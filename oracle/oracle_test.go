@@ -50,8 +50,9 @@ func Test_EndToEnd_NoSubscriptions(t *testing.T) {
 		CheckPointSizeInSlots: 100,
 		DeployedSlot:          5323601,
 	}, fetcher)
-	//checkpointInfo, err := oracle.CalculateCheckpointRewards(0)
-	//require.NoError(t, err)
+	oracle.LastProcessedSlot = 5323600
+	err := oracle.CalculateCheckpointRewards(oracle.cfg.DeployedSlot)
+	require.NoError(t, err)
 	//log.Info("checkpoint", checkpointInfo)
 	_ = oracle
 }

@@ -20,5 +20,5 @@ $ cat file.txt
 Compile and run:
 ```
 go build
-./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=5324453 --pool-address="0x" --checkpoint-size=10 --debug-hardcoded-subscriptions-file=file.txt
+./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=5324453 --pool-address="0x" --checkpoint-size=10 --debug-subscriptions-file=file.txt
 ```

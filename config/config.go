@@ -36,7 +36,7 @@ func NewCliConfig() (*Config, error) {
 	var checkPointSizeInSlots = flag.Uint64("checkpoint-size", 0, "Size in slots for each checkpoint, used to generate dumps and update merkle roots")
 
 	// Debug flags, never use in production
-	var debugHardcodedSubscriptionsFile = flag.String("debug-hardcoded-subscriptions-file", "", "Path to file containing a list of hardcoded validator indexes, one per line")
+	var debugHardcodedSubscriptionsFile = flag.String("debug-subscriptions-file", "", "Path to file containing a list of hardcoded validator indexes, one per line")
 	flag.Parse()
 
 	if *version {

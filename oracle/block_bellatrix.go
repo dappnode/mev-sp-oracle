@@ -25,8 +25,7 @@ type VersionedSignedBeaconBlock struct {
 	spec.VersionedSignedBeaconBlock
 }
 
-// TODO: rename InWEIII
-func (b *VersionedSignedBeaconBlock) MevReward(poolAddress string) (*big.Int, int, error) {
+func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.Int, int, error) {
 	totalMevReward := big.NewInt(0)
 	// this should be just 1, but just in case
 	numTxs := 0
@@ -37,7 +36,8 @@ func (b *VersionedSignedBeaconBlock) MevReward(poolAddress string) (*big.Int, in
 		}
 		// This seems to happen in smart contrat deployments
 		if msg.To() == nil {
-			continue
+			//continue
+			// TODO: check. smart contract deployment have this field to nil
 		}
 		// Note that its usually the last tx but we check all just in case
 		if strings.ToLower(poolAddress) == strings.ToLower(msg.To().String()) {
@@ -48,6 +48,7 @@ func (b *VersionedSignedBeaconBlock) MevReward(poolAddress string) (*big.Int, in
 				"ValIndex":     b.Bellatrix.Message.ProposerIndex,
 				"FeeRecipient": b.FeeRecipient(),
 				"PoolAddress":  poolAddress,
+				"To":           msg.To().String(),
 				"MevReward":    msg.Value(),
 				"TxHash":       tx.Hash().String(),
 			}).Info("MEV transaction detected to pool")
@@ -104,7 +105,7 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 
 	// possible mev block
 	var mevReward *big.Int = big.NewInt(0)
-	mevReward, numTxs, err = b.MevReward(poolAddress) // use fucking units mevRewardInWei
+	mevReward, numTxs, err = b.MevRewardInWei(poolAddress)
 	if err != nil {
 		log.Fatal(err)
 	}
