@@ -19,11 +19,11 @@ func Test_EndToEnd_VanilaReward(t *testing.T) {
 	oracle := NewOracle(&config.Config{
 		PoolAddress:           "0xffee087852cb4898e6c3532e776e68bc68b1143b",
 		CheckPointSizeInSlots: 5,
-		DeployedSlot:          5323502,
+		DeployedSlot:          5344344,
 	}, fetcher)
-
-	//checkpointInfo, err := oracle.CalculateCheckpointRewards(0)
-	//require.NoError(t, err)
+	oracle.LastProcessedSlot = oracle.cfg.DeployedSlot - 1
+	err := oracle.CalculateCheckpointRewards(oracle.cfg.DeployedSlot)
+	require.NoError(t, err)
 	//log.Info("checkpoint", checkpointInfo)
 
 	// TODO: all these test are unfinished!

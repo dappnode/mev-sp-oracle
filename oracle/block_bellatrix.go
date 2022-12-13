@@ -36,8 +36,7 @@ func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.In
 		}
 		// This seems to happen in smart contrat deployments
 		if msg.To() == nil {
-			//continue
-			// TODO: check. smart contract deployment have this field to nil
+			continue
 		}
 		// Note that its usually the last tx but we check all just in case
 		if strings.ToLower(poolAddress) == strings.ToLower(msg.To().String()) {

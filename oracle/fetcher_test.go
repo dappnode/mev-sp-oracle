@@ -2,23 +2,27 @@ package oracle
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/big"
-	"strings"
+	"os"
+	"path/filepath"
 	"testing"
 
 	// TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
 	"mev-sp-oracle/config"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
 var cfgFetcher = config.Config{
-	ConsensusEndpoint: "localhost:5051",
+	ConsensusEndpoint: "http://127.0.0.1:5051",
 	ExecutionEndpoint: "http://127.0.0.1:8545",
 }
 var fetcherTest = NewFetcher(cfgFetcher)
@@ -37,100 +41,95 @@ func Test_FetchFromExecution(t *testing.T) {
 
 }
 
-func Test_GetBlockAtSlot(t *testing.T) {
+// TODO convert this test func into a utility. Fetches blocks from beaconchain
+// and dumps them into a serialized file.
+func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 
-	// 5107234 my block. vanila.
-	// slot: 5320341 block: 16153706 few txs only 13.
+	var cfgFetcher = config.Config{
+		ConsensusEndpoint: "http://127.0.0.1:5051",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+	}
+	var fetcher = NewFetcher(cfgFetcher)
+	folder := "../mock"
+	blockType := "bellatrix"
+	slotToFetch := "5344344"
+	network := "mainnet"
 
-	signedBeaconBlock, err := fetcherTest.GetBlockAtSlot("5320342")
+	// Get block
+	signedBeaconBlock, err := fetcher.GetBlockAtSlot(slotToFetch)
 	require.NoError(t, err)
 
-	log.Info(signedBeaconBlock.Version)
-	log.Info(signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient.String())
-
+	// Serialize and dump the block to a file
 	mbeel, err := signedBeaconBlock.Bellatrix.MarshalJSON()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(mbeel)
-	//log.Info(signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.Timestamp)
+	require.NoError(t, err)
+	nameBlock := "block_" + blockType + "_slot_" + slotToFetch + "_" + network
+	fblock, err := os.Create(filepath.Join(folder, nameBlock))
+	require.NoError(t, err)
+	defer fblock.Close()
+	err = binary.Write(fblock, binary.LittleEndian, mbeel)
+	defer fblock.Close()
 
-	client, err := ethclient.Dial("http://127.0.0.1:8545")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// Get block header
+	header, err := fetcher.ExecutionClient.HeaderByNumber(context.Background(), new(big.Int).SetUint64(signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.BlockNumber))
+	require.NoError(t, err)
 
-	log.Info("number!!:", signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.BlockNumber)
+	// Serialize and dump the block header to a file
+	serializedHeader, err := header.MarshalJSON()
+	require.NoError(t, err)
+	nameHeader := "header_" + blockType + "_slot_" + slotToFetch + "_" + network
+	fheader, err := os.Create(filepath.Join(folder, nameHeader))
+	require.NoError(t, err)
+	defer fheader.Close()
+	err = binary.Write(fheader, binary.LittleEndian, serializedHeader)
+	require.NoError(t, err)
 
-	header, err := client.HeaderByNumber(context.Background(), new(big.Int).SetUint64(signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.BlockNumber))
-	if err != nil {
-		log.Fatal(err)
-	}
+	// Get tx receipts, serialize and dump to file
+	nameTxReceipts := "txreceipts_" + blockType + "_slot_" + slotToFetch + "_" + network
+	fTxs, err := os.Create(filepath.Join(folder, nameTxReceipts))
+	require.NoError(t, err)
+	defer fTxs.Close()
 
-	//fmt.Println(header.MarshalJSON())
-
-	// little-endian to big-endian
-	var baseFeePerGasBEBytes [32]byte
-	for i := 0; i < 32; i++ {
-		baseFeePerGasBEBytes[i] = signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.BaseFeePerGas[32-1-i]
-	}
-	baseFeePerGas := new(big.Int).SetBytes(baseFeePerGasBEBytes[:])
-
-	tips := big.NewInt(0)
-	for i, rawTx := range signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.Transactions {
-		tx, msg, err := DecodeTx(rawTx)
+	var receiptsBlock []*types.Receipt
+	for _, rawTx := range signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.Transactions {
+		tx, _, err := DecodeTx(rawTx)
 		if err == nil {
-			receipt, err := client.TransactionReceipt(context.Background(), tx.Hash())
-			//lol, err := receipt.MarshalJSON()
-			if err != nil {
-				log.Fatal(err)
-			}
-			//fmt.Println(i, " ", lol)
-			_ = i
-			fmt.Println(" ")
-			if err != nil {
-				log.Fatal(err)
-			}
-			tipFee := new(big.Int)
-
-			switch tx.Type() {
-			case 0:
-				tipFee.Mul(tx.GasPrice(), big.NewInt(int64(receipt.GasUsed)))
-			case 1: //same as 0
-				tipFee.Mul(tx.GasPrice(), big.NewInt(int64(receipt.GasUsed)))
-			case 2:
-				val1 := new(big.Int).Add(msg.GasTipCap(), header.BaseFee)
-				usedGasPrice := new(big.Int)
-				if val1.Cmp(msg.GasFeeCap()) >= 0 {
-					usedGasPrice = msg.GasFeeCap() // saturate
-					//log.Info("saturate:", usedGasPrice)
-					//log.Info("GasFeeCap: ", msg.GasFeeCap())
-					//log.Info("GasTipCap: ", msg.GasTipCap())
-				} else {
-					usedGasPrice = val1
-				}
-				//realPrice := new(big.Int).Min(val1, big.NewInt(int64(receipt.GasUsed)))
-				// TODO limit in baseFee?
-				tipFee = new(big.Int).Mul(usedGasPrice, big.NewInt(int64(receipt.GasUsed)))
-			default:
-				log.Fatal("unknown tx type")
-			}
-			//log.Info(i, " ", "tipFee:", tipFee)
-			tips = tips.Add(tips, tipFee)
-
-			if strings.ToLower(msg.From().String()) == strings.ToLower(signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient.String()) {
-				log.Info("-----found")
-			}
-		} else {
-			log.Fatal(err)
+			receipt, err := fetcher.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
+			require.NoError(t, err)
+			receiptsBlock = append(receiptsBlock, receipt)
 		}
 	}
-	burnt := new(big.Int).Mul(big.NewInt(int64(signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.GasUsed)), baseFeePerGas)
-	proposerReward := new(big.Int).Sub(tips, burnt)
+	serializedReceipts, err := json.Marshal(receiptsBlock)
+	require.NoError(t, err)
+	err = binary.Write(fTxs, binary.LittleEndian, serializedReceipts)
+	require.NoError(t, err)
+}
 
-	log.Info("txfees:", tips)
-	log.Info("burndeotherway:", burnt)
-	log.Info("proposer rewards: ", proposerReward)
+func Test_Retrieve(t *testing.T) {
+	// TODO check errors
+	blockJson, err := os.Open("../mock/block_bellatrix_slot_5344344_mainnet")
+	require.NoError(t, err)
+	blockByte, err := ioutil.ReadAll(blockJson)
+	log.Info("dasda", blockByte[0])
+	var bellatrixblock bellatrix.SignedBeaconBlock
+	err = bellatrixblock.UnmarshalJSON(blockByte)
+
+	var headerBlock types.Header
+	headerJson, err := os.Open("../mock/header_bellatrix_slot_5344344_mainnet")
+	headerByte, err := ioutil.ReadAll(headerJson)
+	err = headerBlock.UnmarshalJSON(headerByte)
+	require.NoError(t, err)
+	log.Info(headerBlock.Number.String())
+
+	var txReceipts []types.Receipt
+	txReceiptsJson, err := os.Open("../mock/txreceipts_bellatrix_slot_5344344_mainnet")
+	//log.Info("--", txReceiptsJson.Read())
+	require.NoError(t, err)
+	txReceiptsByte, err := ioutil.ReadAll(txReceiptsJson)
+	//log.Info(txReceiptsByte)
+	err = json.Unmarshal(txReceiptsByte, &txReceipts)
+	require.NoError(t, err)
+	log.Info(txReceipts[0].Status)
+
 }
 
 func Test_Example_Data(t *testing.T) {

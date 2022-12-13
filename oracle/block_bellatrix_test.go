@@ -1,7 +1,10 @@
 package oracle
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"math/big"
+	"os"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -106,6 +109,8 @@ func Test_Bellatrix_GoerliTx_Decode(t *testing.T) {
 // Proposer tip of vanila block has to be calculated by adding all manually tips
 // there is no field available, and it has to be manually recreated using all tx
 // receipts present in that block.
+// TODO: Migrate this function and the others to use files in /mock.
+// TODO: remove mainnet_txs.go
 func Test_GetProperTip_Mainnet_16153706(t *testing.T) {
 	// Decode a a hardcode block/header/receipts
 	var bellatrixBlock_16153706 bellatrix.SignedBeaconBlock
@@ -133,6 +138,27 @@ func Test_GetProperTip_Mainnet_16153706(t *testing.T) {
 	proposerTip, err := extendedBlock.GetProposerTip(&headerBlock_16153706, receiptsBlock_16153706)
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(1944763730864393), proposerTip)
+}
+
+// This block contains a tx with a smart contract deployment
+// Tests if the fee is calculated properly as these tx
+// are a bit different.
+func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
+	fileName := "bellatrix_slot_5344344_mainnet"
+	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(fileName)
+
+	// TODO: Remove this and use directly the Bellatrix block
+	versionedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &block}
+	extendedBlock := VersionedSignedBeaconBlock{versionedBlock}
+
+	mevReward, numTxs, err := extendedBlock.MevRewardInWei("0x388c818ca8b9251b393131c08a736a67ccb19297")
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(99952842017043014), mevReward)
+	require.Equal(t, numTxs, 1)
+
+	proposerTip, err := extendedBlock.GetProposerTip(&header, receipts)
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(95434044627649514), proposerTip)
 }
 
 func Test_MevReward(t *testing.T) {
@@ -189,4 +215,39 @@ func Test_DonatedAmountInWei(t *testing.T) {
 	log.Info("donation2", donation2)
 	require.Equal(t, donation2, big.NewInt(3648455520393139))
 
+}
+
+// bellatrix_slot_5344344_mainnet
+func LoadBlockHeaderReceiptsBellatrix(file string) (bellatrix.SignedBeaconBlock, types.Header, []*types.Receipt) {
+	blockJson, err := os.Open("../mock/block_" + file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	blockByte, err := ioutil.ReadAll(blockJson)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var bellatrixblock bellatrix.SignedBeaconBlock
+	err = bellatrixblock.UnmarshalJSON(blockByte)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var headerBlock types.Header
+	headerJson, err := os.Open("../mock/header_" + file)
+	headerByte, err := ioutil.ReadAll(headerJson)
+	err = headerBlock.UnmarshalJSON(headerByte)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var txReceipts []*types.Receipt
+	txReceiptsJson, err := os.Open("../mock/txreceipts_" + file)
+	txReceiptsByte, err := ioutil.ReadAll(txReceiptsJson)
+	err = json.Unmarshal(txReceiptsByte, &txReceipts)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return bellatrixblock, headerBlock, txReceipts
 }
