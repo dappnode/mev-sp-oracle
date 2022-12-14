@@ -21,14 +21,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var cfgFetcher = config.Config{
-	ConsensusEndpoint: "http://127.0.0.1:5051",
-	ExecutionEndpoint: "http://127.0.0.1:8545",
-}
-var fetcherTest = NewFetcher(cfgFetcher)
-
 // remove. just debuging some stuff
 func Test_FetchFromExecution(t *testing.T) {
+	t.Skip("Skipping test")
+	var cfgFetcher = config.Config{
+		ConsensusEndpoint: "http://127.0.0.1:5051",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+	}
+	var fetcherTest = NewFetcher(cfgFetcher)
+	t.Skip("Skipping test")
 	// TODO: Move this to fetcher in case we need to access some parameters.
 
 	account := common.HexToAddress("0xf573d99385c05c23b24ed33de616ad16a43a0919")
@@ -44,6 +45,7 @@ func Test_FetchFromExecution(t *testing.T) {
 // TODO convert this test func into a utility. Fetches blocks from beaconchain
 // and dumps them into a serialized file.
 func Test_GetBellatrixBlockAtSlot(t *testing.T) {
+	t.Skip("Skipping test")
 
 	var cfgFetcher = config.Config{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
@@ -105,6 +107,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 }
 
 func Test_Retrieve(t *testing.T) {
+	t.Skip("Skipping test")
 	// TODO check errors
 	blockJson, err := os.Open("../mock/block_bellatrix_slot_5344344_mainnet")
 	require.NoError(t, err)
@@ -133,6 +136,13 @@ func Test_Retrieve(t *testing.T) {
 }
 
 func Test_Example_Data(t *testing.T) {
+	t.Skip("Skipping test")
+	var cfgFetcher = config.Config{
+		ConsensusEndpoint: "http://127.0.0.1:5051",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+	}
+	var fetcherTest = NewFetcher(cfgFetcher)
+	t.Skip("Skipping test")
 
 	signedBeaconBlock, err := fetcherTest.GetBlockAtSlot("5214140")
 	require.NoError(t, err)

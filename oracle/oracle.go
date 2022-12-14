@@ -10,21 +10,20 @@ import (
 )
 
 type Oracle struct {
-	fetcher *Fetcher
-	cfg     *config.Config
-	// TODO: Find a better name
-	checkpointInfo    *CheckpointInfo
+	fetcher           *Fetcher
+	cfg               *config.Config
+	state             *OracleState
 	LastProcessedSlot uint64
 }
 
 func NewOracle(
 	cfg *config.Config,
 	fetcher *Fetcher) *Oracle {
-	checkpointInfo := NewCheckpointInfo()
+	state := NewOracleState()
 	oracle := &Oracle{
-		cfg:            cfg,
-		fetcher:        fetcher,
-		checkpointInfo: checkpointInfo,
+		cfg:     cfg,
+		fetcher: fetcher,
+		state:   state,
 	}
 
 	return oracle
@@ -63,7 +62,7 @@ func (or *Oracle) CalculateCheckpointRewards(slotToProcess uint64) error {
 	// TODO: Automatically update the subscriptions for the smart contract on every block
 	// TODO: init is wrong. it has to be "update"
 	contractSubscriptions := or.fetcher.GetSubscriptions()
-	or.checkpointInfo.InitWithSubscriptions(contractSubscriptions)
+	or.state.InitWithSubscriptions(contractSubscriptions)
 
 	// Checkpoints are zero indexed
 	if (slotToProcess - or.LastProcessedSlot) != 1 {
@@ -87,14 +86,16 @@ func (or *Oracle) CalculateCheckpointRewards(slotToProcess uint64) error {
 	}
 
 	missedBlock := false
-	var myBlock VersionedSignedBeaconBlock
+
+	// TODO: Check type and use Capella/Bellatrix
+	var myBlock BellatrixBlock
 	var reward *big.Int = big.NewInt(0)
 	var sentOk bool = false
 
 	if block == nil {
 		missedBlock = true
 	} else {
-		myBlock = VersionedSignedBeaconBlock{*block}
+		myBlock = BellatrixBlock{*block.Bellatrix}
 		reward, sentOk, _, err = myBlock.GetSentRewardAndType(or.cfg.PoolAddress, *or.fetcher)
 		if err != nil {
 			log.Fatal(err)
@@ -105,25 +106,25 @@ func (or *Oracle) CalculateCheckpointRewards(slotToProcess uint64) error {
 	if or.IsValidatorSubscribed(valIndexDuty, contractSubscriptions) {
 		if missedBlock {
 			// if block was missed, advance state machine.
-			or.checkpointInfo.AdvanceStateMachine(valIndexDuty, MissedProposal)
+			or.state.AdvanceStateMachine(valIndexDuty, MissedProposal)
 
 			// If new state is NotActive, means second lost block. Share its pending rewards and reset
-			if or.checkpointInfo.IsNotActive(valIndexDuty) {
-				or.checkpointInfo.IncreaseAllPendingRewards(or.checkpointInfo.pendingRewards[valIndexDuty])
-				or.checkpointInfo.ResetPendingRewards(valIndexDuty)
+			if or.state.IsNotActive(valIndexDuty) {
+				or.state.IncreaseAllPendingRewards(or.state.pendingRewards[valIndexDuty])
+				or.state.ResetPendingRewards(valIndexDuty)
 			}
 
 		} else {
 			if sentOk {
-				or.checkpointInfo.AdvanceStateMachine(valIndexDuty, ProposalWithCorrectFee)
-				or.checkpointInfo.IncreaseAllPendingRewards(reward)
-				or.checkpointInfo.ConsolidateBalance(valIndexDuty)
+				or.state.AdvanceStateMachine(valIndexDuty, ProposalWithCorrectFee)
+				or.state.IncreaseAllPendingRewards(reward)
+				or.state.ConsolidateBalance(valIndexDuty)
 			} else {
 				// reward was not sent to the pool, advance state machine -> ban.
-				or.checkpointInfo.AdvanceStateMachine(valIndexDuty, ProposalWithWrongFee)
-				or.checkpointInfo.IncreaseAllPendingRewards(or.checkpointInfo.pendingRewards[valIndexDuty])
-				or.checkpointInfo.ResetPendingRewards(valIndexDuty)
-				or.checkpointInfo.SetUnbanBalance(valIndexDuty, reward)
+				or.state.AdvanceStateMachine(valIndexDuty, ProposalWithWrongFee)
+				or.state.IncreaseAllPendingRewards(or.state.pendingRewards[valIndexDuty])
+				or.state.ResetPendingRewards(valIndexDuty)
+				or.state.SetUnbanBalance(valIndexDuty, reward)
 				// LogUpdateMetrics(valIndex, reward, duty, etc, state? event?)
 			}
 		}
@@ -153,7 +154,7 @@ func (or *Oracle) CalculateCheckpointRewards(slotToProcess uint64) error {
 		if err != nil {
 			log.Fatal(err)
 		}
-		or.checkpointInfo.IncreaseAllPendingRewards(donatedInBlock)
+		or.state.IncreaseAllPendingRewards(donatedInBlock)
 		//TODO: add info on who donated and put to db. this can be useful for social stuff.
 	}
 	or.LastProcessedSlot = slotToProcess

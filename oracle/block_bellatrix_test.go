@@ -7,7 +7,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/core/types"
 	log "github.com/sirupsen/logrus"
@@ -20,7 +19,7 @@ var block1 = &bellatrix.SignedBeaconBlock{
 		ProposerIndex: 0,
 		Body: &bellatrix.BeaconBlockBody{
 			ExecutionPayload: &bellatrix.ExecutionPayload{
-				FeeRecipient: [20]byte{},
+				FeeRecipient: [20]byte{56, 140, 129, 140, 168, 185, 37, 27, 57, 49, 49, 192, 138, 115, 106, 103, 204, 177, 146, 151},
 				BlockNumber:  0,
 				Transactions: []bellatrix.Transaction{
 					{1, 2},
@@ -28,6 +27,11 @@ var block1 = &bellatrix.SignedBeaconBlock{
 			},
 		},
 	},
+}
+
+func Test_FeeRecipient(t *testing.T) {
+	extendedBlock := BellatrixBlock{*block1}
+	require.Equal(t, "0x388c818ca8b9251b393131c08a736a67ccb19297", extendedBlock.FeeRecipient())
 }
 
 func Test_Bellatrix_TxType_0_Decode(t *testing.T) {
@@ -74,7 +78,7 @@ func Test_Bellatrix_TxType_2_Decode(t *testing.T) {
 	require.Equal(t, "0xcBfa884044546d5569E2abFf3fB429301b61562A", tx.To().String())
 	require.Equal(t, "0xDAFEA492D9c6733ae3d56b7Ed1ADB60692c98Bc5", msg.From().String())
 	require.Equal(t, uint64(125852), tx.Nonce())
-	require.Equal(t, big.NewInt(152030054730000000), tx.Value())
+	require.Equal(t, big.NewInt(58833558053578852), tx.Value())
 }
 
 func Test_Bellatrix_TxType2WithERC20_Decode(t *testing.T) {
@@ -101,24 +105,20 @@ func Test_Bellatrix_GoerliTx_Decode(t *testing.T) {
 	// Test also that works for goerli testnet
 	// TODO
 	//require.Equal(t, big.NewInt(5), tx.ChainId())
-
 }
 
-// TODO: Test tx with a smart contract deployment. Looks like to field is nil
+// TODO: Migrate from mainnet_txs.go to a file
 
 // Proposer tip of vanila block has to be calculated by adding all manually tips
 // there is no field available, and it has to be manually recreated using all tx
 // receipts present in that block.
-// TODO: Migrate this function and the others to use files in /mock.
-// TODO: remove mainnet_txs.go
 func Test_GetProperTip_Mainnet_16153706(t *testing.T) {
 	// Decode a a hardcode block/header/receipts
 	var bellatrixBlock_16153706 bellatrix.SignedBeaconBlock
 	err := bellatrixBlock_16153706.UnmarshalJSON(BellatrixBlock_16153706)
 	require.NoError(t, err)
 
-	versionedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &bellatrixBlock_16153706}
-	extendedBlock := VersionedSignedBeaconBlock{versionedBlock}
+	extendedBlock := BellatrixBlock{bellatrixBlock_16153706}
 
 	log.Info(bellatrixBlock_16153706.Message.Body.ExecutionPayload.FeeRecipient.String())
 
@@ -147,9 +147,7 @@ func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
 	fileName := "bellatrix_slot_5344344_mainnet"
 	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(fileName)
 
-	// TODO: Remove this and use directly the Bellatrix block
-	versionedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &block}
-	extendedBlock := VersionedSignedBeaconBlock{versionedBlock}
+	extendedBlock := BellatrixBlock{block}
 
 	mevReward, numTxs, err := extendedBlock.MevRewardInWei("0x388c818ca8b9251b393131c08a736a67ccb19297")
 	require.NoError(t, err)
@@ -166,9 +164,7 @@ func Test_MevReward(t *testing.T) {
 	var bellatrixBlock_16153707 bellatrix.SignedBeaconBlock
 	err := bellatrixBlock_16153707.UnmarshalJSON(BellatrixBlock_16153707)
 	require.NoError(t, err)
-
-	versionedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &bellatrixBlock_16153707}
-	extendedBlock := VersionedSignedBeaconBlock{versionedBlock}
+	extendedBlock := BellatrixBlock{bellatrixBlock_16153707}
 
 	// Check that mev reward is correct and sent to the address
 	mevReward1, numTxs1, err := extendedBlock.MevRewardInWei("0xf8636377b7a998b51a3cf2bd711b870b3ab0ad56")
@@ -196,25 +192,19 @@ func Test_DonatedAmountInWei(t *testing.T) {
 	var bellatrixBlock_16153707 bellatrix.SignedBeaconBlock
 	err := bellatrixBlock_16153707.UnmarshalJSON(BellatrixBlock_16153707)
 	require.NoError(t, err)
-
-	versionedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &bellatrixBlock_16153707}
-	extendedBlock := VersionedSignedBeaconBlock{versionedBlock}
+	extendedBlock := BellatrixBlock{bellatrixBlock_16153707}
 
 	// one donation is sent to this addres: 0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e
 	donation1, err := extendedBlock.DonatedAmountInWei("0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e")
 	require.NoError(t, err)
-	log.Info("donation1", donation1)
 	number, ok := new(big.Int).SetString("20000000000000000000", 10)
 	require.Equal(t, donation1, number)
 	require.Equal(t, ok, true)
-	log.Info("yolo:  ", number)
 
 	// two tx are done to this adress: 0xef1266370e603ad06cff8304b27f866ca444d434
 	donation2, err := extendedBlock.DonatedAmountInWei("0xef1266370e603ad06cff8304b27f866ca444d434")
 	require.NoError(t, err)
-	log.Info("donation2", donation2)
 	require.Equal(t, donation2, big.NewInt(3648455520393139))
-
 }
 
 // bellatrix_slot_5344344_mainnet

@@ -7,7 +7,3 @@ type Subscriptions struct {
 	// TODO: unsure abou this: validator->controlledAddress?
 	subscriptions map[uint64]string //start, end, etc. see smart contract.
 }
-
-// TODO: type with merkel roots and trees
-// input CheckpointInfo
-// output: MerkelizedCheckpointInfo

@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/core/types"
 	log "github.com/sirupsen/logrus"
 )
@@ -21,15 +21,15 @@ const (
 // and then one other field for capella.SignedBeaconBlock
 
 // extend with custom methods
-type VersionedSignedBeaconBlock struct {
-	spec.VersionedSignedBeaconBlock
+type BellatrixBlock struct {
+	bellatrix.SignedBeaconBlock
 }
 
-func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.Int, int, error) {
+func (b *BellatrixBlock) MevRewardInWei(poolAddress string) (*big.Int, int, error) {
 	totalMevReward := big.NewInt(0)
 	// this should be just 1, but just in case
 	numTxs := 0
-	for _, rawTx := range b.Bellatrix.Message.Body.ExecutionPayload.Transactions {
+	for _, rawTx := range b.Message.Body.ExecutionPayload.Transactions {
 		tx, msg, err := DecodeTx(rawTx)
 		if err != nil {
 			log.Fatal("todo")
@@ -42,9 +42,9 @@ func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.In
 		if strings.ToLower(poolAddress) == strings.ToLower(msg.To().String()) {
 			totalMevReward.Add(totalMevReward, msg.Value())
 			log.WithFields(log.Fields{
-				"Slot":         b.Bellatrix.Message.Slot,
-				"Block":        b.Bellatrix.Message.Body.ExecutionPayload.BlockNumber,
-				"ValIndex":     b.Bellatrix.Message.ProposerIndex,
+				"Slot":         b.Message.Slot,
+				"Block":        b.Message.Body.ExecutionPayload.BlockNumber,
+				"ValIndex":     b.Message.ProposerIndex,
 				"FeeRecipient": b.FeeRecipient(),
 				"PoolAddress":  poolAddress,
 				"To":           msg.To().String(),
@@ -58,17 +58,10 @@ func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.In
 
 }
 
-// get proposer reward (vanila or mev block) and indicate which type of block it was
-// and also feerecepient
-// TODO: rename to GetRewardsSentToPool
-// this can either be:
-// -mev rewards. we check every single tx and check if they sent any amnount to the pool (differenciate from donations)
-// -if the "normal" feerecipient was us, clculate fees and use that as a reward.
-
 // this call is expensive if its a vanila block. the tip sent to the fee recipient
 // has to be calculated by iterating all txs and adding the tips. this requires
 // to get every single tx receipt. note that this call is not done in MEV blocks.
-func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
+func (b *BellatrixBlock) GetSentRewardAndType(
 	poolAddress string,
 	fetcher Fetcher) (*big.Int, bool, int, error) {
 
@@ -80,8 +73,8 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 
 	if b.FeeRecipient() == poolAddress {
 		// vanila block, we get the tip from the block
-		blockNumber := new(big.Int).SetUint64(b.Bellatrix.Message.Body.ExecutionPayload.BlockNumber)
-		header, receipts, err := fetcher.GetExecHeaderAndReceipts(blockNumber, b.Bellatrix.Message.Body.ExecutionPayload.Transactions)
+		blockNumber := new(big.Int).SetUint64(b.Message.Body.ExecutionPayload.BlockNumber)
+		header, receipts, err := fetcher.GetExecHeaderAndReceipts(blockNumber, b.Message.Body.ExecutionPayload.Transactions)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -91,9 +84,9 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 			log.Fatal(err)
 		}
 		log.WithFields(log.Fields{
-			"Slot":         b.Bellatrix.Message.Slot,
-			"Block":        b.Bellatrix.Message.Body.ExecutionPayload.BlockNumber,
-			"ValIndex":     b.Bellatrix.Message.ProposerIndex,
+			"Slot":         b.Message.Slot,
+			"Block":        b.Message.Body.ExecutionPayload.BlockNumber,
+			"ValIndex":     b.Message.ProposerIndex,
 			"FeeRecipient": b.FeeRecipient(),
 			"PoolAddress":  poolAddress,
 			"VanilaReward": reward.String(),
@@ -116,9 +109,9 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 	if numTxs == 0 {
 		// no mev reward
 		log.WithFields(log.Fields{
-			"Slot":         b.Bellatrix.Message.Slot,
-			"Block":        b.Bellatrix.Message.Body.ExecutionPayload.BlockNumber,
-			"ValIndex":     b.Bellatrix.Message.ProposerIndex,
+			"Slot":         b.Message.Slot,
+			"Block":        b.Message.Body.ExecutionPayload.BlockNumber,
+			"ValIndex":     b.Message.ProposerIndex,
 			"FeeRecipient": b.FeeRecipient(),
 			"PoolAddress":  poolAddress,
 		}).Info("No MEV reward found in block")
@@ -126,9 +119,9 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 	} else if numTxs == 1 {
 		// mev block
 		log.WithFields(log.Fields{
-			"Slot":         b.Bellatrix.Message.Slot,
-			"Block":        b.Bellatrix.Message.Body.ExecutionPayload.BlockNumber,
-			"ValIndex":     b.Bellatrix.Message.ProposerIndex,
+			"Slot":         b.Message.Slot,
+			"Block":        b.Message.Body.ExecutionPayload.BlockNumber,
+			"ValIndex":     b.Message.ProposerIndex,
 			"FeeRecipient": b.FeeRecipient(),
 			"PoolAddress":  poolAddress,
 			"MevReward":    reward.String(),
@@ -138,27 +131,26 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 	} else {
 		log.Fatal("more than 1 mev tx in a block is not expected. num: ", numTxs)
 	}
-	return reward, wasRewardSent, txType, nil // TODO: log.fatal so no need to return error
+	return reward, wasRewardSent, txType, nil
 }
 
 // get proposer tip went to the fee recepient. not related to MEV
 // note that the tip is not included in the block and has to be reconstructed
 // iterating all transactions and checking the tip
 // returns proposer tip and feeRecipient
-func (b *VersionedSignedBeaconBlock) GetProposerTip(blockHeader *types.Header, txReceipts []*types.Receipt) (*big.Int, error) {
+func (b *BellatrixBlock) GetProposerTip(blockHeader *types.Header, txReceipts []*types.Receipt) (*big.Int, error) {
 	// little-endian to big-endian
-	// TODO: to util function. LittleToBigEndianBigInt
 	var baseFeePerGasBEBytes [32]byte
 	for i := 0; i < 32; i++ {
-		baseFeePerGasBEBytes[i] = b.Bellatrix.Message.Body.ExecutionPayload.BaseFeePerGas[32-1-i]
+		baseFeePerGasBEBytes[i] = b.Message.Body.ExecutionPayload.BaseFeePerGas[32-1-i]
 	}
 	baseFeePerGas := new(big.Int).SetBytes(baseFeePerGasBEBytes[:])
 
 	tips := big.NewInt(0)
-	if len(b.Bellatrix.Message.Body.ExecutionPayload.Transactions) != len(txReceipts) {
+	if len(b.Message.Body.ExecutionPayload.Transactions) != len(txReceipts) {
 		log.Fatal("txs and receipts not the same length")
 	}
-	for i, rawTx := range b.Bellatrix.Message.Body.ExecutionPayload.Transactions {
+	for i, rawTx := range b.Message.Body.ExecutionPayload.Transactions {
 		tx, msg, err := DecodeTx(rawTx)
 		if err != nil {
 			log.Fatal()
@@ -177,51 +169,33 @@ func (b *VersionedSignedBeaconBlock) GetProposerTip(blockHeader *types.Header, t
 		case 1:
 			tipFee.Mul(gasPrice, gasUsed)
 		case 2:
-			// TODO: move to function, saturate
-			val1 := new(big.Int).Add(msg.GasTipCap(), blockHeader.BaseFee)
-			usedGasPrice := new(big.Int) // TODO: better naming
-			if val1.Cmp(msg.GasFeeCap()) >= 0 {
-				usedGasPrice = msg.GasFeeCap()
-			} else {
-				usedGasPrice = val1
-			}
-			//realPrice := new(big.Int).Min(val1, big.NewInt(int64(receipt.GasUsed)))
-			// TODO limit in baseFee?
+			// Sum gastipcap and basefee or saturate to gasfeecap
+			usedGasPrice := SumAndSaturate(msg.GasTipCap(), blockHeader.BaseFee, msg.GasFeeCap())
 			tipFee = new(big.Int).Mul(usedGasPrice, gasUsed)
 		default:
 			log.Fatal("unknown tx type")
 		}
-		//log.Info(i, " ", "tipFee:", tipFee)
 		tips = tips.Add(tips, tipFee)
-
-		// TODO: remove this?
-		if strings.ToLower(msg.From().String()) == strings.ToLower(b.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient.String()) {
-		}
 	}
-	burnt := new(big.Int).Mul(big.NewInt(int64(b.Bellatrix.Message.Body.ExecutionPayload.GasUsed)), baseFeePerGas)
+	burnt := new(big.Int).Mul(big.NewInt(int64(b.Message.Body.ExecutionPayload.GasUsed)), baseFeePerGas)
 	proposerReward := new(big.Int).Sub(tips, burnt)
 
-	log.Info("txfees:", tips)
-	log.Info("burndeotherway:", burnt)
-	log.Info("proposer rewards: ", proposerReward)
-
 	return proposerReward, nil
-
 }
 
 // Detects "Transfer" transactions to the poolAddress and adds them into a single number
 // Note that ERC20 transfers are not supported, not detected by this function.
-func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) (*big.Int, error) {
+func (b *BellatrixBlock) DonatedAmountInWei(poolAddress string) (*big.Int, error) {
 	donatedAmountInBlock := big.NewInt(0)
 	numTxs := 0
-	for _, rawTx := range b.Bellatrix.Message.Body.ExecutionPayload.Transactions {
+	for _, rawTx := range b.Message.Body.ExecutionPayload.Transactions {
 		_, msg, err := DecodeTx(rawTx)
 		if err != nil {
 			log.Fatal("todo")
 		}
 		// If a transaction was sent to the pool
 		// And the sender is not the fee recipient (exclude MEV transactions)
-		// msg.To() is nil for contract creation transactions TODO:
+		// Note that msg.To() is nil for contract creation transactions
 		if msg.To() == nil {
 			continue
 		}
@@ -236,26 +210,6 @@ func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) (*bi
 	return donatedAmountInBlock, nil
 }
 
-// TODO: Unit test
-func (b *VersionedSignedBeaconBlock) FeeRecipient() string {
-	return b.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient.String()
-}
-
-// TODO: As it is it wont work for Capella fork
-
-// Perhaps move this? not block methods per se
-
-func DecodeTx(rawTx []byte) (*types.Transaction, *types.Message, error) {
-	var tx types.Transaction
-	err := tx.UnmarshalBinary(rawTx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Supports EIP-2930 and EIP-2718 and EIP-1559 and EIP-155 and legacy transactions.
-	msg, err := tx.AsMessage(types.LatestSignerForChainID(tx.ChainId()), big.NewInt(0))
-	if err != nil {
-		return nil, nil, err
-	}
-	return &tx, &msg, err
+func (b *BellatrixBlock) FeeRecipient() string {
+	return b.Message.Body.ExecutionPayload.FeeRecipient.String()
 }
