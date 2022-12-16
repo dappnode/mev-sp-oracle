@@ -29,9 +29,11 @@ var block1 = &bellatrix.SignedBeaconBlock{
 	},
 }
 
-func Test_FeeRecipient(t *testing.T) {
+func Test_FeeRecipientAndSlot(t *testing.T) {
+	// Check that existing methods are inherited and new ones are extended
 	extendedBlock := BellatrixBlock{*block1}
 	require.Equal(t, "0x388c818ca8b9251b393131c08a736a67ccb19297", extendedBlock.FeeRecipient())
+	require.Equal(t, uint64(5214140), uint64(extendedBlock.Message.Slot))
 }
 
 func Test_Bellatrix_TxType_0_Decode(t *testing.T) {
@@ -107,35 +109,17 @@ func Test_Bellatrix_GoerliTx_Decode(t *testing.T) {
 	//require.Equal(t, big.NewInt(5), tx.ChainId())
 }
 
-// TODO: Migrate from mainnet_txs.go to a file
-
 // Proposer tip of vanila block has to be calculated by adding all manually tips
 // there is no field available, and it has to be manually recreated using all tx
 // receipts present in that block.
-func Test_GetProperTip_Mainnet_16153706(t *testing.T) {
+func Test_GetProperTip_Mainnet_Slot_5320341(t *testing.T) {
 	// Decode a a hardcode block/header/receipts
-	var bellatrixBlock_16153706 bellatrix.SignedBeaconBlock
-	err := bellatrixBlock_16153706.UnmarshalJSON(BellatrixBlock_16153706)
-	require.NoError(t, err)
-
-	extendedBlock := BellatrixBlock{bellatrixBlock_16153706}
-
-	log.Info(bellatrixBlock_16153706.Message.Body.ExecutionPayload.FeeRecipient.String())
-
-	var headerBlock_16153706 types.Header
-	err = headerBlock_16153706.UnmarshalJSON(HeaderBlock_16153706)
-	require.NoError(t, err)
-
-	var receiptsBlock_16153706 []*types.Receipt
-	for _, receipt := range ReceiptsBlock_16153706 {
-		var decodedReceipt types.Receipt
-		err = decodedReceipt.UnmarshalJSON(receipt)
-		require.NoError(t, err)
-		receiptsBlock_16153706 = append(receiptsBlock_16153706, &decodedReceipt)
-	}
+	fileName := "bellatrix_slot_5320341_mainnet"
+	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(fileName)
+	extendedBlock := BellatrixBlock{block}
 
 	// Get proposer tip
-	proposerTip, err := extendedBlock.GetProposerTip(&headerBlock_16153706, receiptsBlock_16153706)
+	proposerTip, err := extendedBlock.GetProposerTip(&header, receipts)
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(1944763730864393), proposerTip)
 }
@@ -146,7 +130,6 @@ func Test_GetProperTip_Mainnet_16153706(t *testing.T) {
 func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
 	fileName := "bellatrix_slot_5344344_mainnet"
 	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(fileName)
-
 	extendedBlock := BellatrixBlock{block}
 
 	mevReward, numTxs, err := extendedBlock.MevRewardInWei("0x388c818ca8b9251b393131c08a736a67ccb19297")
@@ -159,12 +142,10 @@ func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
 	require.Equal(t, big.NewInt(95434044627649514), proposerTip)
 }
 
-func Test_MevReward(t *testing.T) {
-	// Use a hardcoded block
-	var bellatrixBlock_16153707 bellatrix.SignedBeaconBlock
-	err := bellatrixBlock_16153707.UnmarshalJSON(BellatrixBlock_16153707)
-	require.NoError(t, err)
-	extendedBlock := BellatrixBlock{bellatrixBlock_16153707}
+func Test_MevReward_Slot_5320342(t *testing.T) {
+	fileName := "bellatrix_slot_5320342_mainnet"
+	block, _, _ := LoadBlockHeaderReceiptsBellatrix(fileName)
+	extendedBlock := BellatrixBlock{block}
 
 	// Check that mev reward is correct and sent to the address
 	mevReward1, numTxs1, err := extendedBlock.MevRewardInWei("0xf8636377b7a998b51a3cf2bd711b870b3ab0ad56")
@@ -183,16 +164,14 @@ func Test_MevReward(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(0), mevReward3)
 	require.Equal(t, numTxs3, 0)
-
-	require.Equal(t, "0xdafea492d9c6733ae3d56b7ed1adb60692c98bc5", bellatrixBlock_16153707.Message.Body.ExecutionPayload.FeeRecipient.String())
+	require.Equal(t, "0xdafea492d9c6733ae3d56b7ed1adb60692c98bc5", extendedBlock.Message.Body.ExecutionPayload.FeeRecipient.String())
 }
 
-// TODO: test with a block that contains mev reward AND a donation.
-func Test_DonatedAmountInWei(t *testing.T) {
-	var bellatrixBlock_16153707 bellatrix.SignedBeaconBlock
-	err := bellatrixBlock_16153707.UnmarshalJSON(BellatrixBlock_16153707)
-	require.NoError(t, err)
-	extendedBlock := BellatrixBlock{bellatrixBlock_16153707}
+// Test donated amount to a given address in a block
+func Test_DonatedAmountInWei_Slot_5320342(t *testing.T) {
+	fileName := "bellatrix_slot_5320342_mainnet"
+	block, _, _ := LoadBlockHeaderReceiptsBellatrix(fileName)
+	extendedBlock := BellatrixBlock{block}
 
 	// one donation is sent to this addres: 0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e
 	donation1, err := extendedBlock.DonatedAmountInWei("0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e")
@@ -207,7 +186,7 @@ func Test_DonatedAmountInWei(t *testing.T) {
 	require.Equal(t, donation2, big.NewInt(3648455520393139))
 }
 
-// bellatrix_slot_5344344_mainnet
+// Util to load from file
 func LoadBlockHeaderReceiptsBellatrix(file string) (bellatrix.SignedBeaconBlock, types.Header, []*types.Receipt) {
 	blockJson, err := os.Open("../mock/block_" + file)
 	if err != nil {

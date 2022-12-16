@@ -45,7 +45,7 @@ func Test_FetchFromExecution(t *testing.T) {
 // TODO convert this test func into a utility. Fetches blocks from beaconchain
 // and dumps them into a serialized file.
 func Test_GetBellatrixBlockAtSlot(t *testing.T) {
-	t.Skip("Skipping test")
+	//t.Skip("Skipping test")
 
 	var cfgFetcher = config.Config{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
@@ -54,7 +54,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	var fetcher = NewFetcher(cfgFetcher)
 	folder := "../mock"
 	blockType := "bellatrix"
-	slotToFetch := "5344344"
+	slotToFetch := "5320330"
 	network := "mainnet"
 
 	// Get block
