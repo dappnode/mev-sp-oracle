@@ -59,10 +59,13 @@ func (or *Oracle) CalculateCheckpointRewards(slotToProcess uint64) error {
 		}).Info("Calculating checkpoint rewards")
 	*/
 
+	// TODO: Not really considering manual subscriptions now
+	// Some dead logic here.
+
 	// TODO: Automatically update the subscriptions for the smart contract on every block
 	// TODO: init is wrong. it has to be "update"
 	contractSubscriptions := or.fetcher.GetSubscriptions()
-	or.state.InitWithSubscriptions(contractSubscriptions)
+	//or.state.InitWithSubscriptions(contractSubscriptions)
 
 	// Checkpoints are zero indexed
 	if (slotToProcess - or.LastProcessedSlot) != 1 {
@@ -132,7 +135,10 @@ func (or *Oracle) CalculateCheckpointRewards(slotToProcess uint64) error {
 		// If the block was not missed and the validator is not subscribed
 		// check if the reward was sent to the pool, and automatically subscribe it.
 		if !missedBlock && sentOk {
-			// TODO: subscribe
+			// If not already subscribed
+			or.state.AddSubscriptionIfNotAlready(valIndexDuty)
+			or.state.IncreaseAllPendingRewards(reward)
+			or.state.ConsolidateBalance(valIndexDuty)
 		}
 
 	}

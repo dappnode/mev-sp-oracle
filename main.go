@@ -15,7 +15,7 @@ import (
 // Hardcoded for Ethereum
 var SlotsInEpoch = uint64(32)
 
-// Example: ./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=5324453 --pool-address="0x" --checkpoint-size=10 --debug-subscriptions-file=file.txt
+// Example: ./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=5365408 --pool-address="0x388C818CA8B9251b393131C08a736A67ccB19297" --checkpoint-size=10
 func main() {
 	log.Info("mev-sp-oracle")
 	cfg, err := config.NewCliConfig()

@@ -108,17 +108,18 @@ func (f *Fetcher) GetSubscriptions() *Subscriptions {
 
 		// TODO: perhaps define subscription type
 		subscriptions: map[uint64]string{
-			268288: "0x", //TODO: add start/end
-			342517: "0x",
-			306361: "0x",
-			77334:  "0x",
-			307966: "0x",
+			/*
+				268288: "0x", //TODO: add start/end
+				342517: "0x",
+				306361: "0x",
+				77334:  "0x",
+				307966: "0x",
 
-			481020: "0x", // propose mev block at 5323504
-			168929: "0x", // proposes vanila block at 5323506
-			195242: "0x", // proposes mev block at  5323505 0x4675c7e5baafbffbca748158becba61ef3b0a263
+				481020: "0x", // propose mev block at 5323504
+				168929: "0x", // proposes vanila block at 5323506
+				195242: "0x", // proposes mev block at  5323505 0x4675c7e5baafbffbca748158becba61ef3b0a263
 
-			210588: "0x",
+				210588: "0x",*/
 		},
 	}
 	return &manualSubscriptions

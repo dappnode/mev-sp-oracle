@@ -87,9 +87,9 @@ func (b *BellatrixBlock) GetSentRewardAndType(
 			"Slot":         b.Message.Slot,
 			"Block":        b.Message.Body.ExecutionPayload.BlockNumber,
 			"ValIndex":     b.Message.ProposerIndex,
-			"FeeRecipient": b.FeeRecipient(),
 			"PoolAddress":  poolAddress,
 			"VanilaReward": reward.String(),
+			//"FeeRecipient": b.FeeRecipient(), //Vanila fee recipient
 		}).Info("Vanila reward found in block")
 		txType = VanilaBlock
 		wasRewardSent = true
@@ -107,17 +107,17 @@ func (b *BellatrixBlock) GetSentRewardAndType(
 	}
 	reward = mevReward
 	if numTxs == 0 {
-		// no mev reward
+		// no mev reward, debug to avoid spam
 		log.WithFields(log.Fields{
 			"Slot":         b.Message.Slot,
 			"Block":        b.Message.Body.ExecutionPayload.BlockNumber,
 			"ValIndex":     b.Message.ProposerIndex,
 			"FeeRecipient": b.FeeRecipient(),
 			"PoolAddress":  poolAddress,
-		}).Info("No MEV reward found in block")
+		}).Debug("No MEV reward found in block")
 		wasRewardSent = false
 	} else if numTxs == 1 {
-		// mev block
+		// mev block, debug.
 		log.WithFields(log.Fields{
 			"Slot":         b.Message.Slot,
 			"Block":        b.Message.Body.ExecutionPayload.BlockNumber,
@@ -125,7 +125,7 @@ func (b *BellatrixBlock) GetSentRewardAndType(
 			"FeeRecipient": b.FeeRecipient(),
 			"PoolAddress":  poolAddress,
 			"MevReward":    reward.String(),
-		}).Info("MEV reward found in block")
+		}).Debug("MEV reward found in block")
 		wasRewardSent = true
 		txType = MevBlock
 	} else {

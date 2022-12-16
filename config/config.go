@@ -44,10 +44,15 @@ func NewCliConfig() (*Config, error) {
 		os.Exit(0)
 	}
 
+	var debugHardcodedSubscriptions []uint64
+	var err error
+
 	// Only to debug: Read hardcoded subscriptions from a file
-	debugHardcodedSubscriptions, err := ReadHardcodedSubscriptions(*debugHardcodedSubscriptionsFile)
-	if err != nil {
-		log.Fatal(err)
+	if *debugHardcodedSubscriptionsFile != "" {
+		debugHardcodedSubscriptions, err = ReadHardcodedSubscriptions(*debugHardcodedSubscriptionsFile)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	conf := &Config{

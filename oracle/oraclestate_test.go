@@ -7,6 +7,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func Test_AddSubscription(t *testing.T) {
+	state := NewOracleState()
+	state.AddSubscriptionIfNotAlready(10)
+	state.IncreaseAllPendingRewards(big.NewInt(100))
+	state.ConsolidateBalance(10)
+	state.IncreaseAllPendingRewards(big.NewInt(200))
+	require.Equal(t, big.NewInt(200), state.pendingRewards[10])
+	require.Equal(t, big.NewInt(100), state.claimableRewards[10])
+
+	// check that adding again doesnt reset the subscription
+	state.AddSubscriptionIfNotAlready(10)
+	require.Equal(t, big.NewInt(200), state.pendingRewards[10])
+	require.Equal(t, big.NewInt(100), state.claimableRewards[10])
+}
+
 func Test_IncreasePendingRewards(t *testing.T) {
 	state := NewOracleState()
 	state.pendingRewards[12] = big.NewInt(100)

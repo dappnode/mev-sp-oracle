@@ -35,6 +35,9 @@ type OracleState struct {
 	network             string
 	poolContract        string
 
+	// TODO: Rough idea
+	//activeSubscriptions []uint64
+
 	pendingRewards   map[uint64]*big.Int // TODO add wei or gwei to all fucking variables.
 	claimableRewards map[uint64]*big.Int
 	unbanBalance     map[uint64]*big.Int
@@ -63,7 +66,11 @@ func NewOracleState() *OracleState {
 	}
 }
 
-func (state *OracleState) InitValIndexData(valIndex uint64) {
+func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64) {
+	// TODO: refactor this function
+	if state.pendingRewards[valIndex] != nil {
+		return
+	}
 	state.pendingRewards[valIndex] = big.NewInt(0)
 	state.claimableRewards[valIndex] = big.NewInt(0)
 	state.unbanBalance[valIndex] = big.NewInt(0)
@@ -71,13 +78,6 @@ func (state *OracleState) InitValIndexData(valIndex uint64) {
 	state.proposedBlocks[valIndex] = make([]uint64, 0)
 	state.missedBlocks[valIndex] = make([]uint64, 0)
 	state.wrongFeeBlocks[valIndex] = make([]uint64, 0)
-}
-
-// bad naming
-func (state *OracleState) InitWithSubscriptions(subs *Subscriptions) {
-	for valIndex, _ := range subs.subscriptions {
-		state.InitValIndexData(valIndex)
-	}
 }
 
 func (state *OracleState) ConsolidateBalance(valIndex uint64) {
