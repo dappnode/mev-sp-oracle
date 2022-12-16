@@ -19,7 +19,7 @@ import (
 )
 
 type Fetcher struct {
-	ConsensusClient *http.Service // TODO rename to consensusClient
+	ConsensusClient *http.Service
 	ExecutionClient *ethclient.Client
 }
 
@@ -40,7 +40,7 @@ func NewFetcher(cfg config.Config) *Fetcher {
 		http.WithLogLevel(zerolog.WarnLevel),
 	)
 	if err != nil {
-		log.Fatal("TODO:", err)
+		log.Fatal(err)
 	}
 	consensusClient := client.(*http.Service)
 
@@ -53,7 +53,6 @@ func NewFetcher(cfg config.Config) *Fetcher {
 // TODO: rename to getConsensusblock?
 func (f *Fetcher) GetBlockAtSlot(slot string) (*spec.VersionedSignedBeaconBlock, error) {
 
-	// input is the slot
 	// TODO: set custom timeouts
 	signedBeaconBlock, err := f.ConsensusClient.SignedBeaconBlock(context.Background(), slot)
 
@@ -78,7 +77,6 @@ func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 	return duties[slotWithinEpoch], nil
 }
 
-// TODO this wont work for capella
 // This function is expensive as gets every tx receipt from the block. Use only if needed
 func (f *Fetcher) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellatrix.Transaction) (*types.Header, []*types.Receipt, error) {
 	header, err := f.ExecutionClient.HeaderByNumber(context.Background(), blockNumber)
@@ -101,7 +99,7 @@ func (f *Fetcher) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellat
 	return header, receipts, nil
 }
 
-// TODO: unsure how this will look like
+// TODO:
 func (f *Fetcher) GetSubscriptions() *Subscriptions {
 	// manual subscriptions from the smart contract
 	var manualSubscriptions = Subscriptions{
