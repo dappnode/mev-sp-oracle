@@ -14,39 +14,39 @@ func Test_AddSubscription(t *testing.T) {
 	state.IncreaseAllPendingRewards(big.NewInt(100))
 	state.ConsolidateBalance(10)
 	state.IncreaseAllPendingRewards(big.NewInt(200))
-	require.Equal(t, big.NewInt(200), state.pendingRewards[10])
-	require.Equal(t, big.NewInt(100), state.claimableRewards[10])
+	require.Equal(t, big.NewInt(200), state.PendingRewards[10])
+	require.Equal(t, big.NewInt(100), state.ClaimableRewards[10])
 
 	// check that adding again doesnt reset the subscription
 	state.AddSubscriptionIfNotAlready(10)
-	require.Equal(t, big.NewInt(200), state.pendingRewards[10])
-	require.Equal(t, big.NewInt(100), state.claimableRewards[10])
+	require.Equal(t, big.NewInt(200), state.PendingRewards[10])
+	require.Equal(t, big.NewInt(100), state.ClaimableRewards[10])
 }
 
 func Test_IncreasePendingRewards(t *testing.T) {
 	state := NewOracleState(&config.Config{})
-	state.pendingRewards[12] = big.NewInt(100)
+	state.PendingRewards[12] = big.NewInt(100)
 	state.validatorState[12] = Active
 	totalAmount := big.NewInt(130)
 
-	require.Equal(t, big.NewInt(100), state.pendingRewards[12])
+	require.Equal(t, big.NewInt(100), state.PendingRewards[12])
 	state.IncreaseAllPendingRewards(totalAmount)
-	require.Equal(t, big.NewInt(230), state.pendingRewards[12])
+	require.Equal(t, big.NewInt(230), state.PendingRewards[12])
 }
 
 func Test_ConsolidateBalance_Eligible(t *testing.T) {
 	valIndex := uint64(10)
 	state := NewOracleState(&config.Config{})
-	state.claimableRewards[valIndex] = big.NewInt(77)
-	state.pendingRewards[valIndex] = big.NewInt(23)
+	state.ClaimableRewards[valIndex] = big.NewInt(77)
+	state.PendingRewards[valIndex] = big.NewInt(23)
 
-	require.Equal(t, big.NewInt(77), state.claimableRewards[valIndex])
-	require.Equal(t, big.NewInt(23), state.pendingRewards[valIndex])
+	require.Equal(t, big.NewInt(77), state.ClaimableRewards[valIndex])
+	require.Equal(t, big.NewInt(23), state.PendingRewards[valIndex])
 
 	state.ConsolidateBalance(valIndex)
 
-	require.Equal(t, big.NewInt(100), state.claimableRewards[valIndex])
-	require.Equal(t, big.NewInt(0), state.pendingRewards[valIndex])
+	require.Equal(t, big.NewInt(100), state.ClaimableRewards[valIndex])
+	require.Equal(t, big.NewInt(0), state.PendingRewards[valIndex])
 }
 
 func Test_StateMachine(t *testing.T) {

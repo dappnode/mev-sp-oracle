@@ -28,6 +28,24 @@ func main() {
 
 	fetcher := oracle.NewFetcher(*cfg)
 	oracle := oracle.NewOracle(cfg, fetcher)
+
+	go mainLoop(oracle, fetcher, cfg)
+
+	// Wait for signal.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	for {
+		sig := <-sigCh
+		if sig == syscall.SIGINT || sig == syscall.SIGTERM || sig == os.Interrupt || sig == os.Kill {
+			break
+		}
+	}
+
+	// TODO: Save to file before stopping?
+	log.Info("Stopping mev-sp-oracle")
+}
+
+func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config) {
 	/*
 		syncProgress, err := fetcher.ExecutionClient.SyncProgress(context.Background())
 		if err != nil {
@@ -76,19 +94,12 @@ func main() {
 		// TODO: Rethink this a bit. Do not run in the first block we process, and think about edge cases
 		if (oracle.State.Slot-cfg.DeployedSlot)%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached")
-			// TODO: Dump to file and generate merkle trees/root/proof
+			for i, v := range oracle.State.PendingRewards {
+				log.Info("Pending reward for: ", i, "is: ", v)
+			}
+			for i, v := range oracle.State.ClaimableRewards {
+				log.Info("Claimable reward for: ", i, "is: ", v)
+			}
 		}
 	}
-
-	// Wait for signal.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-	for {
-		sig := <-sigCh
-		if sig == syscall.SIGINT || sig == syscall.SIGTERM || sig == os.Interrupt || sig == os.Kill {
-			break
-		}
-	}
-
-	log.Info("Stopping mev-sp-oracle")
 }

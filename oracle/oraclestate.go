@@ -42,9 +42,9 @@ type OracleState struct {
 	// TODO: Rough idea
 	//activeSubscriptions []uint64
 
-	pendingRewards   map[uint64]*big.Int // TODO add wei or gwei to all fucking variables.
-	claimableRewards map[uint64]*big.Int
-	unbanBalance     map[uint64]*big.Int
+	PendingRewards   map[uint64]*big.Int // TODO add wei or gwei to all fucking variables.
+	ClaimableRewards map[uint64]*big.Int
+	UnbanBalance     map[uint64]*big.Int
 
 	// TODO: Rename to states
 	validatorState map[uint64]int // TODO not sure if the enum has a type.
@@ -70,9 +70,9 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		Network:     cfg.Network,
 		PoolAddress: cfg.PoolAddress,
 
-		pendingRewards:   make(map[uint64]*big.Int),
-		claimableRewards: make(map[uint64]*big.Int),
-		unbanBalance:     make(map[uint64]*big.Int),
+		PendingRewards:   make(map[uint64]*big.Int),
+		ClaimableRewards: make(map[uint64]*big.Int),
+		UnbanBalance:     make(map[uint64]*big.Int),
 		validatorState:   make(map[uint64]int),
 		proposedBlocks:   make(map[uint64][]uint64),
 		missedBlocks:     make(map[uint64][]uint64),
@@ -82,12 +82,12 @@ func NewOracleState(cfg *config.Config) *OracleState {
 
 func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64) {
 	// TODO: refactor this function
-	if state.pendingRewards[valIndex] != nil {
+	if state.PendingRewards[valIndex] != nil {
 		return
 	}
-	state.pendingRewards[valIndex] = big.NewInt(0)
-	state.claimableRewards[valIndex] = big.NewInt(0)
-	state.unbanBalance[valIndex] = big.NewInt(0)
+	state.PendingRewards[valIndex] = big.NewInt(0)
+	state.ClaimableRewards[valIndex] = big.NewInt(0)
+	state.UnbanBalance[valIndex] = big.NewInt(0)
 	state.validatorState[valIndex] = Active
 	state.proposedBlocks[valIndex] = make([]uint64, 0)
 	state.missedBlocks[valIndex] = make([]uint64, 0)
@@ -95,8 +95,8 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64) {
 }
 
 func (state *OracleState) ConsolidateBalance(valIndex uint64) {
-	state.claimableRewards[valIndex].Add(state.claimableRewards[valIndex], state.pendingRewards[valIndex])
-	state.pendingRewards[valIndex] = big.NewInt(0)
+	state.ClaimableRewards[valIndex].Add(state.ClaimableRewards[valIndex], state.PendingRewards[valIndex])
+	state.PendingRewards[valIndex] = big.NewInt(0)
 }
 
 func (state *OracleState) GetEligibleValidators() []uint64 {
@@ -118,17 +118,17 @@ func (state *OracleState) IncreaseAllPendingRewards(
 	amountToIncrease := big.NewInt(0).Div(totalAmount, numEligibleValidators)
 	// TODO: Rounding problems. Evenly distribute the remainder
 
-	for _, pending := range state.pendingRewards {
+	for _, pending := range state.PendingRewards {
 		pending.Add(pending, amountToIncrease)
 	}
 }
 
 func (state *OracleState) ResetPendingRewards(valIndex uint64) {
-	state.pendingRewards[valIndex] = big.NewInt(0)
+	state.PendingRewards[valIndex] = big.NewInt(0)
 }
 
 func (state *OracleState) SetUnbanBalance(valIndex uint64, amount *big.Int) {
-	state.unbanBalance[valIndex] = amount
+	state.UnbanBalance[valIndex] = amount
 }
 
 func (state *OracleState) GetState(valIndex uint64) int {

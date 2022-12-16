@@ -61,6 +61,9 @@ func (f *Fetcher) GetBlockAtSlot(slot uint64) (*spec.VersionedSignedBeaconBlock,
 	return signedBeaconBlock, err
 }
 
+// TODO: This call take 1 second and we get the whole epoch, but just a slot
+// is taken each time. Cache the result for the whole epoch and it should
+// really increase the performance.
 func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 	// Hardcoded
 	slotsInEpoch := uint64(32)

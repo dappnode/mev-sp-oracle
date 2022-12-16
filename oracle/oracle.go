@@ -115,7 +115,7 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 
 			// If new state is NotActive, means second lost block. Share its pending rewards and reset
 			if or.State.IsNotActive(valIndexDuty) {
-				or.State.IncreaseAllPendingRewards(or.State.pendingRewards[valIndexDuty])
+				or.State.IncreaseAllPendingRewards(or.State.PendingRewards[valIndexDuty])
 				or.State.ResetPendingRewards(valIndexDuty)
 			}
 
@@ -127,7 +127,7 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 			} else {
 				// reward was not sent to the pool, advance state machine -> ban.
 				or.State.AdvanceStateMachine(valIndexDuty, ProposalWithWrongFee)
-				or.State.IncreaseAllPendingRewards(or.State.pendingRewards[valIndexDuty])
+				or.State.IncreaseAllPendingRewards(or.State.PendingRewards[valIndexDuty])
 				or.State.ResetPendingRewards(valIndexDuty)
 				or.State.SetUnbanBalance(valIndexDuty, reward)
 				// LogUpdateMetrics(valIndex, reward, duty, etc, state? event?)
@@ -158,11 +158,13 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 	//}
 
 	if !missedBlock {
-		donatedInBlock, err := myBlock.DonatedAmountInWei(or.cfg.PoolAddress)
-		if err != nil {
-			log.Fatal(err)
-		}
-		or.State.IncreaseAllPendingRewards(donatedInBlock)
+		// TODO: What if the first time we enter here there are no registered validators?
+		// TODO: Not sure if donations are confused here with mev rewards
+		//donatedInBlock, err := myBlock.DonatedAmountInWei(or.cfg.PoolAddress)
+		//if err != nil {
+		//	log.Fatal(err)
+		//}
+		//or.State.IncreaseAllPendingRewards(donatedInBlock)
 		//TODO: add info on who donated and put to db. this can be useful for social stuff.
 	}
 	or.State.Slot = slotToProcess + 1
