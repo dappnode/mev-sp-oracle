@@ -3,6 +3,7 @@ package oracle
 import (
 	"context"
 	"math/big"
+	"strconv"
 	"time"
 
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
@@ -51,10 +52,11 @@ func NewFetcher(cfg config.Config) *Fetcher {
 }
 
 // TODO: rename to getConsensusblock?
-func (f *Fetcher) GetBlockAtSlot(slot string) (*spec.VersionedSignedBeaconBlock, error) {
+func (f *Fetcher) GetBlockAtSlot(slot uint64) (*spec.VersionedSignedBeaconBlock, error) {
 
 	// TODO: set custom timeouts
-	signedBeaconBlock, err := f.ConsensusClient.SignedBeaconBlock(context.Background(), slot)
+	slotStr := strconv.FormatUint(slot, 10)
+	signedBeaconBlock, err := f.ConsensusClient.SignedBeaconBlock(context.Background(), slotStr)
 
 	return signedBeaconBlock, err
 }

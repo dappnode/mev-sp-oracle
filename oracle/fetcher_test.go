@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	// TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
@@ -47,7 +48,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	var fetcher = NewFetcher(cfgFetcher)
 	folder := "../mock"
 	blockType := "bellatrix"
-	slotToFetch := "5320330"
+	slotToFetch := uint64(5320330)
 	network := "mainnet"
 
 	// Get block
@@ -57,7 +58,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	// Serialize and dump the block to a file
 	mbeel, err := signedBeaconBlock.Bellatrix.MarshalJSON()
 	require.NoError(t, err)
-	nameBlock := "block_" + blockType + "_slot_" + slotToFetch + "_" + network
+	nameBlock := "block_" + blockType + "_slot_" + strconv.FormatInt(int64(slotToFetch), 10) + "_" + network
 	fblock, err := os.Create(filepath.Join(folder, nameBlock))
 	require.NoError(t, err)
 	defer fblock.Close()
@@ -71,7 +72,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	// Serialize and dump the block header to a file
 	serializedHeader, err := header.MarshalJSON()
 	require.NoError(t, err)
-	nameHeader := "header_" + blockType + "_slot_" + slotToFetch + "_" + network
+	nameHeader := "header_" + blockType + "_slot_" + strconv.FormatInt(int64(slotToFetch), 10) + "_" + network
 	fheader, err := os.Create(filepath.Join(folder, nameHeader))
 	require.NoError(t, err)
 	defer fheader.Close()
@@ -79,7 +80,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get tx receipts, serialize and dump to file
-	nameTxReceipts := "txreceipts_" + blockType + "_slot_" + slotToFetch + "_" + network
+	nameTxReceipts := "txreceipts_" + blockType + "_slot_" + strconv.FormatInt(int64(slotToFetch), 10) + "_" + network
 	fTxs, err := os.Create(filepath.Join(folder, nameTxReceipts))
 	require.NoError(t, err)
 	defer fTxs.Close()

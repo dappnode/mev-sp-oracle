@@ -2,13 +2,14 @@ package oracle
 
 import (
 	"math/big"
+	"mev-sp-oracle/config"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func Test_AddSubscription(t *testing.T) {
-	state := NewOracleState()
+	state := NewOracleState(&config.Config{})
 	state.AddSubscriptionIfNotAlready(10)
 	state.IncreaseAllPendingRewards(big.NewInt(100))
 	state.ConsolidateBalance(10)
@@ -23,7 +24,7 @@ func Test_AddSubscription(t *testing.T) {
 }
 
 func Test_IncreasePendingRewards(t *testing.T) {
-	state := NewOracleState()
+	state := NewOracleState(&config.Config{})
 	state.pendingRewards[12] = big.NewInt(100)
 	state.validatorState[12] = Active
 	totalAmount := big.NewInt(130)
@@ -35,7 +36,7 @@ func Test_IncreasePendingRewards(t *testing.T) {
 
 func Test_ConsolidateBalance_Eligible(t *testing.T) {
 	valIndex := uint64(10)
-	state := NewOracleState()
+	state := NewOracleState(&config.Config{})
 	state.claimableRewards[valIndex] = big.NewInt(77)
 	state.pendingRewards[valIndex] = big.NewInt(23)
 
@@ -49,7 +50,7 @@ func Test_ConsolidateBalance_Eligible(t *testing.T) {
 }
 
 func Test_StateMachine(t *testing.T) {
-	state := NewOracleState()
+	state := NewOracleState(&config.Config{})
 	valIndex1 := uint64(1000)
 	valIndex2 := uint64(2000)
 

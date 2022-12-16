@@ -3,6 +3,8 @@ package oracle
 import (
 	"math/big"
 
+	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,14 +28,16 @@ const (
 // TODO: add stuff to serialize to json
 // TODO state into is not a good name
 type OracleState struct {
-	timestampGeneration string
-	blockStart          string
-	blockEnd            string
-	amountOfBlocks      string
-	blockHeigh          string
-	slotHeigh           string
-	network             string
-	poolContract        string
+	// When the state was updated
+	timestampGeneration string // TODO unused
+
+	// Amount of processed blocks
+	ProcessedSlots uint64
+
+	// Slot of this state
+	Slot        uint64
+	Network     string
+	PoolAddress string
 
 	// TODO: Rough idea
 	//activeSubscriptions []uint64
@@ -54,8 +58,18 @@ type OracleState struct {
 	// map[uint64][]*big.Int
 }
 
-func NewOracleState() *OracleState {
+func NewOracleState(cfg *config.Config) *OracleState {
 	return &OracleState{
+		// Start by default at the first slot when the oracle was deployed
+		Slot: cfg.DeployedSlot,
+
+		// Assume no block were processed
+		ProcessedSlots: uint64(0),
+
+		// Onchain oracle info
+		Network:     cfg.Network,
+		PoolAddress: cfg.PoolAddress,
+
 		pendingRewards:   make(map[uint64]*big.Int),
 		claimableRewards: make(map[uint64]*big.Int),
 		unbanBalance:     make(map[uint64]*big.Int),

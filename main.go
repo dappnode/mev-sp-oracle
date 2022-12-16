@@ -7,6 +7,9 @@ import (
 	"context"
 	"mev-sp-oracle/config"
 	"mev-sp-oracle/oracle"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -15,7 +18,7 @@ import (
 // Hardcoded for Ethereum
 var SlotsInEpoch = uint64(32)
 
-// Example: ./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=5365408 --pool-address="0x388C818CA8B9251b393131C08a736A67ccB19297" --checkpoint-size=10
+// Example: ./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=5365409 --pool-address="0x388C818CA8B9251b393131C08a736A67ccB19297" --checkpoint-size=10
 func main() {
 	log.Info("mev-sp-oracle")
 	cfg, err := config.NewCliConfig()
@@ -32,8 +35,8 @@ func main() {
 		}
 	*/
 
-	// TODO: Quick and dirty
-	oracle.LastProcessedSlot = cfg.DeployedSlot - 1
+	// TODO: resume from file
+	log.Info("Starting to process from slot", oracle.State.Slot)
 
 	for {
 
@@ -60,8 +63,8 @@ func main() {
 		finalizedEpoch := uint64(finality.Finalized.Epoch)
 		finalizedSlot := finalizedEpoch * SlotsInEpoch
 
-		if finalizedSlot > oracle.LastProcessedSlot {
-			err = oracle.CalculateCheckpointRewards(oracle.LastProcessedSlot + 1)
+		if finalizedSlot > oracle.State.Slot {
+			err = oracle.AdvanceStateToNextEpoch()
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -71,11 +74,21 @@ func main() {
 		}
 
 		// TODO: Rethink this a bit. Do not run in the first block we process, and think about edge cases
-		if (oracle.LastProcessedSlot-cfg.DeployedSlot)%cfg.CheckPointSizeInSlots == 0 {
+		if (oracle.State.Slot-cfg.DeployedSlot)%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached")
 			// TODO: Dump to file and generate merkle trees/root/proof
 		}
 	}
-}
 
-// TODO: handle sigint and sigterm signals
+	// Wait for signal.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	for {
+		sig := <-sigCh
+		if sig == syscall.SIGINT || sig == syscall.SIGTERM || sig == os.Interrupt || sig == os.Kill {
+			break
+		}
+	}
+
+	log.Info("Stopping mev-sp-oracle")
+}
