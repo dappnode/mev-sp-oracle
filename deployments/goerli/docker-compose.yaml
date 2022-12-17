@@ -6,6 +6,9 @@
 # 2. run docker-compose
 # docker-compose up -d
 
+# 3. other
+# chmod 777 teku
+
 version: "3.9"
 
 # just used by the oracle
