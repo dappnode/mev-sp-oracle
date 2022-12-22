@@ -1,0 +1,69 @@
+# instructions
+
+# 1. create jwtsecret file
+# sudo openssl rand -hex 32 > jwtsecret
+
+# 2. run docker-compose
+# docker-compose up -d
+
+# 3. other
+# chmod 777 teku
+
+version: "3.9"
+
+# just used by the oracle
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 1000m
+
+services:
+  geth:
+    image: "ethereum/client-go:v1.10.26"
+    restart: on-failure
+    stop_grace_period: 5m
+    command:
+      - --goerli
+      - --http
+      - --http.api=eth,net,engine,admin
+      - --http.addr=0.0.0.0
+      - --http.vhosts="*"
+      - --authrpc.vhosts=*
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.jwtsecret=/jwtsecret
+      - --datadir=/geth
+      - --port=30303
+    ports:
+      - 127.0.0.1:8551:8551
+      - 127.0.0.1:8545:8545
+      - 30303:30303/tcp
+      - 30303:30303/udp
+    volumes:
+      - ./geth:/geth
+      - ./jwtsecret:/jwtsecret
+
+  teku:
+    image: consensys/teku:22.12.0
+    restart: on-failure
+    depends_on:
+      - geth
+    command:
+      - --network=goerli
+      - --data-path=/opt/teku/data
+      - --ee-endpoint=http://geth:8551
+      - --ee-jwt-secret-file=/jwtsecret
+      - --metrics-enabled=true
+      - --metrics-host-allowlist="*"
+      - --rest-api-enabled=true
+      - --rest-api-host-allowlist=*
+      - --data-storage-archive-frequency=128
+      - --data-storage-mode=archive
+      #- --initial-state=https://xxx/eth/v2/debug/beacon/states/finalized
+    ports:
+      - 127.0.0.1:5051:5051
+      - 127.0.0.1:8008:8008
+      - 9000:9000
+    volumes:
+      - ./teku:/opt/teku/data
+      - ./jwtsecret:/jwtsecret
