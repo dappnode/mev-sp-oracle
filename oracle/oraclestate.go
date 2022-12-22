@@ -151,6 +151,18 @@ func (state *OracleState) IsBanned(valIndex uint64) bool {
 	return state.validatorState[valIndex] == Banned
 }
 
+func (state *OracleState) LogPendingBalances() {
+	for valIndex, pending := range state.PendingRewards {
+		log.Info("SlotState: ", state.Slot, " Pending: ", valIndex, ": ", pending)
+	}
+}
+
+func (state *OracleState) LogClaimableBalances() {
+	for valIndex, claimable := range state.ClaimableRewards {
+		log.Info("SlotState: ", state.Slot, " Claimable: ", valIndex, ": ", claimable)
+	}
+}
+
 // See spec for state machine.
 func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 	switch state.validatorState[valIndex] {

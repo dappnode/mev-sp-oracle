@@ -47,7 +47,7 @@ func (or *Oracle) IsValidatorSubscribed(validatorIndex uint64, subscriptions *Su
 }
 
 func (or *Oracle) AdvanceStateToNextEpoch() error {
-	log.Info("Processing slot: ", or.State.Slot)
+	//log.Info("Processing slot: ", or.State.Slot)
 	//lastSlot := (checkpointNumber+1)*or.cfg.CheckPointSizeInSlots + or.cfg.DeployedSlot // TODO: not sure if -1
 	/*
 		log.WithFields(log.Fields{
@@ -63,6 +63,7 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 	// TODO: Automatically update the subscriptions for the smart contract on every block
 	// TODO: init is wrong. it has to be "update"
 	contractSubscriptions := or.fetcher.GetSubscriptions()
+	_ = contractSubscriptions
 	//or.state.InitWithSubscriptions(contractSubscriptions)
 
 	// TODO: Ensure somehow that we dont process a slot twice.
@@ -96,19 +97,23 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 	var myBlock BellatrixBlock
 	var reward *big.Int = big.NewInt(0)
 	var sentOk bool = false
+	var rewardType int = -1
 
 	if block == nil {
 		missedBlock = true
 	} else {
 		myBlock = BellatrixBlock{*block.Bellatrix}
-		reward, sentOk, _, err = myBlock.GetSentRewardAndType(or.cfg.PoolAddress, *or.fetcher)
+		reward, sentOk, rewardType, err = myBlock.GetSentRewardAndType(or.cfg.PoolAddress, *or.fetcher)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
+	_ = rewardType
 
 	// Check if proposal belongs to a subscription from the smart contract
-	if or.IsValidatorSubscribed(valIndexDuty, contractSubscriptions) {
+	//if or.IsValidatorSubscribed(valIndexDuty, contractSubscriptions) {
+	// Temporally disable auto subscriptions
+	if 1 != 1 {
 		if missedBlock {
 			// if block was missed, advance state machine.
 			or.State.AdvanceStateMachine(valIndexDuty, MissedProposal)

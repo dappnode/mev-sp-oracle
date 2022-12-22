@@ -18,7 +18,9 @@ import (
 // Hardcoded for Ethereum
 var SlotsInEpoch = uint64(32)
 
-// Example: ./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=5365409 --pool-address="0x388C818CA8B9251b393131C08a736A67ccB19297" --checkpoint-size=10
+// Examples:
+// Goerli/Prater
+// ./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=4500000 --pool-address="0x455e5aa18469bc6ccef49594645666c587a3a71b" --checkpoint-size=10
 func main() {
 	log.Info("mev-sp-oracle")
 	cfg, err := config.NewCliConfig()
@@ -41,7 +43,7 @@ func main() {
 		}
 	}
 
-	// TODO: Save to file before stopping?
+	// TODO: Dump to file before stopping
 	log.Info("Stopping mev-sp-oracle")
 }
 
@@ -54,7 +56,7 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 	*/
 
 	// TODO: resume from file
-	log.Info("Starting to process from slot", oracle.State.Slot)
+	log.Info("Starting to process from slot: ", oracle.State.Slot)
 
 	for {
 
@@ -86,6 +88,7 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 			if err != nil {
 				log.Fatal(err)
 			}
+			log.Info("[", oracle.State.Slot, "/", finalizedSlot, "] Done processing slot. Remaining slots: ", finalizedSlot-oracle.State.Slot)
 		} else {
 			log.Info("Waiting for new finalized slot")
 			time.Sleep(10 * time.Second)
@@ -93,13 +96,9 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 
 		// TODO: Rethink this a bit. Do not run in the first block we process, and think about edge cases
 		if (oracle.State.Slot-cfg.DeployedSlot)%cfg.CheckPointSizeInSlots == 0 {
-			log.Info("Checkpoint reached")
-			for i, v := range oracle.State.PendingRewards {
-				log.Info("Pending reward for: ", i, "is: ", v)
-			}
-			for i, v := range oracle.State.ClaimableRewards {
-				log.Info("Claimable reward for: ", i, "is: ", v)
-			}
+			log.Info("Checkpoint reached, slot: ", oracle.State.Slot)
+			oracle.State.LogClaimableBalances()
+			oracle.State.LogPendingBalances()
 		}
 	}
 }
