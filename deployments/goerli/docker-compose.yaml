@@ -16,9 +16,25 @@ x-logging: &logging
   logging:
     driver: json-file
     options:
-      max-size: 1000m
+      max-size: 2000m
 
 services:
+  oracle:
+    # image required to be built locally
+    # use from dockerhub when ready
+    image: "oracle"
+    restart: "no"
+    <<: *logging
+    depends_on:
+      - geth
+      - teku
+    command:
+      - --consensus-endpoint=http://teku:5051
+      - --execution-endpoint=http://geth:8545
+      - --deployed-slot=4500000
+      - --checkpoint-size=10
+      - --pool-address=0x455e5aa18469bc6ccef49594645666c587a3a71b
+
   geth:
     image: "ethereum/client-go:v1.10.26"
     restart: on-failure
@@ -28,7 +44,7 @@ services:
       - --http
       - --http.api=eth,net,engine,admin
       - --http.addr=0.0.0.0
-      - --http.vhosts="*"
+      - --http.vhosts=*
       - --authrpc.vhosts=*
       - --authrpc.addr=0.0.0.0
       - --authrpc.jwtsecret=/jwtsecret
