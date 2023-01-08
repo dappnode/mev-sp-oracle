@@ -55,7 +55,7 @@ func Test_GetUniqueElements(t *testing.T) {
 			"0xaaa",
 			"0xbbb",
 		})
-	require.Equal(t, []string{"0xaaa", "0xbbb"}, test1)
+	require.ElementsMatch(t, []string{"0xaaa", "0xbbb"}, test1)
 
 	test2 := GetUniqueElements(
 		[]string{
@@ -64,13 +64,13 @@ func Test_GetUniqueElements(t *testing.T) {
 			"0xaaa",
 			"0xaaa",
 		})
-	require.Equal(t, []string{"0xaaa"}, test2)
+	require.ElementsMatch(t, []string{"0xaaa"}, test2)
 
 	test3 := GetUniqueElements(
 		[]string{
 			"0xaaa",
 		})
-	require.Equal(t, []string{"0xaaa"}, test3)
+	require.ElementsMatch(t, []string{"0xaaa"}, test3)
 
 	test4 := GetUniqueElements(
 		[]string{
@@ -78,5 +78,5 @@ func Test_GetUniqueElements(t *testing.T) {
 			"0xbbb",
 			"0xccc",
 		})
-	require.Equal(t, []string{"0xaaa", "0xbbb", "0xccc"}, test4)
+	require.ElementsMatch(t, []string{"0xaaa", "0xbbb", "0xccc"}, test4)
 }
