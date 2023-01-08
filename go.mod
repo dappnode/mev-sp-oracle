@@ -4,9 +4,12 @@ module mev-sp-oracle
 go 1.19
 
 require (
+	github.com/miguelmota/go-solidity-sha3 v0.1.1
 	github.com/rs/zerolog v1.26.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.7.2
+	github.com/txaty/go-merkletree v0.1.15-0.20230105063604-9a402c177611
+	golang.org/x/crypto v0.0.0-20211215165025-cf75a172585e
 )
 
 require (
@@ -33,7 +36,7 @@ require (
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
-	golang.org/x/crypto v0.0.0-20211215165025-cf75a172585e // indirect
+	github.com/txaty/gool v0.1.4 // indirect
 	golang.org/x/net v0.0.0-20220607020251-c690dde0001d // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gopkg.in/cenkalti/backoff.v1 v1.1.0 // indirect

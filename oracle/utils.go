@@ -35,3 +35,15 @@ func SumAndSaturate(a *big.Int, b *big.Int, saturate *big.Int) *big.Int {
 	}
 	return aPlusB
 }
+
+func GetUniqueElements(arr []string) []string {
+	result := []string{}
+	encountered := map[string]bool{}
+	for v := range arr {
+		encountered[arr[v]] = true
+	}
+	for key, _ := range encountered {
+		result = append(result, key)
+	}
+	return result
+}
