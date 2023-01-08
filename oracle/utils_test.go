@@ -46,3 +46,37 @@ func Test_SumAndSaturate(t *testing.T) {
 	test3 := SumAndSaturate(big.NewInt(500), big.NewInt(700), big.NewInt(1000000))
 	require.Equal(t, big.NewInt(1200), test3)
 }
+
+func Test_GetUniqueElements(t *testing.T) {
+	test1 := GetUniqueElements(
+		[]string{
+			"0xaaa",
+			"0xaaa",
+			"0xaaa",
+			"0xbbb",
+		})
+	require.Equal(t, []string{"0xaaa", "0xbbb"}, test1)
+
+	test2 := GetUniqueElements(
+		[]string{
+			"0xaaa",
+			"0xaaa",
+			"0xaaa",
+			"0xaaa",
+		})
+	require.Equal(t, []string{"0xaaa"}, test2)
+
+	test3 := GetUniqueElements(
+		[]string{
+			"0xaaa",
+		})
+	require.Equal(t, []string{"0xaaa"}, test3)
+
+	test4 := GetUniqueElements(
+		[]string{
+			"0xaaa",
+			"0xbbb",
+			"0xccc",
+		})
+	require.Equal(t, []string{"0xaaa", "0xbbb", "0xccc"}, test4)
+}
