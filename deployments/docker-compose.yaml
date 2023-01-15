@@ -29,18 +29,19 @@ services:
       - geth
       - teku
     command:
+      - --network=${NETWORK}
       - --consensus-endpoint=http://teku:5051
       - --execution-endpoint=http://geth:8545
-      - --deployed-slot=4500000
-      - --checkpoint-size=10
-      - --pool-address=0x455e5aa18469bc6ccef49594645666c587a3a71b
+      - --deployed-slot=${DEPLOYED_SLOT}
+      - --checkpoint-size=${CHECKPOINT_SIZE}
+      - --pool-address=${POOL_ADDRESS}
 
   geth:
     image: "ethereum/client-go:v1.10.26"
     restart: on-failure
     stop_grace_period: 5m
     command:
-      - --goerli
+      - --${NETWORK}
       - --http
       - --http.api=eth,net,engine,admin
       - --http.addr=0.0.0.0
@@ -65,7 +66,7 @@ services:
     depends_on:
       - geth
     command:
-      - --network=goerli
+      - --network=${NETWORK}
       - --data-path=/opt/teku/data
       - --ee-endpoint=http://geth:8551
       - --ee-jwt-secret-file=/jwtsecret
@@ -83,3 +84,14 @@ services:
     volumes:
       - ./teku:/opt/teku/data
       - ./jwtsecret:/jwtsecret
+
+  postgres:
+      image: postgres:15.1
+      restart: on-failure
+      environment:
+        - POSTGRES_USER=${POSTGRES_USER}
+        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      ports:
+        - 127.0.0.1:5432:5432
+      volumes: 
+        - ./postgres-data:/var/lib/postgresql/data
