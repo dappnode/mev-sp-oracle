@@ -19,22 +19,23 @@ x-logging: &logging
       max-size: 2000m
 
 services:
-  oracle:
+  # Enable when public image is ready
+  #oracle:
     # image required to be built locally
     # use from dockerhub when ready
-    image: "oracle"
-    restart: "no"
-    <<: *logging
-    depends_on:
-      - geth
-      - teku
-    command:
-      - --network=${NETWORK}
-      - --consensus-endpoint=http://teku:5051
-      - --execution-endpoint=http://geth:8545
-      - --deployed-slot=${DEPLOYED_SLOT}
-      - --checkpoint-size=${CHECKPOINT_SIZE}
-      - --pool-address=${POOL_ADDRESS}
+  #  image: "oracle"
+  #  restart: "no"
+  #  <<: *logging
+  #  depends_on:
+  #    - geth
+  #    - teku
+  #  command:
+  #    - --network=${NETWORK}
+  #    - --consensus-endpoint=http://teku:5051
+  #    - --execution-endpoint=http://geth:8545
+  #    - --deployed-slot=${DEPLOYED_SLOT}
+  #    - --checkpoint-size=${CHECKPOINT_SIZE}
+  #    - --pool-address=${POOL_ADDRESS}
 
   geth:
     image: "ethereum/client-go:v1.10.26"
@@ -118,6 +119,6 @@ services:
       - --eth1deposits.enable=true
       - --eth1deposits.start-block=${BLOCK_DEPOSIT_CONTRACT}
       - --eth1client.address=https://geth:8545
-      - --chaindb.url=postgresql://postgres:${POSTGRES_PASSWORD}@url:5432/${POSTGRES_USER}
+      - --chaindb.url=postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_USER}
       - --eth2client.address=http://teku:5051
       - --log-level=trace

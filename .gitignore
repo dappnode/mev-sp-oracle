@@ -2,4 +2,5 @@
 mev-sp-oracle
 **/jwtsecret
 deployments/goerli/geth
-deployments/goerli/teku/
+deployments/goerli/teku
+deployments/goerli/postgres-data
