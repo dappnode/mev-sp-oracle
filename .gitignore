@@ -5,3 +5,7 @@ deployments/goerli/geth
 deployments/goerli/teku
 deployments/goerli/postgres-data
 deployments/goerli/metabase-data
+deployments/geth
+deployments/teku
+deployments/postgres-data
+deployments/metabase-data
