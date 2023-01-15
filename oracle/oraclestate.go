@@ -42,9 +42,12 @@ type OracleState struct {
 	// TODO: Rough idea
 	//activeSubscriptions []uint64
 
-	PendingRewards   map[uint64]*big.Int // TODO add wei or gwei to all fucking variables.
-	ClaimableRewards map[uint64]*big.Int
-	UnbanBalance     map[uint64]*big.Int
+	PendingRewards map[uint64]*big.Int // TODO add wei or gwei to all fucking variables.
+
+	ClaimableRewards       map[uint64]*big.Int
+	UnbanBalances          map[uint64]*big.Int
+	DepositAddresses       map[uint64]string
+	PoolRecipientAddresses map[uint64]string
 
 	// TODO: Rename to states
 	validatorState map[uint64]int // TODO not sure if the enum has a type.
@@ -70,13 +73,15 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		Network:     cfg.Network,
 		PoolAddress: cfg.PoolAddress,
 
-		PendingRewards:   make(map[uint64]*big.Int),
-		ClaimableRewards: make(map[uint64]*big.Int),
-		UnbanBalance:     make(map[uint64]*big.Int),
-		validatorState:   make(map[uint64]int),
-		proposedBlocks:   make(map[uint64][]uint64),
-		missedBlocks:     make(map[uint64][]uint64),
-		wrongFeeBlocks:   make(map[uint64][]uint64),
+		PendingRewards:         make(map[uint64]*big.Int),
+		ClaimableRewards:       make(map[uint64]*big.Int),
+		UnbanBalances:          make(map[uint64]*big.Int),
+		DepositAddresses:       make(map[uint64]string),
+		PoolRecipientAddresses: make(map[uint64]string),
+		validatorState:         make(map[uint64]int),
+		proposedBlocks:         make(map[uint64][]uint64),
+		missedBlocks:           make(map[uint64][]uint64),
+		wrongFeeBlocks:         make(map[uint64][]uint64),
 	}
 }
 
@@ -87,7 +92,7 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64) {
 	}
 	state.PendingRewards[valIndex] = big.NewInt(0)
 	state.ClaimableRewards[valIndex] = big.NewInt(0)
-	state.UnbanBalance[valIndex] = big.NewInt(0)
+	state.UnbanBalances[valIndex] = big.NewInt(0)
 	state.validatorState[valIndex] = Active
 	state.proposedBlocks[valIndex] = make([]uint64, 0)
 	state.missedBlocks[valIndex] = make([]uint64, 0)
@@ -128,7 +133,7 @@ func (state *OracleState) ResetPendingRewards(valIndex uint64) {
 }
 
 func (state *OracleState) SetUnbanBalance(valIndex uint64, amount *big.Int) {
-	state.UnbanBalance[valIndex] = amount
+	state.UnbanBalances[valIndex] = amount
 }
 
 func (state *OracleState) GetState(valIndex uint64) int {
