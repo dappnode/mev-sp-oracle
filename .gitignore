@@ -4,3 +4,4 @@ mev-sp-oracle
 deployments/goerli/geth
 deployments/goerli/teku
 deployments/goerli/postgres-data
+deployments/goerli/metabase-data

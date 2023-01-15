@@ -121,21 +121,17 @@ services:
       - --eth1client.address=http://geth:8545
       - --chaindb.url=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432
       - --eth2client.address=http://teku:5051
-      - --log-level=trace
+      - --log-level=debug
 
   metabase:
     volumes:
     # setup your SQLITE db (optional)
       #- /PATH/TO/SQLITE/:/metabase
       - ./metabase-data:/metabase-data
+    # First time has to be manualy configured
+    # Use POSTGRES_USER for both "Database name" and "Username"
     environment:
       - MB_DB_FILE=/metabase-data/metabase.db
-      - MB_DB_TYPE=postgres
-      - MB_DB_DBNAME=postgres
-      - MB_DB_PORT=5432
-      - MB_DB_USER=${POSTGRES_USER}
-      - MB_DB_PASS=${POSTGRES_PASSWORD}
-      - MB_DB_HOST=postgres
     ports:
       - 3000:3000
     image: metabase/metabase
