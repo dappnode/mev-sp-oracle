@@ -1,2 +1,7 @@
 **/.DS_Store
 mev-sp-oracle
+**/jwtsecret
+deployments/goerli/geth
+deployments/goerli/teku
+deployments/goerli/postgres-data
+deployments/goerli/metabase-data
