@@ -1,2 +1,5 @@
 **/.DS_Store
 mev-sp-oracle
+**/jwtsecret
+deployments/goerli/geth
+deployments/goerli/teku/
