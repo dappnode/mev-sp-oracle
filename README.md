@@ -27,14 +27,19 @@ $ chmod 777 teku
 
 Goerli deposit contract is `0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b` but some validators were predeposited, so not all of the will be indexes and most likely doesn't have a deposit address observable onchain.
 
+Store in `.env` so that it's picked up by `docker-compose`
+
 ```
-export NETWORK=goerli
-export DEPLOYED_SLOT=4500000
-export CHECKPOINT_SIZE=10
-export POOL_ADDRESS=0x455e5aa18469bc6ccef49594645666c587a3a71b
-export POSTGRES_USER=xxx
-export POSTGRES_PASSWORD=yyy
-export BLOCK_DEPOSIT_CONTRACT=6711090
+NETWORK=goerli
+DEPLOYED_SLOT=4500000
+CHECKPOINT_SIZE=10
+POOL_ADDRESS=0x455e5aa18469bc6ccef49594645666c587a3a71b
+POSTGRES_USER=xxx
+POSTGRES_PASSWORD=yyy
+BLOCK_DEPOSIT_CONTRACT=6711090
+```
+
+```
 docker-compose up -d
 ```
 
@@ -45,13 +50,18 @@ docker compose convert
 
 ### Mainnet
 
+Store in `.env` so that it's picked up by `docker-compose`
 
 ```
-export NETWORK=mainnet
-export DEPLOYED_SLOT=xxx
-export CHECKPOINT_SIZE=xxx
-export POOL_ADDRESS=0xxx
-export POSTGRES_USER=xxx
-export POSTGRES_PASSWORD=yyy
+NETWORK=mainnet
+DEPLOYED_SLOT=xxx
+CHECKPOINT_SIZE=xxx
+POOL_ADDRESS=0xxx
+POSTGRES_USER=xxx
+POSTGRES_PASSWORD=yyy
+```
+
+```
 docker-compose up -d
 ```
+

@@ -9,3 +9,4 @@ deployments/geth
 deployments/teku
 deployments/postgres-data
 deployments/metabase-data
+deployments/.env
