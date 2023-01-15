@@ -16,10 +16,16 @@ $ ./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpo
 
 ### Goerli Testnet
 
+Debug tools:
+* https://prater.beaconcha.in
+* https://goerli.etherscan.io
+
 ```console
 $ sudo openssl rand -hex 32 > jwtsecret
 $ chmod 777 teku
 ```
+
+Goerli deposit contract is `0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b` but some validators were predeposited, so not all of the will be indexes and most likely doesn't have a deposit address observable onchain.
 
 ```
 export NETWORK=goerli
@@ -28,9 +34,14 @@ export CHECKPOINT_SIZE=10
 export POOL_ADDRESS=0x455e5aa18469bc6ccef49594645666c587a3a71b
 export POSTGRES_USER=xxx
 export POSTGRES_PASSWORD=yyy
+export BLOCK_DEPOSIT_CONTRACT=6711090
 docker-compose up -d
 ```
 
+Use to check that all env variables were correctly replaced
+```console
+docker compose convert
+```
 
 ### Mainnet
 

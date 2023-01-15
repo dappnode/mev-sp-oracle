@@ -86,12 +86,38 @@ services:
       - ./jwtsecret:/jwtsecret
 
   postgres:
-      image: postgres:15.1
-      restart: on-failure
-      environment:
-        - POSTGRES_USER=${POSTGRES_USER}
-        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      ports:
-        - 127.0.0.1:5432:5432
-      volumes: 
-        - ./postgres-data:/var/lib/postgresql/data
+    image: postgres:15.1
+    restart: on-failure
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - 127.0.0.1:5432:5432
+    volumes: 
+      - ./postgres-data:/var/lib/postgresql/data
+
+  chaind:
+    image: wealdtech/chaind:0.6.17
+    restart: on-failure
+    # TODO: export prometheus metrics
+    #ports:
+    #  - 127.0.0.1:xxx:yyy
+    # This config just indexes deposits
+    command:
+      - --blocks.enable=false
+      - --finalizer.enable=false
+      - --summarizer.enable=false
+      - --summarizer.epochs.enable=false
+      - --summarizer.blocks.enable=false
+      - --summarizer.validators.enable=false
+      - --validators.enable=false
+      - --validators.balances.enable=false
+      - --beacon-committees.enable=false
+      - --proposer-duties.enable=false
+      - --sync-committees.enable=false
+      - --eth1deposits.enable=true
+      - --eth1deposits.start-block=${BLOCK_DEPOSIT_CONTRACT}
+      - --eth1client.address=https://geth:8545
+      - --chaindb.url=postgresql://postgres:${POSTGRES_PASSWORD}@url:5432/${POSTGRES_USER}
+      - --eth2client.address=http://teku:5051
+      - --log-level=trace
