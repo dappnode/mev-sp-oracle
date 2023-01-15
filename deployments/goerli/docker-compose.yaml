@@ -118,7 +118,27 @@ services:
       - --sync-committees.enable=false
       - --eth1deposits.enable=true
       - --eth1deposits.start-block=${BLOCK_DEPOSIT_CONTRACT}
-      - --eth1client.address=https://geth:8545
-      - --chaindb.url=postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_USER}
+      - --eth1client.address=http://geth:8545
+      - --chaindb.url=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432
       - --eth2client.address=http://teku:5051
       - --log-level=trace
+
+  metabase:
+    volumes:
+    # setup your SQLITE db (optional)
+      #- /PATH/TO/SQLITE/:/metabase
+      - ./metabase-data:/metabase-data
+    environment:
+      - MB_DB_FILE=/metabase-data/metabase.db
+      - MB_DB_TYPE=postgres
+      - MB_DB_DBNAME=DATABASE
+      - MB_DB_PORT=5432
+      - MB_DB_USER=${POSTGRES_USER}
+      - MB_DB_PASS=${POSTGRES_PASSWORD}
+      - MB_DB_HOST=postgres
+    ports:
+      - 3000:3000
+    image: metabase/metabase
+    restart: always
+    depends_on: 
+      - postgres
