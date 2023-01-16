@@ -9,7 +9,13 @@ The dappnode **mev smoothing pool** is made of three repositories:
 
 ```console
 $ go build
-$ ./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=4500000 --pool-address="0x455e5aa18469bc6ccef49594645666c587a3a71b" --checkpoint-size=10
+$ ./mev-sp-oracle \
+--consensus-endpoint="http://127.0.0.1:5051" \
+--execution-endpoint="http://127.0.0.1:8545" \
+--postgres-endpoint="postgres://xxx:yyy@localhost:5432" \
+--deployed-slot=4500000 \
+--pool-address="0x455e5aa18469bc6ccef49594645666c587a3a71b" \
+--checkpoint-size=10
 ```
 
 ## How to deploy

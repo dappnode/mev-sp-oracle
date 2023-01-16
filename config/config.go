@@ -17,6 +17,7 @@ type Config struct {
 	PoolAddress           string
 	DeployedSlot          uint64
 	CheckPointSizeInSlots uint64
+	PostgresEndpoint      string
 
 	// Debug flags, never use in production
 	DebugHardcodedSubscriptions []uint64
@@ -28,12 +29,13 @@ var ReleaseVersion = "custom-build"
 
 func NewCliConfig() (*Config, error) {
 	var version = flag.Bool("version", false, "Prints the release version and exits")
-	var consensusEndpoint = flag.String("consensus-endpoint", "", "")
-	var executionEndpoint = flag.String("execution-endpoint", "", "xxx")
+	var consensusEndpoint = flag.String("consensus-endpoint", "", "Ethereum consensus endpoint")
+	var executionEndpoint = flag.String("execution-endpoint", "", "Ethereum execution endpoint")
 	var network = flag.String("network", "mainnet", "Network to run in: mainnet|goerli")
 	var poolAddress = flag.String("pool-address", "", "Address of the smoothing pool contract")
 	var deployedSlot = flag.Uint64("deployed-slot", 0, "Deployed slot of the smart contract: slot, not block")
 	var checkPointSizeInSlots = flag.Uint64("checkpoint-size", 0, "Size in slots for each checkpoint, used to generate dumps and update merkle roots")
+	var postgresEndpoint = flag.String("postgres-endpoint", "", "Postgres endpoint")
 
 	// Debug flags, never use in production
 	var debugHardcodedSubscriptionsFile = flag.String("debug-subscriptions-file", "", "Path to file containing a list of hardcoded validator indexes, one per line")
@@ -63,6 +65,7 @@ func NewCliConfig() (*Config, error) {
 		DeployedSlot:                *deployedSlot,
 		CheckPointSizeInSlots:       *checkPointSizeInSlots,
 		DebugHardcodedSubscriptions: debugHardcodedSubscriptions,
+		PostgresEndpoint:            *postgresEndpoint,
 	}
 	logConfig(conf)
 	return conf, nil
@@ -76,6 +79,7 @@ func logConfig(cfg *Config) {
 		"PoolAddress":                 cfg.PoolAddress,
 		"DeployedSlot":                cfg.DeployedSlot,
 		"CheckPointSizeInSlots":       cfg.CheckPointSizeInSlots,
+		"PostgresEndpoint":            cfg.PostgresEndpoint,
 		"DebugHardcodedSubscriptions": cfg.DebugHardcodedSubscriptions,
 	}).Info("Cli Config:")
 }

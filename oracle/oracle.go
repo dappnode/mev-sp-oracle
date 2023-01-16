@@ -1,26 +1,35 @@
 package oracle
 
 import (
+	"encoding/hex"
 	"math/big"
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
+	"mev-sp-oracle/postgres"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type Oracle struct {
-	fetcher *Fetcher
-	cfg     *config.Config
-	State   *OracleState
+	fetcher  *Fetcher
+	cfg      *config.Config
+	State    *OracleState
+	postgres *postgres.Postgresql
 }
 
 func NewOracle(
 	cfg *config.Config,
 	fetcher *Fetcher) *Oracle {
 	state := NewOracleState(cfg)
+
+	postgres, err := postgres.New(cfg.PostgresEndpoint)
+	if err != nil {
+		log.Fatal(err)
+	}
 	oracle := &Oracle{
-		cfg:     cfg,
-		fetcher: fetcher,
-		State:   state,
+		cfg:      cfg,
+		fetcher:  fetcher,
+		State:    state,
+		postgres: postgres,
 	}
 
 	return oracle
@@ -113,7 +122,7 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 	// Check if proposal belongs to a subscription from the smart contract
 	//if or.IsValidatorSubscribed(valIndexDuty, contractSubscriptions) {
 	// Temporally disable auto subscriptions
-	if 1 != 1 {
+	if false {
 		if missedBlock {
 			// if block was missed, advance state machine.
 			or.State.AdvanceStateMachine(valIndexDuty, MissedProposal)
@@ -143,6 +152,14 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 		// check if the reward was sent to the pool, and automatically subscribe it.
 		if !missedBlock && sentOk {
 			// If not already subscribed
+			pubKey := "0x" + hex.EncodeToString(slotDuty.PubKey[:])
+			// Move this somewhere else
+			log.Info(pubKey)
+			deposidAddress, err := or.postgres.GetDepositAddressOfValidatorKey(pubKey)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Info("Auto subscribing validator: ", valIndexDuty, " with deposit address: ", deposidAddress)
 			or.State.AddSubscriptionIfNotAlready(valIndexDuty)
 			or.State.IncreaseAllPendingRewards(reward)
 			or.State.ConsolidateBalance(valIndexDuty)
