@@ -155,11 +155,14 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 			pubKey := "0x" + hex.EncodeToString(slotDuty.PubKey[:])
 			// Move this somewhere else
 			log.Info(pubKey)
-			deposidAddress, err := or.postgres.GetDepositAddressOfValidatorKey(pubKey)
+			depositAddress, err := or.postgres.GetDepositAddressOfValidatorKey(pubKey)
+			// TODO: Remove this in production
 			if err != nil {
-				log.Fatal(err)
+				log.Warn("Deposit key not found for ", pubKey, ". Expected in goerli. Using a default one. err: ", err)
+				// If it errors, use a goerli address we control, only for debuging
+				depositAddress = "0xc1B3c3F3Ff91ABd602BF3CAc449FFe9B852934f0"
 			}
-			log.Info("Auto subscribing validator: ", valIndexDuty, " with deposit address: ", deposidAddress)
+			log.Info("Auto subscribing validator: ", valIndexDuty, " with deposit address: ", depositAddress)
 			or.State.AddSubscriptionIfNotAlready(valIndexDuty)
 			or.State.IncreaseAllPendingRewards(reward)
 			or.State.ConsolidateBalance(valIndexDuty)
