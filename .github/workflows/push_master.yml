@@ -26,4 +26,4 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           push: true
-          tags: dappnode/mev-sp-oracle:latest
+          tags: dappnode/mev-sp-oracle:${GITHUB_SHA::6}
