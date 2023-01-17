@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
+	"mev-sp-oracle/postgres"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -42,9 +43,9 @@ type OracleState struct {
 	// TODO: Rough idea
 	//activeSubscriptions []uint64
 
-	PendingRewards map[uint64]*big.Int // TODO add wei or gwei to all fucking variables.
+	PendingRewards map[uint64]*big.Int // TODO add wei or gwei to all fucking variables. //TODO: rename to CUMULATIVE
 
-	ClaimableRewards       map[uint64]*big.Int
+	ClaimableRewards       map[uint64]*big.Int //TODO: rename to CUMULATIVE
 	UnbanBalances          map[uint64]*big.Int
 	DepositAddresses       map[uint64]string
 	PoolRecipientAddresses map[uint64]string
@@ -53,15 +54,20 @@ type OracleState struct {
 	validatorState map[uint64]int // TODO not sure if the enum has a type.
 
 	// extra info
-	proposedBlocks map[uint64][]uint64
-	missedBlocks   map[uint64][]uint64
-	wrongFeeBlocks map[uint64][]uint64
+	ProposedBlocks map[uint64][]uint64
+	MissedBlocks   map[uint64][]uint64
+	WrongFeeBlocks map[uint64][]uint64
 
 	// TODO: Mev contributions to the pool
 	// map[uint64][]*big.Int
+	postgres *postgres.Postgresql
 }
 
 func NewOracleState(cfg *config.Config) *OracleState {
+	postgres, err := postgres.New(cfg.PostgresEndpoint)
+	if err != nil {
+		log.Fatal(err)
+	}
 	return &OracleState{
 		// Start by default at the first slot when the oracle was deployed
 		Slot: cfg.DeployedSlot,
@@ -79,9 +85,10 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		DepositAddresses:       make(map[uint64]string),
 		PoolRecipientAddresses: make(map[uint64]string),
 		validatorState:         make(map[uint64]int),
-		proposedBlocks:         make(map[uint64][]uint64),
-		missedBlocks:           make(map[uint64][]uint64),
-		wrongFeeBlocks:         make(map[uint64][]uint64),
+		ProposedBlocks:         make(map[uint64][]uint64),
+		MissedBlocks:           make(map[uint64][]uint64),
+		WrongFeeBlocks:         make(map[uint64][]uint64),
+		postgres:               postgres,
 	}
 }
 
@@ -94,9 +101,9 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64) {
 	state.ClaimableRewards[valIndex] = big.NewInt(0)
 	state.UnbanBalances[valIndex] = big.NewInt(0)
 	state.validatorState[valIndex] = Active
-	state.proposedBlocks[valIndex] = make([]uint64, 0)
-	state.missedBlocks[valIndex] = make([]uint64, 0)
-	state.wrongFeeBlocks[valIndex] = make([]uint64, 0)
+	state.ProposedBlocks[valIndex] = make([]uint64, 0)
+	state.MissedBlocks[valIndex] = make([]uint64, 0)
+	state.WrongFeeBlocks[valIndex] = make([]uint64, 0)
 }
 
 func (state *OracleState) ConsolidateBalance(valIndex uint64) {
@@ -224,4 +231,12 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 			log.Info("ValIndex: ", valIndex, " state change: ", "Banned -> UnbanValidator")
 		}
 	}
+}
+
+// Dumps all the oracle state to the db
+// Note that this is a proof of concept. All data is stored in the memory
+// and dumped to the db on each checkpoint, but at some point
+// this may become unfeasible.
+func (state *OracleState) DumpOracleStateToDatabase() error {
+	return state.postgres.DumpOracleStateToDatabase()
 }

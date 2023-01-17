@@ -85,3 +85,27 @@ func getDepositsWhereClause(fromAddresses []string) string {
 	}
 	return strings.Join(whereElements, " or ")
 }
+
+var createTable = `
+CREATE TABLE IF NOT EXISTS t_oracle_validator_balances (
+	 f_deposit_address TEXT,
+	 f_validator_key TEXT,
+	 f_slot_checkpoint BIGINT,
+	 f_pending_balance BIGINT,
+	 f_claimed_balance BIGINT,
+	 f_num_proposed_blocks BIGINT,
+	 f_num_missed_blocks BIGINT,
+	 f_checkpoint_slot BIGINT,
+	 f_checkpoint_proofs TEXT,
+	 f_checkpoint_root TEXT,
+);
+`
+
+func (a *Postgresql) DumpOracleStateToDatabase() error {
+	if _, err := a.db.Exec(
+		context.Background(),
+		createTable); err != nil {
+		return err
+	}
+	return nil
+}
