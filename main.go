@@ -97,8 +97,8 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 		// TODO: Rethink this a bit. Do not run in the first block we process, and think about edge cases
 		if (oracle.State.Slot-cfg.DeployedSlot)%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached, slot: ", oracle.State.Slot)
-			oracle.State.LogClaimableBalances()
-			oracle.State.LogPendingBalances()
+			//oracle.State.LogClaimableBalances()
+			//oracle.State.LogPendingBalances()
 		}
 	}
 }
