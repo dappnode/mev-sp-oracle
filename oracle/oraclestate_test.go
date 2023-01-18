@@ -26,7 +26,7 @@ func Test_AddSubscription(t *testing.T) {
 func Test_IncreasePendingRewards(t *testing.T) {
 	state := NewOracleState(&config.Config{})
 	state.PendingRewards[12] = big.NewInt(100)
-	state.validatorState[12] = Active
+	state.ValidatorState[12] = Active
 	totalAmount := big.NewInt(130)
 
 	require.Equal(t, big.NewInt(100), state.PendingRewards[12])
@@ -83,14 +83,14 @@ func Test_StateMachine(t *testing.T) {
 	}
 
 	for _, testState := range stateMachineTestVector {
-		state.validatorState[valIndex1] = testState.From
-		state.validatorState[valIndex2] = testState.From
+		state.ValidatorState[valIndex1] = testState.From
+		state.ValidatorState[valIndex2] = testState.From
 
 		state.AdvanceStateMachine(valIndex1, testState.Event)
 		state.AdvanceStateMachine(valIndex2, testState.Event)
 
-		require.Equal(t, testState.End, state.validatorState[valIndex1])
-		require.Equal(t, testState.End, state.validatorState[valIndex2])
+		require.Equal(t, testState.End, state.ValidatorState[valIndex1])
+		require.Equal(t, testState.End, state.ValidatorState[valIndex2])
 	}
 }
 

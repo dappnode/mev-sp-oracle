@@ -58,6 +58,12 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 	// TODO: resume from file
 	log.Info("Starting to process from slot: ", oracle.State.Slot)
 
+	// TODO: Dirty, to be safe. Clean db at startup until we can safely resume
+	_, err := oracle.Postgres.Db.Exec(context.Background(), "drop table if exists t_oracle_validator_balances")
+	if err != nil {
+		log.Fatal("error cleaning table t_oracle_validator_balances at startup: ", err)
+	}
+
 	for {
 
 		headSlot, err := fetcher.ConsensusClient.NodeSyncing(context.Background())
@@ -97,6 +103,11 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 		// TODO: Rethink this a bit. Do not run in the first block we process, and think about edge cases
 		if (oracle.State.Slot-cfg.DeployedSlot)%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached, slot: ", oracle.State.Slot)
+			err := oracle.State.DumpOracleStateToDatabase()
+			// TODO: By now just panic
+			if err != nil {
+				log.Fatal("Failed dumping oracle state to db: ", err)
+			}
 			//oracle.State.LogClaimableBalances()
 			//oracle.State.LogPendingBalances()
 		}

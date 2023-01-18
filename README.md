@@ -65,9 +65,14 @@ CHECKPOINT_SIZE=xxx
 POOL_ADDRESS=0xxx
 POSTGRES_USER=xxx
 POSTGRES_PASSWORD=yyy
+BLOCK_DEPOSIT_CONTRACT=TODO
 ```
 
 ```
 docker-compose up -d
 ```
 
+
+todo: metabase. store balances
+allow to filter by checkpint
+allow to see balances of validator. use combom box to filter validator key (or peerhaps algo deposit address)
