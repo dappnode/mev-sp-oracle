@@ -7,6 +7,7 @@ import (
 	"context"
 	"mev-sp-oracle/config"
 	"mev-sp-oracle/oracle"
+	"mev-sp-oracle/postgres"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,6 +31,31 @@ func main() {
 
 	fetcher := oracle.NewFetcher(*cfg)
 	oracle := oracle.NewOracle(cfg, fetcher)
+
+	// Preparae the database
+	// TODO: Dirty, to be safe. Clean db at startup until we can safely resume. The idea is
+	// to resume from the last checkpoint.
+	_, err = oracle.Postgres.Db.Exec(context.Background(), "drop table if exists t_oracle_validator_balances")
+	if err != nil {
+		log.Fatal("error cleaning table t_oracle_validator_balances at startup: ", err)
+	}
+
+	_, err = oracle.Postgres.Db.Exec(context.Background(), "drop table if exists t_pool_blocks")
+	if err != nil {
+		log.Fatal("error cleaning table t_pool_blocks at startup: ", err)
+	}
+
+	if _, err := oracle.Postgres.Db.Exec(
+		context.Background(),
+		postgres.CreateRewardsTable); err != nil {
+		log.Fatal("error creating table t_oracle_validator_balances: ", err)
+	}
+
+	if _, err := oracle.Postgres.Db.Exec(
+		context.Background(),
+		postgres.CreateBlocksTable); err != nil {
+		log.Fatal("error creating table t_pool_blocks ", err)
+	}
 
 	go mainLoop(oracle, fetcher, cfg)
 
@@ -57,12 +83,6 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 
 	// TODO: resume from file
 	log.Info("Starting to process from slot: ", oracle.State.Slot)
-
-	// TODO: Dirty, to be safe. Clean db at startup until we can safely resume
-	_, err := oracle.Postgres.Db.Exec(context.Background(), "drop table if exists t_oracle_validator_balances")
-	if err != nil {
-		log.Fatal("error cleaning table t_oracle_validator_balances at startup: ", err)
-	}
 
 	for {
 
