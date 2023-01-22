@@ -13,7 +13,7 @@ type Oracle struct {
 	fetcher  *Fetcher
 	cfg      *config.Config
 	State    *OracleState
-	postgres *postgres.Postgresql
+	Postgres *postgres.Postgresql
 }
 
 func NewOracle(
@@ -29,7 +29,7 @@ func NewOracle(
 		cfg:      cfg,
 		fetcher:  fetcher,
 		State:    state,
-		postgres: postgres,
+		Postgres: postgres,
 	}
 
 	return oracle
@@ -155,7 +155,7 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 			pubKey := "0x" + hex.EncodeToString(slotDuty.PubKey[:])
 			// Move this somewhere else
 			log.Info(pubKey)
-			depositAddress, err := or.postgres.GetDepositAddressOfValidatorKey(pubKey)
+			depositAddress, err := or.Postgres.GetDepositAddressOfValidatorKey(pubKey)
 			// TODO: Remove this in production
 			if err != nil {
 				log.Warn("Deposit key not found for ", pubKey, ". Expected in goerli. Using a default one. err: ", err)
@@ -166,6 +166,11 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 			or.State.AddSubscriptionIfNotAlready(valIndexDuty)
 			or.State.IncreaseAllPendingRewards(reward)
 			or.State.ConsolidateBalance(valIndexDuty)
+			or.State.ProposedBlocks[valIndexDuty] = append(or.State.ProposedBlocks[valIndexDuty], uint64(slotDuty.Slot))
+
+			// if the validator already proposed a block this is already set
+			or.State.DepositAddresses[valIndexDuty] = depositAddress
+			or.State.ValidatorKey[valIndexDuty] = pubKey
 		}
 
 	}

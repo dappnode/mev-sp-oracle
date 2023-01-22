@@ -3,7 +3,11 @@ package postgres
 import (
 	"context"
 	"fmt"
+
+	//"mev-sp-oracle/oracle"
 	"strings"
+
+	//"mev-sp-oracle/oracle"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/jackc/pgx/v4"
@@ -11,26 +15,29 @@ import (
 )
 
 type Postgresql struct {
-	db       *pgx.Conn
-	PoolName string
+	Db *pgx.Conn
 }
 
 // postgres://xxx:yyy@url:5432
 func New(postgresEndpoint string) (*Postgresql, error) {
-	conn, err := pgx.Connect(context.Background(), postgresEndpoint)
+	var conn *pgx.Conn
+	var err error
+	if postgresEndpoint != "" {
+		conn, err = pgx.Connect(context.Background(), postgresEndpoint)
+	}
 
 	if err != nil {
 		return nil, err
 	}
 
 	return &Postgresql{
-		db: conn,
+		Db: conn,
 	}, nil
 }
 
 // Returns the validator keys for the given deposit addresses
 func (a *Postgresql) GetValidatorKeysFromDepositAddress(fromAddresses []string) ([][]byte, error) {
-	rows, err := a.db.Query(context.Background(),
+	rows, err := a.Db.Query(context.Background(),
 		`select encode(f_validator_pubkey, 'hex')
 		from t_eth1_deposits
 		where (`+getDepositsWhereClause(fromAddresses)+")")
@@ -65,7 +72,7 @@ func (a *Postgresql) GetValidatorKeysFromDepositAddress(fromAddresses []string) 
 // also with 0x prefix
 func (a *Postgresql) GetDepositAddressOfValidatorKey(validatorKey string) (string, error) {
 	var depositAddress string
-	err := a.db.QueryRow(context.Background(),
+	err := a.Db.QueryRow(context.Background(),
 		"select encode(f_eth1_sender, 'hex') from t_eth1_deposits where encode(f_validator_pubkey::bytea, 'hex') = $1",
 		strings.Replace(validatorKey, "0x", "", -1)).Scan(&depositAddress)
 
@@ -85,3 +92,40 @@ func getDepositsWhereClause(fromAddresses []string) string {
 	}
 	return strings.Join(whereElements, " or ")
 }
+
+var CreateRewardsTable = `
+CREATE TABLE IF NOT EXISTS t_oracle_validator_balances (
+	 f_deposit_address TEXT,
+	 f_validator_key TEXT,
+	 f_validator_index NUMERIC,
+	 f_pending_balance BIGINT,
+	 f_claimable_balance BIGINT,
+	 f_unban_balance BIGINT,
+	 f_num_proposed_blocks BIGINT,
+	 f_num_missed_blocks BIGINT,
+	 f_num_wrongfee_blocks BIGINT,
+	 f_checkpoint_slot BIGINT,
+	 f_checkpoint_proofs TEXT,
+	 f_checkpoint_root TEXT,
+
+	 PRIMARY KEY (f_validator_key, f_checkpoint_slot)
+);
+`
+
+// TODO: add validator state?
+var InsertRewardsTable = `
+INSERT INTO t_oracle_validator_balances(
+	f_deposit_address,
+	f_validator_key,
+	f_validator_index,
+	f_pending_balance,
+	f_claimable_balance,
+	f_unban_balance,
+	f_num_proposed_blocks,
+	f_num_missed_blocks,
+	f_num_wrongfee_blocks,
+	f_checkpoint_slot,
+	f_checkpoint_proofs,
+	f_checkpoint_root)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+`
