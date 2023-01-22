@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	//"mev-sp-oracle/oracle"
 	"strings"
@@ -82,6 +83,32 @@ func (a *Postgresql) GetDepositAddressOfValidatorKey(validatorKey string) (strin
 	return "0x" + depositAddress, nil
 }
 
+// TODO: passing everything, dirty
+func (a *Postgresql) StoreBlockInDb(
+	timestamp string,
+	slot uint64,
+	validatorKey string,
+	validatorIndex uint64,
+	vanilaOrMev string,
+	rewardWei big.Int,
+	okWrongMissed uint64) error {
+	_, err := a.Db.Exec(
+		context.Background(),
+		InsertBlocksTable,
+		timestamp,
+		slot,
+		validatorKey,
+		validatorIndex,
+		vanilaOrMev,
+		rewardWei.Uint64(), // TODO can overflow
+		okWrongMissed,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func getDepositsWhereClause(fromAddresses []string) string {
 	whereElements := make([]string, 0)
 	for _, address := range fromAddresses {
@@ -112,6 +139,20 @@ CREATE TABLE IF NOT EXISTS t_oracle_validator_balances (
 );
 `
 
+var CreateBlocksTable = `
+CREATE TABLE IF NOT EXISTS t_pool_blocks (
+	f_timestamp TEXT,
+	f_slot NUMERIC,
+	f_validator_key TEXT,
+	f_validator_index NUMERIC,
+	f_vanila_or_mev TEXT,
+	f_reward_wei BIGINT,
+	f_ok_wrong_missed NUMERIC,
+
+	PRIMARY KEY (f_slot)
+);
+`
+
 // TODO: add validator state?
 var InsertRewardsTable = `
 INSERT INTO t_oracle_validator_balances(
@@ -128,4 +169,16 @@ INSERT INTO t_oracle_validator_balances(
 	f_checkpoint_proofs,
 	f_checkpoint_root)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+`
+
+var InsertBlocksTable = `
+INSERT INTO t_pool_blocks(
+	f_timestamp,
+	f_slot,
+	f_validator_key,
+	f_validator_index,
+	f_vanila_or_mev,
+	f_reward_wei,
+	f_ok_wrong_missed)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `

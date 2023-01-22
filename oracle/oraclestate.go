@@ -250,11 +250,6 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 // this may become unfeasible.
 func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD: returning here the merkle root doesnt make sense. quick workaround
 	log.Info("Dumping all state to database")
-	if _, err := state.postgres.Db.Exec(
-		context.Background(),
-		postgres.CreateRewardsTable); err != nil {
-		return err, ""
-	}
 
 	// TODO: Define a type on validator parameters to store and stop
 	// using that many maps

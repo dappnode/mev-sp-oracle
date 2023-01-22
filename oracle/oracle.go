@@ -188,6 +188,26 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 			or.State.ValidatorKey[valIndexDuty] = pubKey
 			// TODO: perhaps not needed anymore. just same value as deposit address
 			or.State.PoolRecipientAddresses[valIndexDuty] = depositAddress
+
+			// TODO: quick PoC. todo store blocks that were missed.
+			rewardTypeString := "unset"
+			if rewardType == VanilaBlock {
+				rewardTypeString = "vanila"
+			} else if rewardType == MevBlock {
+				rewardTypeString = "mev"
+			}
+			err = or.Postgres.StoreBlockInDb(
+				"TODO",
+				uint64(slotDuty.Slot),
+				pubKey,
+				valIndexDuty,
+				rewardTypeString,
+				*reward,
+				1, // TODO
+			)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 	}
