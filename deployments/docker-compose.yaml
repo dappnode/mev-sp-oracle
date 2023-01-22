@@ -35,6 +35,7 @@ services:
       - --checkpoint-size=${CHECKPOINT_SIZE}
       - --pool-address=${POOL_ADDRESS}
       - --deployer-private-key=${DEPLOYER_PRIVATE_KEY}
+      - --postgres-endpoint=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432
 
   geth:
     image: "ethereum/client-go:v1.10.26"
