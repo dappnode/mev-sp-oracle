@@ -36,6 +36,7 @@ services:
   #    - --deployed-slot=${DEPLOYED_SLOT}
   #    - --checkpoint-size=${CHECKPOINT_SIZE}
   #    - --pool-address=${POOL_ADDRESS}
+  #    - --deployer-private-key=${DEPLOYER_PRIVATE_KEY}
 
   geth:
     image: "ethereum/client-go:v1.10.26"
