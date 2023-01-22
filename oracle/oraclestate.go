@@ -46,6 +46,7 @@ type OracleState struct {
 	//activeSubscriptions []uint64
 
 	// TODO: Do not store that many maps. Define a new type storing all val information
+	// huge crap.
 
 	PendingRewards map[uint64]*big.Int // TODO add wei or gwei to all fucking variables. //TODO: rename to CUMULATIVE
 
@@ -68,6 +69,7 @@ type OracleState struct {
 
 	// TODO: Mev contributions to the pool
 	// map[uint64][]*big.Int
+	// inject this dependancies? dirty to mix this with the oracle state info
 	postgres *postgres.Postgresql
 }
 
@@ -246,12 +248,12 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 // Note that this is a proof of concept. All data is stored in the memory
 // and dumped to the db on each checkpoint, but at some point
 // this may become unfeasible.
-func (state *OracleState) DumpOracleStateToDatabase() error {
+func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD: returning here the merkle root doesnt make sense. quick workaround
 	log.Info("Dumping all state to database")
 	if _, err := state.postgres.Db.Exec(
 		context.Background(),
 		postgres.CreateRewardsTable); err != nil {
-		return err
+		return err, ""
 	}
 
 	// TODO: Define a type on validator parameters to store and stop
@@ -260,7 +262,8 @@ func (state *OracleState) DumpOracleStateToDatabase() error {
 	mk := NewMerklelizer()
 	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
 	depositToLeaf, tree := mk.GenerateTreeFromState(state)
-	log.Info("Merkle root: ", hex.EncodeToString(tree.Root))
+	merkleRootStr := hex.EncodeToString(tree.Root)
+	log.Info("Merkle root: ", merkleRootStr)
 
 	// TODO: Add also validator key on top of the index
 	for valIndex, _ := range state.ValidatorState {
@@ -287,9 +290,9 @@ func (state *OracleState) DumpOracleStateToDatabase() error {
 			ByteArrayToStringArray(proof.Siblings),
 			"0x"+hex.EncodeToString(tree.Root))
 		if err != nil {
-			return err
+			return err, ""
 		}
 	}
-	return nil
+	return nil, merkleRootStr
 
 }

@@ -4,16 +4,18 @@ import (
 	"encoding/hex"
 	"math/big"
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
+	"mev-sp-oracle/contract"
 	"mev-sp-oracle/postgres"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type Oracle struct {
-	fetcher  *Fetcher
-	cfg      *config.Config
-	State    *OracleState
-	Postgres *postgres.Postgresql
+	fetcher    *Fetcher
+	cfg        *config.Config
+	State      *OracleState
+	Operations *contract.Operations
+	Postgres   *postgres.Postgresql
 }
 
 func NewOracle(
@@ -25,11 +27,14 @@ func NewOracle(
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	operations := contract.NewOperations(cfg)
 	oracle := &Oracle{
-		cfg:      cfg,
-		fetcher:  fetcher,
-		State:    state,
-		Postgres: postgres,
+		cfg:        cfg,
+		fetcher:    fetcher,
+		State:      state,
+		Postgres:   postgres,
+		Operations: operations,
 	}
 
 	return oracle

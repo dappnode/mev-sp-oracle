@@ -103,7 +103,8 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 		// TODO: Rethink this a bit. Do not run in the first block we process, and think about edge cases
 		if (oracle.State.Slot-cfg.DeployedSlot)%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached, slot: ", oracle.State.Slot)
-			err := oracle.State.DumpOracleStateToDatabase()
+			err, mRoot := oracle.State.DumpOracleStateToDatabase()
+			oracle.Operations.UpdateContractMerkleRoot(mRoot)
 			// TODO: By now just panic
 			if err != nil {
 				log.Fatal("Failed dumping oracle state to db: ", err)
