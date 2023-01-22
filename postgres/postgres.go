@@ -20,7 +20,11 @@ type Postgresql struct {
 
 // postgres://xxx:yyy@url:5432
 func New(postgresEndpoint string) (*Postgresql, error) {
-	conn, err := pgx.Connect(context.Background(), postgresEndpoint)
+	var conn *pgx.Conn
+	var err error
+	if postgresEndpoint != "" {
+		conn, err = pgx.Connect(context.Background(), postgresEndpoint)
+	}
 
 	if err != nil {
 		return nil, err
