@@ -159,8 +159,18 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 			// TODO: Remove this in production
 			if err != nil {
 				log.Warn("Deposit key not found for ", pubKey, ". Expected in goerli. Using a default one. err: ", err)
-				// If it errors, use a goerli address we control, only for debuging
-				depositAddress = "0xc1B3c3F3Ff91ABd602BF3CAc449FFe9B852934f0"
+				// If it errors, use a goerli address we control, only for debuging. Remove for production
+				someDepositAddresses := []string{
+					"0x001eDa52592fE2f8a28dA25E8033C263744b1b6E",
+					"0x0029a125E6A3f058628Bd619C91f481e4470D673",
+					"0x003718fb88964A1F167eCf205c7f04B25FF46B8E",
+					"0x004b1EaBc3ea60331a01fFfC3D63E5F6B3aB88B3",
+					"0x005CD1608e40d1e775a97d12e4f594029567C071",
+					"0x0069c9017BDd6753467c138449eF98320be1a4E4",
+					"0x007cF0936ACa64Ef22C0019A616801Bec7FCCECF",
+				}
+				// Just pick a "random" one to not always the same
+				depositAddress = someDepositAddresses[slotDuty.Slot%7]
 			}
 			log.Info("Auto subscribing validator: ", valIndexDuty, " with deposit address: ", depositAddress)
 			or.State.AddSubscriptionIfNotAlready(valIndexDuty)
@@ -171,6 +181,8 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 			// if the validator already proposed a block this is already set
 			or.State.DepositAddresses[valIndexDuty] = depositAddress
 			or.State.ValidatorKey[valIndexDuty] = pubKey
+			// TODO: perhaps not needed anymore. just same value as deposit address
+			or.State.PoolRecipientAddresses[valIndexDuty] = depositAddress
 		}
 
 	}

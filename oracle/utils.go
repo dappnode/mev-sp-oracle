@@ -1,7 +1,9 @@
 package oracle
 
 import (
+	"encoding/hex"
 	"math/big"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -46,4 +48,13 @@ func GetUniqueElements(arr []string) []string {
 		result = append(result, key)
 	}
 	return result
+}
+
+func ByteArrayToStringArray(arr [][]byte) string {
+	result := []string{}
+	for _, v := range arr {
+		result = append(result, "0x"+hex.EncodeToString(v))
+	}
+
+	return strings.Join(result, ",")
 }

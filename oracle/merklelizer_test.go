@@ -44,7 +44,8 @@ func Test_GenerateTreeFromState(t *testing.T) {
 	state.ClaimableRewards[5] = big.NewInt(60000)
 	state.UnbanBalances[5] = big.NewInt(0)
 
-	tree := merklelizer.GenerateTreeFromState(state)
+	// TODO: add test to _
+	_, tree := merklelizer.GenerateTreeFromState(state)
 	require.Equal(t, "bcdf38cc9218047f9e86184199c880bfe80fc9eec2ecff0da3484217e6ccc898", hex.EncodeToString(tree.Root))
 
 }
