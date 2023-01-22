@@ -119,11 +119,16 @@ func (merklelizer *Merklelizer) OrderByDepositAddress(leafs []RawLeaf) []RawLeaf
 	return sortedLeafs
 }
 
-func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) *mt.MerkleTree {
+// return map of deposit address -> and its hashed leaf. rethink this
+func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[string]mt.DataBlock, *mt.MerkleTree) {
 
 	blocks := make([]mt.DataBlock, 0)
 
 	orderedRawLeafs := merklelizer.AggregateValidatorsIndexes(state)
+
+	log.Info("orderedRawLeafs", orderedRawLeafs)
+
+	depositToLeaf := make(map[string]mt.DataBlock, 0)
 
 	for _, leaf := range orderedRawLeafs {
 		leafHash := solsha3.SoliditySHA3(
@@ -133,6 +138,11 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) *mt.Me
 			solsha3.Uint256(leaf.UnbanBalance),
 		)
 		blocks = append(blocks, &testData{data: leafHash})
+		depositToLeaf[leaf.DepositAddress] = &testData{data: leafHash}
+	}
+
+	if len(blocks) <= 1 {
+		log.Warn("TODO: cant generate tree with less than 2 blocks")
 	}
 
 	tree, err := mt.New(&mt.Config{
@@ -144,7 +154,8 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) *mt.Me
 	if err != nil {
 		log.Fatal(err)
 	}
-	return tree
+
+	return depositToLeaf, tree
 
 	/*
 		for i := 0; i < len(blocks); i++ {

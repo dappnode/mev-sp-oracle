@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"context"
+	"encoding/hex"
 	"math/big"
 
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
@@ -256,9 +257,20 @@ func (state *OracleState) DumpOracleStateToDatabase() error {
 	// TODO: Define a type on validator parameters to store and stop
 	// using that many maps
 
+	mk := NewMerklelizer()
+	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
+	depositToLeaf, tree := mk.GenerateTreeFromState(state)
+	log.Info("Merkle root: ", hex.EncodeToString(tree.Root))
+
 	// TODO: Add also validator key on top of the index
 	for valIndex, _ := range state.ValidatorState {
-		_, err := state.postgres.Db.Exec(
+		block := depositToLeaf[state.DepositAddresses[valIndex]]
+		proof, err := tree.GenerateProof(block)
+		if err != nil {
+			log.Fatal("Error generating proof", err)
+		}
+
+		_, err = state.postgres.Db.Exec(
 			context.Background(),
 			postgres.InsertRewardsTable,
 
@@ -272,24 +284,8 @@ func (state *OracleState) DumpOracleStateToDatabase() error {
 			len(state.MissedBlocks[valIndex]),
 			len(state.WrongFeeBlocks[valIndex]),
 			state.Slot,
-			"TODO: proofs, not sure if it fits in a string",
-			"TODO: merkle root of this checkpoint")
-
-		/*
-			f_deposit_address,
-			f_validator_key,
-			f_validator_index,
-			f_pending_balance,
-			f_claimable_balance,
-			f_unban_balance,
-			f_num_proposed_blocks,
-			f_num_missed_blocks,
-			f_num_wrongfee_blocks,
-			f_checkpoint_slot,
-			f_checkpoint_proofs,
-			f_checkpoint_root)
-		*/
-
+			ByteArrayToStringArray(proof.Siblings),
+			"0x"+hex.EncodeToString(tree.Root))
 		if err != nil {
 			return err
 		}
