@@ -19,24 +19,22 @@ x-logging: &logging
       max-size: 2000m
 
 services:
-  # Enable when public image is ready
-  #oracle:
-    # image required to be built locally
-    # use from dockerhub when ready
-  #  image: "oracle"
-  #  restart: "no"
-  #  <<: *logging
-  #  depends_on:
-  #    - geth
-  #    - teku
-  #  command:
-  #    - --network=${NETWORK}
-  #    - --consensus-endpoint=http://teku:5051
-  #    - --execution-endpoint=http://geth:8545
-  #    - --deployed-slot=${DEPLOYED_SLOT}
-  #    - --checkpoint-size=${CHECKPOINT_SIZE}
-  #    - --pool-address=${POOL_ADDRESS}
-  #    - --deployer-private-key=${DEPLOYER_PRIVATE_KEY}
+  oracle:
+    image: "dappnode/mev-sp-oracle:fcebd38"
+    restart: "no"
+    <<: *logging
+    depends_on:
+      - geth
+      - teku
+      - postgres
+    command:
+      - --network=${NETWORK}
+      - --consensus-endpoint=http://teku:5051
+      - --execution-endpoint=http://geth:8545
+      - --deployed-slot=${DEPLOYED_SLOT}
+      - --checkpoint-size=${CHECKPOINT_SIZE}
+      - --pool-address=${POOL_ADDRESS}
+      - --deployer-private-key=${DEPLOYER_PRIVATE_KEY}
 
   geth:
     image: "ethereum/client-go:v1.10.26"
