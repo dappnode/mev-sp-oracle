@@ -3,7 +3,6 @@ package oracle
 import (
 	"context"
 	"math/big"
-	"strconv"
 
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
 	"mev-sp-oracle/postgres"
@@ -53,6 +52,7 @@ type OracleState struct {
 	UnbanBalances          map[uint64]*big.Int
 	DepositAddresses       map[uint64]string
 	PoolRecipientAddresses map[uint64]string
+	ValidatorKey           map[uint64]string
 
 	// TODO: Rename to states
 	ValidatorState map[uint64]int // TODO not sure if the enum has a type.
@@ -90,6 +90,7 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		ClaimableRewards:       make(map[uint64]*big.Int),
 		UnbanBalances:          make(map[uint64]*big.Int),
 		DepositAddresses:       make(map[uint64]string),
+		ValidatorKey:           make(map[uint64]string),
 		PoolRecipientAddresses: make(map[uint64]string),
 		ValidatorState:         make(map[uint64]int),
 		ProposedBlocks:         make(map[uint64][]uint64),
@@ -262,14 +263,14 @@ func (state *OracleState) DumpOracleStateToDatabase() error {
 			postgres.InsertRewardsTable,
 
 			state.DepositAddresses[valIndex], //TODO: This is empty?
-			// TODO: dirty, shouldnt overflow but yeah
-			strconv.Itoa(int(valIndex))+"TODO: used validator key instead",
-			state.PendingRewards[valIndex].Int64(),   // TODO: can overflow. i think its actually overflowing
-			state.ClaimableRewards[valIndex].Int64(), // TODO fix this!! overflows!!
-			state.UnbanBalances[valIndex].Int64(),
+			state.ValidatorKey[valIndex],
+			valIndex,
+			state.PendingRewards[valIndex].Uint64(), // TODO: can we overflow a uint64?
+			state.ClaimableRewards[valIndex].Uint64(),
+			state.UnbanBalances[valIndex].Uint64(),
 			len(state.ProposedBlocks[valIndex]),
 			len(state.MissedBlocks[valIndex]),
-			(len(state.WrongFeeBlocks[valIndex])),
+			len(state.WrongFeeBlocks[valIndex]),
 			state.Slot,
 			"TODO: proofs, not sure if it fits in a string",
 			"TODO: merkle root of this checkpoint")
@@ -277,9 +278,10 @@ func (state *OracleState) DumpOracleStateToDatabase() error {
 		/*
 			f_deposit_address,
 			f_validator_key,
+			f_validator_index,
 			f_pending_balance,
-			f_claimed_balance,
-			f_unban_balance
+			f_claimable_balance,
+			f_unban_balance,
 			f_num_proposed_blocks,
 			f_num_missed_blocks,
 			f_num_wrongfee_blocks,

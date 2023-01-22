@@ -108,8 +108,8 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 			if err != nil {
 				log.Fatal("Failed dumping oracle state to db: ", err)
 			}
-			//oracle.State.LogClaimableBalances()
-			//oracle.State.LogPendingBalances()
+			oracle.State.LogClaimableBalances()
+			oracle.State.LogPendingBalances()
 		}
 	}
 }

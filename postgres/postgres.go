@@ -93,8 +93,9 @@ var CreateRewardsTable = `
 CREATE TABLE IF NOT EXISTS t_oracle_validator_balances (
 	 f_deposit_address TEXT,
 	 f_validator_key TEXT,
+	 f_validator_index NUMERIC,
 	 f_pending_balance BIGINT,
-	 f_claimed_balance BIGINT,
+	 f_claimable_balance BIGINT,
 	 f_unban_balance BIGINT,
 	 f_num_proposed_blocks BIGINT,
 	 f_num_missed_blocks BIGINT,
@@ -112,8 +113,9 @@ var InsertRewardsTable = `
 INSERT INTO t_oracle_validator_balances(
 	f_deposit_address,
 	f_validator_key,
+	f_validator_index,
 	f_pending_balance,
-	f_claimed_balance,
+	f_claimable_balance,
 	f_unban_balance,
 	f_num_proposed_blocks,
 	f_num_missed_blocks,
@@ -121,5 +123,5 @@ INSERT INTO t_oracle_validator_balances(
 	f_checkpoint_slot,
 	f_checkpoint_proofs,
 	f_checkpoint_root)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 `

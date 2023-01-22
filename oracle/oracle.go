@@ -166,6 +166,11 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 			or.State.AddSubscriptionIfNotAlready(valIndexDuty)
 			or.State.IncreaseAllPendingRewards(reward)
 			or.State.ConsolidateBalance(valIndexDuty)
+			or.State.ProposedBlocks[valIndexDuty] = append(or.State.ProposedBlocks[valIndexDuty], uint64(slotDuty.Slot))
+
+			// if the validator already proposed a block this is already set
+			or.State.DepositAddresses[valIndexDuty] = depositAddress
+			or.State.ValidatorKey[valIndexDuty] = pubKey
 		}
 
 	}
