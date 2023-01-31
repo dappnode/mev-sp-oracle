@@ -120,7 +120,7 @@ func (merklelizer *Merklelizer) OrderByDepositAddress(leafs []RawLeaf) []RawLeaf
 }
 
 // return map of deposit address -> and its hashed leaf. rethink this
-func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[string]mt.DataBlock, *mt.MerkleTree) {
+func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[string]mt.DataBlock, map[string]RawLeaf, *mt.MerkleTree) {
 
 	blocks := make([]mt.DataBlock, 0)
 
@@ -128,7 +128,11 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 
 	log.Info("orderedRawLeafs", orderedRawLeafs)
 
+	// TODO: refactor this.
+	// Stores the deposit address -> hashed leaf
 	depositToLeaf := make(map[string]mt.DataBlock, 0)
+	// Stores te deposit address -> raw leaf
+	depositToRawLeaf := make(map[string]RawLeaf, 0)
 
 	for _, leaf := range orderedRawLeafs {
 		// TODO: Improve logs and move to debug
@@ -145,6 +149,7 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		log.Info("leafHash: ", hex.EncodeToString(leafHash), " Deposit addres: ", leaf.DepositAddress)
 		blocks = append(blocks, &testData{data: leafHash})
 		depositToLeaf[leaf.DepositAddress] = &testData{data: leafHash}
+		depositToRawLeaf[leaf.DepositAddress] = leaf
 	}
 
 	if len(blocks) <= 1 {
@@ -179,7 +184,7 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		}
 	}
 
-	return depositToLeaf, tree
+	return depositToLeaf, depositToRawLeaf, tree
 
 	// TODO: Update contract with root.
 	// TODO: Generate dump with proofs.

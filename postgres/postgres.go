@@ -120,6 +120,8 @@ func getDepositsWhereClause(fromAddresses []string) string {
 	return strings.Join(whereElements, " or ")
 }
 
+// TODO: rename to validatorRewards vs DepositAddressRewards
+// TODO remove the proofs from here.
 var CreateRewardsTable = `
 CREATE TABLE IF NOT EXISTS t_oracle_validator_balances (
 	 f_deposit_address TEXT,
@@ -136,6 +138,23 @@ CREATE TABLE IF NOT EXISTS t_oracle_validator_balances (
 	 f_checkpoint_root TEXT,
 
 	 PRIMARY KEY (f_validator_key, f_checkpoint_slot)
+);
+`
+
+// TODO: pool recipient address no longer exists
+// TODO: pending is not populated now, but a nice to have.
+var CreateDepositAddressRewardsTable = `
+CREATE TABLE IF NOT EXISTS t_oracle_depositaddress_rewards (
+	 f_deposit_address TEXT,
+	 f_validator_keys TEXT,
+	 f_pending_balance BIGINT,
+	 f_claimable_balance BIGINT,
+	 f_unban_balance BIGINT,
+	 f_checkpoint_slot BIGINT,
+	 f_checkpoint_proofs TEXT,
+	 f_checkpoint_root TEXT,
+
+	 PRIMARY KEY (f_deposit_address, f_checkpoint_slot)
 );
 `
 
@@ -181,4 +200,17 @@ INSERT INTO t_pool_blocks(
 	f_reward_wei,
 	f_ok_wrong_missed)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+var InsertDepositAddressRewardsTable = `
+INSERT INTO t_oracle_depositaddress_rewards(
+	f_deposit_address,
+	f_validator_keys,
+	f_pending_balance,
+	f_claimable_balance,
+	f_unban_balance,
+	f_checkpoint_slot,
+	f_checkpoint_proofs,
+	f_checkpoint_root)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `

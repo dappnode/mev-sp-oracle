@@ -89,6 +89,7 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		Network:     cfg.Network,
 		PoolAddress: cfg.PoolAddress,
 
+		// TODO: refactor this shit. Create a new type for the validator info
 		PendingRewards:         make(map[uint64]*big.Int),
 		ClaimableRewards:       make(map[uint64]*big.Int),
 		UnbanBalances:          make(map[uint64]*big.Int),
@@ -256,7 +257,7 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD:
 
 	mk := NewMerklelizer()
 	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
-	depositToLeaf, tree := mk.GenerateTreeFromState(state)
+	depositToLeaf, depositToRawLeaf, tree := mk.GenerateTreeFromState(state)
 	merkleRootStr := hex.EncodeToString(tree.Root)
 	log.Info("Merkle root: ", merkleRootStr)
 
@@ -294,6 +295,44 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD:
 			return err, ""
 		}
 	}
+
+	_ = depositToRawLeaf
+
+	for depositAddress, rawLeaf := range depositToRawLeaf {
+		// Extra check to make sure the deposit address is the same as the key
+		if depositAddress != rawLeaf.DepositAddress {
+			log.Fatal("Deposit address in raw leaf doesnt match the key")
+		}
+		log.Info("deposit", depositAddress)
+		log.Info("rawLeaf", rawLeaf)
+
+		// TODO some duplicated code here
+		block := depositToLeaf[depositAddress]
+		proof, err := tree.GenerateProof(block)
+
+		test := ByteArrayToStringArray(proof.Siblings)
+		_ = test
+
+		_, err = state.postgres.Db.Exec(
+			context.Background(),
+			postgres.InsertDepositAddressRewardsTable,
+			depositAddress,
+			"TODO: add keys for this address",
+			uint64(0), // TODO
+			rawLeaf.ClaimableBalance.Uint64(),
+			rawLeaf.UnbanBalance.Uint64(),
+			state.Slot,
+			ByteArrayToStringArray(proof.Siblings),
+			"0x"+hex.EncodeToString(tree.Root),
+		)
+		if err != nil {
+			// improve error handling
+			log.Fatal(err)
+			//return err, ""
+		}
+
+	}
+
 	return nil, merkleRootStr
 
 }
