@@ -102,10 +102,16 @@ func (b *BellatrixBlock) GetSentRewardAndType(
 		log.Fatal(err)
 	}
 	// sanity check. I assume we can't have both mev and vanila rewards. if we do, fail and revisit
+	// this happened in goerli, but a very weird scenario that should never happen in mainnet.
+	// can only occur if the pool address is the same as the fee recipient, aka our pool address
+	// is the same as the fee recipient sent by the builders.
 	if (mevReward.Cmp(big.NewInt(0)) == 1) && (reward.Cmp(big.NewInt(0)) == 1) {
-		log.Fatal("Both VanilaReward and MevReward are !=0. mevReward: ", mevReward, "vanilaReward: ", reward)
+		log.Warn("Both VanilaReward and MevReward are !=0. mevReward: ", mevReward, "vanilaReward: ", reward, ". This should never happen in mainnet.")
 	}
-	reward = mevReward
+	// perhaps refactor this logic
+	if mevReward.Cmp(big.NewInt(0)) == 1 {
+		reward = mevReward
+	}
 	if numTxs == 0 {
 		// no mev reward, do nothing
 	} else if numTxs == 1 {
