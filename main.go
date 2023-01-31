@@ -45,10 +45,21 @@ func main() {
 		log.Fatal("error cleaning table t_pool_blocks at startup: ", err)
 	}
 
+	_, err = oracle.Postgres.Db.Exec(context.Background(), "drop table if exists t_oracle_depositaddress_rewards")
+	if err != nil {
+		log.Fatal("error cleaning table t_pool_blocks at startup: ", err)
+	}
+
 	if _, err := oracle.Postgres.Db.Exec(
 		context.Background(),
 		postgres.CreateRewardsTable); err != nil {
 		log.Fatal("error creating table t_oracle_validator_balances: ", err)
+	}
+
+	if _, err := oracle.Postgres.Db.Exec(
+		context.Background(),
+		postgres.CreateDepositAddressRewardsTable); err != nil {
+		log.Fatal("error creating table t_oracle_depositaddress_rewards: ", err)
 	}
 
 	if _, err := oracle.Postgres.Db.Exec(
