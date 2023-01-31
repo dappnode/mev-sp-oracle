@@ -19,6 +19,7 @@ type Config struct {
 	CheckPointSizeInSlots uint64
 	PostgresEndpoint      string
 	DeployerPrivateKey    string
+	DryRun                bool
 
 	// Debug flags, never use in production
 	DebugHardcodedSubscriptions []uint64
@@ -32,12 +33,13 @@ func NewCliConfig() (*Config, error) {
 	var version = flag.Bool("version", false, "Prints the release version and exits")
 	var consensusEndpoint = flag.String("consensus-endpoint", "", "Ethereum consensus endpoint")
 	var executionEndpoint = flag.String("execution-endpoint", "", "Ethereum execution endpoint")
-	var network = flag.String("network", "mainnet", "Network to run in: mainnet|goerli")
+	var network = flag.String("network", "", "Network to run in: mainnet|goerli")
 	var poolAddress = flag.String("pool-address", "", "Address of the smoothing pool contract")
 	var deployedSlot = flag.Uint64("deployed-slot", 0, "Deployed slot of the smart contract: slot, not block")
 	var checkPointSizeInSlots = flag.Uint64("checkpoint-size", 0, "Size in slots for each checkpoint, used to generate dumps and update merkle roots")
 	var postgresEndpoint = flag.String("postgres-endpoint", "", "Postgres endpoint")
 	var deployerPrivateKey = flag.String("deployer-private-key", "", "Private key of the deployer account")
+	var dryRun = flag.Bool("dry-run", false, "If enabled, the pool contract will not be updated")
 
 	// Debug flags, never use in production
 	var debugHardcodedSubscriptionsFile = flag.String("debug-subscriptions-file", "", "Path to file containing a list of hardcoded validator indexes, one per line")
@@ -69,6 +71,12 @@ func NewCliConfig() (*Config, error) {
 		DebugHardcodedSubscriptions: debugHardcodedSubscriptions,
 		PostgresEndpoint:            *postgresEndpoint,
 		DeployerPrivateKey:          *deployerPrivateKey,
+		DryRun:                      *dryRun,
+	}
+	if conf.DryRun {
+		log.Warn("The pool contract will NOT be updated, running in dry-run mode")
+	} else {
+		log.Warn("The pool contract will be updated. Make sure it has balance to cover tx fees")
 	}
 	logConfig(conf)
 	return conf, nil
@@ -85,6 +93,7 @@ func logConfig(cfg *Config) {
 		"PostgresEndpoint":            cfg.PostgresEndpoint,
 		"DebugHardcodedSubscriptions": cfg.DebugHardcodedSubscriptions,
 		"DeployerPrivateKey":          "TODO: use a file with protected password",
+		"DryRun":                      cfg.DryRun,
 	}).Info("Cli Config:")
 }
 

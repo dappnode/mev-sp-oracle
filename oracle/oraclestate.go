@@ -262,7 +262,13 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD:
 
 	// TODO: Add also validator key on top of the index
 	for valIndex, _ := range state.ValidatorState {
+		log.Info("Generating root for deposit: ", state.DepositAddresses[valIndex])
 		block := depositToLeaf[state.DepositAddresses[valIndex]]
+		serrr, err := block.Serialize()
+		if err != nil {
+			log.Fatal("Error serializing block", err)
+		}
+		log.Info("Hash of leaf is: ", hex.EncodeToString(serrr))
 		proof, err := tree.GenerateProof(block)
 		if err != nil {
 			log.Fatal("Error generating proof", err)

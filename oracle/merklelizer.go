@@ -131,18 +131,25 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 	depositToLeaf := make(map[string]mt.DataBlock, 0)
 
 	for _, leaf := range orderedRawLeafs {
+		// TODO: Improve logs and move to debug
+		log.Info("leaf.DepositAddress: ", leaf.DepositAddress)
+		log.Info("leaf.PoolRecipient: ", leaf.PoolRecipient)
+		log.Info("leaf.ClaimableBalance: ", leaf.ClaimableBalance)
+		log.Info("leaf.UnbanBalance: ", leaf.UnbanBalance)
 		leafHash := solsha3.SoliditySHA3(
 			solsha3.Address(leaf.DepositAddress),
 			solsha3.Address(leaf.PoolRecipient),
 			solsha3.Uint256(leaf.ClaimableBalance),
 			solsha3.Uint256(leaf.UnbanBalance),
 		)
+		log.Info("leafHash: ", hex.EncodeToString(leafHash), " Deposit addres: ", leaf.DepositAddress)
 		blocks = append(blocks, &testData{data: leafHash})
 		depositToLeaf[leaf.DepositAddress] = &testData{data: leafHash}
 	}
 
 	if len(blocks) <= 1 {
-		log.Warn("TODO: cant generate tree with less than 2 blocks")
+		// TODO handle this.
+		log.Fatal("TODO: cant generate tree with less than 2 blocks")
 	}
 
 	tree, err := mt.New(&mt.Config{
@@ -155,20 +162,24 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		log.Fatal(err)
 	}
 
-	return depositToLeaf, tree
+	// TODO: Improve logs, use debug
+	for i := 0; i < len(blocks); i++ {
+		serrr, err := blocks[i].Serialize()
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Info("Proof of block index :", i, " blockhash:  ", hex.EncodeToString(serrr))
+		proof0, err := tree.GenerateProof(blocks[i])
+		if err != nil {
+			log.Fatal(err)
+		}
+		for j, proof := range proof0.Siblings {
+			_ = j
+			log.Info("proof: ", hex.EncodeToString(proof))
+		}
+	}
 
-	/*
-		for i := 0; i < len(blocks); i++ {
-			log.Info("rpfoo of block index :", i)
-			proof0, err := tree.GenerateProof(blocks[i])
-			if err != nil {
-				log.Fatal(err)
-			}
-			for j, proof := range proof0.Siblings {
-				_ = j
-				log.Info("proof0: ", hex.EncodeToString(proof))
-			}
-		}*/
+	return depositToLeaf, tree
 
 	// TODO: Update contract with root.
 	// TODO: Generate dump with proofs.

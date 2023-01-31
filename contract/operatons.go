@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 
@@ -46,7 +47,7 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) {
 	}
 	copy(newMerkleRootBytes[:], common.Hex2Bytes(newMerkleRoot))
 
-	log.Info("new merkle root:", newMerkleRootBytes)
+	log.Info("new merkle root:", hex.EncodeToString(newMerkleRootBytes[:]))
 
 	privateKey, err := crypto.HexToECDSA(o.cfg.DeployerPrivateKey)
 	if err != nil {

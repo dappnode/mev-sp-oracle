@@ -31,6 +31,7 @@ Usage of ./mev-sp-oracle:
 
 ## Goerli Example
 
+Use `--dry-run` to avoid updating the contract, useful when you want to recreate the state to verify the merkle roots.
 ```console
 $ go build
 $ ./mev-sp-oracle \
