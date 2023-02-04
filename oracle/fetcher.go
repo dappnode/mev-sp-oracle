@@ -19,6 +19,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Simple cache storing epoch -> proposer duties
+// This is useful to not query the beacon node for each slot
+// since ProposerDuties returns the duties for the whole epoch
+var ProposalDutyCache map[uint64][]*api.ProposerDuty = make(map[uint64][]*api.ProposerDuty)
+
 type Fetcher struct {
 	ConsensusClient *http.Service
 	ExecutionClient *ethclient.Client
@@ -68,6 +73,13 @@ func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 	// Hardcoded
 	slotsInEpoch := uint64(32)
 	epoch := slot / slotsInEpoch
+	slotWithinEpoch := slot % slotsInEpoch
+
+	// If cache hit, avoid querying the beacon node
+	epochDuties, cacheHit := ProposalDutyCache[epoch]
+	if cacheHit {
+		return epochDuties[slotWithinEpoch], nil
+	}
 	// Empty indexes to force fetching all duties
 	indexes := make([]phase0.ValidatorIndex, 0)
 
@@ -78,7 +90,12 @@ func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 	if err != nil {
 		return &api.ProposerDuty{}, err
 	}
-	slotWithinEpoch := slot % slotsInEpoch
+
+	// Store result in cache
+	ProposalDutyCache[epoch] = duties
+
+	// TODO: clean the cache since we only want one value
+
 	return duties[slotWithinEpoch], nil
 }
 
