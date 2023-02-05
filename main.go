@@ -5,6 +5,7 @@ import (
 	//"github.com/dappnode/mev-sp-oracle/config"
 	//"github.com/dappnode/mev-sp-oracle/oracle"
 	"context"
+	"mev-sp-oracle/api"
 	"mev-sp-oracle/config"
 	"mev-sp-oracle/oracle"
 	"mev-sp-oracle/postgres"
@@ -31,6 +32,8 @@ func main() {
 
 	fetcher := oracle.NewFetcher(*cfg)
 	oracle := oracle.NewOracle(cfg, fetcher)
+	api := api.NewApiService(*cfg)
+	go api.StartHTTPServer()
 
 	// Preparae the database
 	// TODO: Dirty, to be safe. Clean db at startup until we can safely resume. The idea is

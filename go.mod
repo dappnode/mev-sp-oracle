@@ -4,6 +4,7 @@ module mev-sp-oracle
 go 1.19
 
 require (
+	github.com/gorilla/mux v1.8.0
 	github.com/jackc/pgx/v4 v4.17.2
 	github.com/miguelmota/go-solidity-sha3 v0.1.1
 	github.com/pkg/errors v0.9.1
