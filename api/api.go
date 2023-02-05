@@ -160,7 +160,7 @@ func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Re
 }
 
 func (m *ApiService) handleLatestCheckpoint(w http.ResponseWriter, req *http.Request) {
-	log.WithFields(logrus.Fields{}).Info("/latestCheckpoint")
+	log.Info("/latestCheckpoint")
 
 	mRoot, slot, err := m.Postgres.GetLatestCheckpoint()
 	if err != nil {

@@ -76,7 +76,7 @@ func (a *Postgresql) GetLatestCheckpoint() (string, uint64, error) {
 	var checkpointSlot uint64
 
 	err := a.Db.QueryRow(context.Background(),
-		"select f_checkpoint_root,f_checkpoint_slot from t_oracle_validator_balances where f_checkpoint_slot = (select max(f_checkpoint_slot) from t_oracle_validator_balances) group by f_checkpoint_root,f_checkpoint_slot").Scan(&latestCheckpointRoot, &checkpointSlot)
+		"select f_checkpoint_root,f_checkpoint_slot from t_oracle_validator_balances where f_checkpoint_slot = (select max(f_checkpoint_slot) from t_oracle_validator_balances) limit 1").Scan(&latestCheckpointRoot, &checkpointSlot)
 	if err != nil {
 		return "", 0, err
 	}
