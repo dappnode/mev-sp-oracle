@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
 	"mev-sp-oracle/postgres"
@@ -17,12 +18,18 @@ const (
 	// Available endpoints
 
 	pathStatus            = "/status"
-	pathLatestMerkleProof = "/oracle/merkleproof/depositaddress/{depositaddress}" // TODO: validate with some regex
+	pathLatestCheckpoint  = "/latestcheckpoint"
+	pathLatestMerkleProof = "/oracle/merkleproof/depositaddress/{depositaddress}"
 )
 
 type httpErrorResp struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+type httpOkLatestCheckpoint struct {
+	MerkleRoot     string `json:"merkleroot"`
+	CheckpointSlot uint64 `json:"checkpointslot"`
 }
 
 type httpOkProofs struct {
@@ -79,6 +86,7 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc("/", m.handleRoot).Methods(http.MethodGet)
 	r.HandleFunc(pathStatus, m.handleStatus).Methods(http.MethodGet)
 	r.HandleFunc(pathLatestMerkleProof, m.handleLatestMerkleProof)
+	r.HandleFunc(pathLatestCheckpoint, m.handleLatestCheckpoint)
 
 	//r.Use(mux.CORSMethodMiddleware(r))
 
@@ -128,9 +136,13 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 }
 
 func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Request) {
-	// TODO: some validation is not found
 	vars := mux.Vars(req)
 	depositAddress := vars["depositaddress"]
+
+	if !IsValidAddress(depositAddress) {
+		m.respondError(w, http.StatusBadRequest, "invalid depositAddress")
+		return
+	}
 
 	// TODO: move to debug
 	log.WithFields(logrus.Fields{
@@ -145,4 +157,20 @@ func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Re
 		return
 	}
 	m.respondOK(w, httpOkProofs{depositAddress, mRoot, slot, mPoof, avBalance, unbanBalance})
+}
+
+func (m *ApiService) handleLatestCheckpoint(w http.ResponseWriter, req *http.Request) {
+	log.WithFields(logrus.Fields{}).Info("/latestCheckpoint")
+
+	mRoot, slot, err := m.Postgres.GetLatestCheckpoint()
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	m.respondOK(w, httpOkLatestCheckpoint{mRoot, slot})
+}
+
+func IsValidAddress(v string) bool {
+	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
+	return re.MatchString(v)
 }

@@ -70,6 +70,19 @@ func (a *Postgresql) GetValidatorKeysFromDepositAddress(fromAddresses []string) 
 	return keys, nil
 }
 
+// Returns the latest known checkpoint root and slot
+func (a *Postgresql) GetLatestCheckpoint() (string, uint64, error) {
+	var latestCheckpointRoot string
+	var checkpointSlot uint64
+
+	err := a.Db.QueryRow(context.Background(),
+		"select f_checkpoint_root,f_checkpoint_slot from t_oracle_validator_balances where f_checkpoint_slot = (select max(f_checkpoint_slot) from t_oracle_validator_balances) group by f_checkpoint_root,f_checkpoint_slot").Scan(&latestCheckpointRoot, &checkpointSlot)
+	if err != nil {
+		return "", 0, err
+	}
+	return latestCheckpointRoot, checkpointSlot, nil
+}
+
 // Given a validator key in hex prefixed with 0x, return its deposit address
 // also with 0x prefix
 func (a *Postgresql) GetDepositAddressOfValidatorKey(validatorKey string) (string, error) {
