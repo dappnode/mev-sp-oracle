@@ -19,6 +19,17 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type EpochDuties struct {
+	Epoch  uint64
+	Duties []*api.ProposerDuty
+}
+
+// Simple cache storing epoch -> proposer duties
+// This is useful to not query the beacon node for each slot
+// since ProposerDuties returns the duties for the whole epoch
+// Note that the cache is meant to store only one epoch's duties
+var ProposalDutyCache EpochDuties
+
 type Fetcher struct {
 	ConsensusClient *http.Service
 	ExecutionClient *ethclient.Client
@@ -61,13 +72,21 @@ func (f *Fetcher) GetBlockAtSlot(slot uint64) (*spec.VersionedSignedBeaconBlock,
 	return signedBeaconBlock, err
 }
 
-// TODO: This call take 1 second and we get the whole epoch, but just a slot
-// is taken each time. Cache the result for the whole epoch and it should
-// really increase the performance.
 func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 	// Hardcoded
 	slotsInEpoch := uint64(32)
 	epoch := slot / slotsInEpoch
+	slotWithinEpoch := slot % slotsInEpoch
+
+	// If cache hit, return the result
+	if ProposalDutyCache.Epoch == epoch {
+		// Health check that should never happen
+		if ProposalDutyCache.Epoch != uint64(ProposalDutyCache.Duties[slotWithinEpoch].Slot/phase0.Slot(slotsInEpoch)) {
+			log.Fatal("Proposal duty epoch does not match when converting slot to epoch")
+		}
+		return ProposalDutyCache.Duties[slotWithinEpoch], nil
+	}
+
 	// Empty indexes to force fetching all duties
 	indexes := make([]phase0.ValidatorIndex, 0)
 
@@ -78,7 +97,10 @@ func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 	if err != nil {
 		return &api.ProposerDuty{}, err
 	}
-	slotWithinEpoch := slot % slotsInEpoch
+
+	// Store result in cache
+	ProposalDutyCache = EpochDuties{epoch, duties}
+
 	return duties[slotWithinEpoch], nil
 }
 
