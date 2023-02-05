@@ -20,7 +20,7 @@ x-logging: &logging
 
 services:
   oracle:
-    image: "dappnode/mev-sp-oracle:fcebd38"
+    image: "dappnode/mev-sp-oracle:6ab4db2"
     restart: "no"
     <<: *logging
     depends_on:
@@ -36,6 +36,8 @@ services:
       - --pool-address=${POOL_ADDRESS}
       - --deployer-private-key=${DEPLOYER_PRIVATE_KEY}
       - --postgres-endpoint=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432
+    ports:
+      - 7300:7300
 
   geth:
     image: "ethereum/client-go:v1.10.26"
