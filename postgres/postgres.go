@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 type Postgresql struct {
@@ -69,6 +70,19 @@ func (a *Postgresql) GetValidatorKeysFromDepositAddress(fromAddresses []string) 
 	return keys, nil
 }
 
+// Returns the latest known checkpoint root and slot
+func (a *Postgresql) GetLatestCheckpoint() (string, uint64, error) {
+	var latestCheckpointRoot string
+	var checkpointSlot uint64
+
+	err := a.Db.QueryRow(context.Background(),
+		"select f_checkpoint_root,f_checkpoint_slot from t_oracle_validator_balances where f_checkpoint_slot = (select max(f_checkpoint_slot) from t_oracle_validator_balances) limit 1").Scan(&latestCheckpointRoot, &checkpointSlot)
+	if err != nil {
+		return "", 0, err
+	}
+	return latestCheckpointRoot, checkpointSlot, nil
+}
+
 // Given a validator key in hex prefixed with 0x, return its deposit address
 // also with 0x prefix
 func (a *Postgresql) GetDepositAddressOfValidatorKey(validatorKey string) (string, error) {
@@ -81,6 +95,31 @@ func (a *Postgresql) GetDepositAddressOfValidatorKey(validatorKey string) (strin
 		return "", err
 	}
 	return "0x" + depositAddress, nil
+}
+
+// Gets the merkle proofs for a given deposit address for the latest known checkpoint (slot)
+// Deposit address should be prefixed with 0x
+func (a *Postgresql) GetLatestMerkleProofByDeposit(depositAddress string) ([]string, string, uint64, string, string, error) {
+	// TODO: Get also merkle root
+	// TODO: check if not starts with 0x, return err
+	var merkleRoots string
+	var merkleRoot string
+	var checkpointSlot uint64
+	var availableBalance string // TODO: perhaps bigInt is better workaround
+	var unbanBalance string     // TODO: perhaps bigInt is better workaround
+
+	// TODO: CAST(f_claimable_balance as TEXT) dirty workaround. Find a better way
+	log.Info("depositAddress:", depositAddress)
+	err := a.Db.QueryRow(context.Background(),
+		"select f_checkpoint_proofs, f_checkpoint_root, f_checkpoint_slot, CAST(f_claimable_balance as TEXT), CAST(f_unban_balance as TEXT) from t_oracle_depositaddress_rewards where LOWER(f_deposit_address) = $1 and f_checkpoint_slot = (select max(f_checkpoint_slot) from t_oracle_depositaddress_rewards)",
+		strings.ToLower(depositAddress)).Scan(&merkleRoots, &merkleRoot, &checkpointSlot, &availableBalance, &unbanBalance)
+
+	if err != nil {
+		return []string{}, "", 0, "", "", err
+	}
+
+	// TODO: add some validation
+	return strings.Split(merkleRoots, ","), merkleRoot, checkpointSlot, availableBalance, unbanBalance, err
 }
 
 // TODO: passing everything, dirty
