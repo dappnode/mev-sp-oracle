@@ -103,20 +103,20 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 		headSlot, err := fetcher.ConsensusClient.NodeSyncing(context.Background())
 		if err != nil {
 			log.Error("Could not get node sync status:", err)
-			time.Sleep(5 * time.Second)
+			time.Sleep(15 * time.Second)
 			continue
 		}
 
 		if headSlot.IsSyncing {
 			log.Error("Node is not in sync")
-			time.Sleep(5 * time.Second)
+			time.Sleep(15 * time.Second)
 			continue
 		}
 
 		finality, err := fetcher.ConsensusClient.Finality(context.Background(), "finalized")
 		if err != nil {
 			log.Error("Could not get finalized status:", err)
-			time.Sleep(5 * time.Second)
+			time.Sleep(15 * time.Second)
 			continue
 		}
 
@@ -131,7 +131,7 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 			log.Info("[", oracle.State.Slot, "/", finalizedSlot, "] Done processing slot. Remaining slots: ", finalizedSlot-oracle.State.Slot)
 		} else {
 			log.Info("Waiting for new finalized slot")
-			time.Sleep(10 * time.Second)
+			time.Sleep(15 * time.Second)
 		}
 
 		// TODO: Rethink this a bit. Do not run in the first block we process, and think about edge cases
