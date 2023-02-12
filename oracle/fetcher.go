@@ -67,7 +67,18 @@ func (f *Fetcher) GetBlockAtSlot(slot uint64) (*spec.VersionedSignedBeaconBlock,
 
 	// TODO: set custom timeouts
 	slotStr := strconv.FormatUint(slot, 10)
-	signedBeaconBlock, err := f.ConsensusClient.SignedBeaconBlock(context.Background(), slotStr)
+	var signedBeaconBlock *spec.VersionedSignedBeaconBlock
+	var err error
+
+	for {
+		signedBeaconBlock, err = f.ConsensusClient.SignedBeaconBlock(context.Background(), slotStr)
+		if err != nil {
+			log.Warn("Error fetching block at slot ", slot, ": ", err, " Retrying in 15 seconds...")
+			time.Sleep(15 * time.Second)
+			continue
+		}
+		break
+	}
 
 	return signedBeaconBlock, err
 }
@@ -89,13 +100,20 @@ func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 
 	// Empty indexes to force fetching all duties
 	indexes := make([]phase0.ValidatorIndex, 0)
+	var duties []*api.ProposerDuty
+	var err error
 
-	duties, err := f.ConsensusClient.ProposerDuties(
-		context.Background(),
-		phase0.Epoch(epoch),
-		indexes)
-	if err != nil {
-		return &api.ProposerDuty{}, err
+	for {
+		duties, err = f.ConsensusClient.ProposerDuties(
+			context.Background(),
+			phase0.Epoch(epoch),
+			indexes)
+		if err != nil {
+			log.Warn("Error fetching proposer duties for epoch ", epoch, ": ", err, " Retrying in 15 seconds...")
+			time.Sleep(15 * time.Second)
+			continue
+		}
+		break
 	}
 
 	// Store result in cache
@@ -106,20 +124,36 @@ func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 
 // This function is expensive as gets every tx receipt from the block. Use only if needed
 func (f *Fetcher) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellatrix.Transaction) (*types.Header, []*types.Receipt, error) {
-	header, err := f.ExecutionClient.HeaderByNumber(context.Background(), blockNumber)
-	if err != nil {
-		log.Fatal(err)
+
+	var header *types.Header
+	var err error
+
+	for {
+		header, err = f.ExecutionClient.HeaderByNumber(context.Background(), blockNumber)
+		if err != nil {
+			log.Warn("Error fetching header at block ", blockNumber, ": ", err, " Retrying in 15 seconds...")
+			time.Sleep(15 * time.Second)
+			continue
+		}
+		break
 	}
 
 	var receipts []*types.Receipt
 	for _, rawTx := range rawTxs {
+		// This should never happen
 		tx, _, err := DecodeTx(rawTx)
 		if err != nil {
 			log.Fatal(err)
 		}
-		receipt, err := f.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
-		if err != nil {
-			log.Fatal(err)
+		var receipt *types.Receipt
+		for {
+			receipt, err = f.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
+			if err != nil {
+				log.Warn("Error fetching receipt for tx ", tx.Hash(), ": ", err, " Retrying in 15 seconds...")
+				time.Sleep(15 * time.Second)
+				continue
+			}
+			break
 		}
 		receipts = append(receipts, receipt)
 	}
