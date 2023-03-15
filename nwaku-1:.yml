@@ -1,0 +1,179 @@
+  nwaku-1:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
+
+  nwaku-2:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
+
+  nwaku-3:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
+
+  nwaku-4:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
+
+  nwaku-5:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
+
+  nwaku-6:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
+
+  nwaku-7:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
+
+  nwaku-8:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
+
+  nwaku-9:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
+
+  nwaku-10:
+    image: ${NWAKU_IMAGE}
+    restart: on-failure
+    command:
+      - --relay=true
+      - --rpc-admin=true
+      - --keep-alive=true
+      - --max-connections=150
+      - --dns-discovery=true
+      - --discv5-discovery=true
+      - --discv5-enr-auto-update=True
+      - --log-level=INFO
+      - --rpc-address=0.0.0.0
+      - --metrics-server=True
+      - --metrics-server-address=0.0.0.0
+      - --nat=extip:127.0.0.1
+      - --discv5-bootstrap-node=${BOOTSTRAP_ENR}
