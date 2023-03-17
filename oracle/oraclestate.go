@@ -2,8 +2,10 @@ package oracle
 
 import (
 	"context"
+	"encoding/gob"
 	"encoding/hex"
 	"math/big"
+	"os"
 
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
 	"mev-sp-oracle/postgres"
@@ -11,66 +13,89 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// enum type in go?
-// example: https://github.com/prysmaticlabs/prysm/blob/6bea17cb546eaad84613ce7e06fd8685eec8a806/beacon-chain/p2p/peers/status.go#L50-L59
+// States of the state machine
 const (
-	Active       int = 0
-	ActiveWarned     = 1
-	NotActive        = 2
-	Banned           = 3
+	Eligible      int = 0
+	YellowCard        = 1
+	RedCard           = 2
+	NotSubscribed     = 3
+	Banned            = 4
 )
 
-// events from the state machine
+// Events in the state machine that trigger transitions
 const (
-	ProposalWithCorrectFee int = 0
+	ProposalWithCorrectFee int = 0 // TODO: rename as in the spec
 	ProposalWithWrongFee       = 1
 	MissedProposal             = 2
-	UnbanValidator             = 3
 )
+
+type ValidatorInfo struct {
+	// see spec
+	ValidatorStatus int
+	// TODO: some explanation + reference spec
+	AccumulatedRewardsWei *big.Int // TODO not sure if this is gwei or wei
+	PendingRewardsWei     *big.Int // TODO not sure if this is gwei or wei
+	DepositAddress        string
+	ValidatorIndex        string
+	ValidatorKey          string
+	ProposedBlocksSlots   []uint64
+	MissedBlocksSlots     []uint64
+	WrongFeeBlocksSlots   []uint64
+
+	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
+
+	// TODO:
+	CollateralWei *big.Int // TODO not sure if this is gwei or wei
+}
 
 // TODO: add stuff to serialize to json
 // TODO state into is not a good name
 type OracleState struct {
 	// When the state was updated
-	timestampGeneration string // TODO unused
+	TimestampGeneration string // TODO unused
 
 	// Amount of processed blocks
-	ProcessedSlots uint64
+	ProcessedSlots uint64 // TODO does this make sense?
 
 	// Slot of this state
 	Slot        uint64
 	Network     string
 	PoolAddress string
 
-	// TODO: Rough idea
-	//activeSubscriptions []uint64
+	Validators map[uint64]*ValidatorInfo
 
-	// TODO: Do not store that many maps. Define a new type storing all val information
-	// huge crap.
-
-	PendingRewards map[uint64]*big.Int // TODO add wei or gwei to all fucking variables. //TODO: rename to CUMULATIVE
-
-	ClaimableRewards       map[uint64]*big.Int //TODO: rename to CUMULATIVE
-	UnbanBalances          map[uint64]*big.Int
-	DepositAddresses       map[uint64]string
-	PoolRecipientAddresses map[uint64]string
-	ValidatorKey           map[uint64]string
-
-	// TODO: Rename to states
-	ValidatorState map[uint64]int // TODO not sure if the enum has a type.
-
-	// extra info
-	ProposedBlocks map[uint64][]uint64
-	MissedBlocks   map[uint64][]uint64
-	WrongFeeBlocks map[uint64][]uint64
-
-	// TODO: include here the claimedSoFar? will require querying the smart contract every slot.
-	// https://www.metabase.com/learn/sql-questions/field-filters
-
-	// TODO: Mev contributions to the pool
-	// map[uint64][]*big.Int
-	// inject this dependancies? dirty to mix this with the oracle state info
+	// TODO this should go here as is not really part of the state.
 	postgres *postgres.Postgresql
+}
+
+func (p *OracleState) SaveStateToFile() error {
+	file, err := os.Create("state.gob")
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	encoder := gob.NewEncoder(file)
+	encoder.Encode(p)
+
+	return nil
+}
+
+func ReadStateFromFile() (*OracleState, error) {
+	state := OracleState{}
+
+	file, err := os.Open("state.gob")
+	if err != nil {
+		return nil, err
+	}
+
+	defer file.Close()
+
+	decoder := gob.NewDecoder(file)
+	decoder.Decode(&state)
+
+	return &state, nil
 }
 
 func NewOracleState(cfg *config.Config) *OracleState {
@@ -89,44 +114,47 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		Network:     cfg.Network,
 		PoolAddress: cfg.PoolAddress,
 
-		// TODO: refactor this shit. Create a new type for the validator info
-		PendingRewards:         make(map[uint64]*big.Int),
-		ClaimableRewards:       make(map[uint64]*big.Int),
-		UnbanBalances:          make(map[uint64]*big.Int),
-		DepositAddresses:       make(map[uint64]string),
-		ValidatorKey:           make(map[uint64]string),
-		PoolRecipientAddresses: make(map[uint64]string),
-		ValidatorState:         make(map[uint64]int),
-		ProposedBlocks:         make(map[uint64][]uint64),
-		MissedBlocks:           make(map[uint64][]uint64),
-		WrongFeeBlocks:         make(map[uint64][]uint64),
-		postgres:               postgres,
+		Validators: make(map[uint64]*ValidatorInfo, 0),
+
+		postgres: postgres,
 	}
+}
+
+func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
+	// TODO
+	// Detect subscriptions with smart contract event. If subscribed but never unsubscribed, then it is subscribed
+
+	for valIndex, validator := range state.Validators {
+		if valIndex == validatorIndex && validator.ValidatorStatus != Banned && validator.ValidatorStatus != NotSubscribed {
+			return true
+		}
+	}
+	return false
 }
 
 func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64) {
-	// TODO: refactor this function
-	if state.PendingRewards[valIndex] != nil {
-		return
+	validator, found := state.Validators[valIndex]
+	if !found {
+		validator = &ValidatorInfo{
+			ValidatorStatus:       Eligible,
+			AccumulatedRewardsWei: big.NewInt(0),
+			PendingRewardsWei:     big.NewInt(0),
+			// TODO: not sure if I have to initialize the rest of the fields
+		}
+		state.Validators[valIndex] = validator
 	}
-	state.PendingRewards[valIndex] = big.NewInt(0)
-	state.ClaimableRewards[valIndex] = big.NewInt(0)
-	state.UnbanBalances[valIndex] = big.NewInt(0)
-	state.ValidatorState[valIndex] = Active
-	state.ProposedBlocks[valIndex] = make([]uint64, 0)
-	state.MissedBlocks[valIndex] = make([]uint64, 0)
-	state.WrongFeeBlocks[valIndex] = make([]uint64, 0)
 }
 
 func (state *OracleState) ConsolidateBalance(valIndex uint64) {
-	state.ClaimableRewards[valIndex].Add(state.ClaimableRewards[valIndex], state.PendingRewards[valIndex])
-	state.PendingRewards[valIndex] = big.NewInt(0)
+	state.Validators[valIndex].AccumulatedRewardsWei.Add(state.Validators[valIndex].AccumulatedRewardsWei, state.Validators[valIndex].PendingRewardsWei)
+	state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
 }
 
 func (state *OracleState) GetEligibleValidators() []uint64 {
 	eligibleValidators := make([]uint64, 0)
-	for valIndex, score := range state.ValidatorState {
-		if score == Active || score == ActiveWarned {
+
+	for valIndex, validator := range state.Validators {
+		if validator.ValidatorStatus == Eligible || validator.ValidatorStatus == YellowCard {
 			eligibleValidators = append(eligibleValidators, valIndex)
 		}
 	}
@@ -142,105 +170,64 @@ func (state *OracleState) IncreaseAllPendingRewards(
 	amountToIncrease := big.NewInt(0).Div(totalAmount, numEligibleValidators)
 	// TODO: Rounding problems. Evenly distribute the remainder
 
-	for _, pending := range state.PendingRewards {
-		pending.Add(pending, amountToIncrease)
+	for _, eligibleIndex := range eligibleValidators {
+		state.Validators[eligibleIndex].PendingRewardsWei.Add(state.Validators[eligibleIndex].PendingRewardsWei, amountToIncrease)
 	}
 }
 
 func (state *OracleState) ResetPendingRewards(valIndex uint64) {
-	state.PendingRewards[valIndex] = big.NewInt(0)
-}
-
-func (state *OracleState) SetUnbanBalance(valIndex uint64, amount *big.Int) {
-	state.UnbanBalances[valIndex] = amount
-}
-
-func (state *OracleState) GetState(valIndex uint64) int {
-	return state.ValidatorState[valIndex]
-}
-
-func (state *OracleState) IsActive(valIndex uint64) bool {
-	return state.ValidatorState[valIndex] == Active
-}
-
-func (state *OracleState) IsActiveWarned(valIndex uint64) bool {
-	return state.ValidatorState[valIndex] == ActiveWarned
-}
-
-func (state *OracleState) IsNotActive(valIndex uint64) bool {
-	return state.ValidatorState[valIndex] == NotActive
-}
-
-func (state *OracleState) IsBanned(valIndex uint64) bool {
-	return state.ValidatorState[valIndex] == Banned
+	state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
 }
 
 func (state *OracleState) LogPendingBalances() {
-	for valIndex, pending := range state.PendingRewards {
-		log.Info("SlotState: ", state.Slot, " Pending: ", valIndex, ": ", pending)
+	for valIndex, validator := range state.Validators {
+		log.Info("SlotState: ", state.Slot, " Pending: ", valIndex, ": ", validator.PendingRewardsWei)
 	}
 }
 
 func (state *OracleState) LogClaimableBalances() {
-	for valIndex, claimable := range state.ClaimableRewards {
-		log.Info("SlotState: ", state.Slot, " Claimable: ", valIndex, ": ", claimable)
+	for valIndex, validator := range state.Validators {
+		log.Info("SlotState: ", state.Slot, " Claimable: ", valIndex, ": ", validator.AccumulatedRewardsWei)
 	}
 }
 
 // See spec for state machine.
+// TODO: Review this!!
 func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
-	switch state.ValidatorState[valIndex] {
-	case Active:
+	switch state.Validators[valIndex].ValidatorStatus {
+	case Eligible:
 		switch event {
 		case ProposalWithCorrectFee:
 			log.Info("ValIndex: ", valIndex, " state change: ", "Active -> Active")
 		case ProposalWithWrongFee:
-			state.ValidatorState[valIndex] = Banned
+			state.Validators[valIndex].ValidatorStatus = Banned
 			log.Info("ValIndex: ", valIndex, " state change: ", "Active -> Banned")
 		case MissedProposal:
-			state.ValidatorState[valIndex] = ActiveWarned
+			state.Validators[valIndex].ValidatorStatus = YellowCard
 			log.Info("ValIndex: ", valIndex, " state change: ", "Active -> ActiveWarned")
-		case UnbanValidator:
-			log.Fatal("Can't receive UnbanValidator event in state: Active")
 		}
-	case ActiveWarned:
+	case YellowCard:
 		switch event {
 		case ProposalWithCorrectFee:
-			state.ValidatorState[valIndex] = Active
+			state.Validators[valIndex].ValidatorStatus = Eligible
 			log.Info("ValIndex: ", valIndex, " state change: ", "ActiveWarned -> Active")
 		case ProposalWithWrongFee:
-			state.ValidatorState[valIndex] = Banned
+			state.Validators[valIndex].ValidatorStatus = Banned
 			log.Info("ValIndex: ", valIndex, " state change: ", "ActiveWarned -> Banned")
 		case MissedProposal:
-			state.ValidatorState[valIndex] = NotActive
+			state.Validators[valIndex].ValidatorStatus = NotSubscribed // TODO: probably wrong
 			log.Info("ValIndex: ", valIndex, " state change: ", "ActiveWarned -> NotActive")
-		case UnbanValidator:
-			log.Fatal("Can't receive UnbanValidator event in state: ActiveWarned")
 		}
-	case NotActive:
+	case NotSubscribed:
 		switch event {
 		case ProposalWithCorrectFee:
-			state.ValidatorState[valIndex] = ActiveWarned
+			state.Validators[valIndex].ValidatorStatus = YellowCard
 			log.Info("ValIndex: ", valIndex, " state change: ", "NotActive -> ActiveWarned")
 		case ProposalWithWrongFee:
-			state.ValidatorState[valIndex] = Banned
+			state.Validators[valIndex].ValidatorStatus = Banned
 			log.Info("ValIndex: ", valIndex, " state change: ", "NotActive -> Banned")
 		case MissedProposal:
 			log.Info("ValIndex: ", valIndex, " state change: ", "NotActive -> NotActive")
-		case UnbanValidator:
-			log.Fatal("Can't receive UnbanValidator event in state: NotActive")
-		}
-	case Banned:
-		switch event {
-		case ProposalWithCorrectFee:
-			log.Info("ValIndex: ", valIndex, " event: ProposalWithCorrectFee but Banned. Do nothing")
-		case ProposalWithWrongFee:
-			log.Info("ValIndex: ", valIndex, " event: ProposalWithWrongFee but Banned. Do nothing")
-		case MissedProposal:
-			log.Info("ValIndex: ", valIndex, " event: MissedProposal but Banned. Do nothing")
-		case UnbanValidator:
-			state.ValidatorState[valIndex] = Active
-			log.Info("ValIndex: ", valIndex, " state change: ", "Banned -> UnbanValidator")
 		}
 	}
 }
@@ -262,9 +249,9 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD:
 	log.Info("Merkle root: ", merkleRootStr)
 
 	// TODO: Add also validator key on top of the index
-	for valIndex, _ := range state.ValidatorState {
-		log.Info("Generating root for deposit: ", state.DepositAddresses[valIndex])
-		block := depositToLeaf[state.DepositAddresses[valIndex]]
+	for valIndex, validator := range state.Validators {
+		log.Info("Generating root for deposit: ", validator.DepositAddress)
+		block := depositToLeaf[validator.DepositAddress]
 		serrr, err := block.Serialize()
 		if err != nil {
 			log.Fatal("Error serializing block", err)
@@ -279,15 +266,15 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD:
 			context.Background(),
 			postgres.InsertRewardsTable,
 
-			state.DepositAddresses[valIndex], //TODO: This is empty?
-			state.ValidatorKey[valIndex],
+			validator.DepositAddress, //TODO: This is empty?
+			validator.ValidatorKey,
 			valIndex,
-			state.PendingRewards[valIndex].Uint64(), // TODO: can we overflow a uint64?
-			state.ClaimableRewards[valIndex].Uint64(),
-			state.UnbanBalances[valIndex].Uint64(),
-			len(state.ProposedBlocks[valIndex]),
-			len(state.MissedBlocks[valIndex]),
-			len(state.WrongFeeBlocks[valIndex]),
+			validator.PendingRewardsWei.Uint64(), // TODO: can we overflow a uint64?
+			validator.AccumulatedRewardsWei.Uint64(),
+			uint64(0), // TODO: remove unbann balance
+			len(validator.ProposedBlocksSlots),
+			len(validator.MissedBlocksSlots),
+			len(validator.WrongFeeBlocksSlots),
 			state.Slot,
 			ByteArrayToStringArray(proof.Siblings),
 			"0x"+hex.EncodeToString(tree.Root))
@@ -318,9 +305,9 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD:
 			postgres.InsertDepositAddressRewardsTable,
 			depositAddress,
 			"TODO: add keys for this address",
-			uint64(0), // TODO
-			rawLeaf.ClaimableBalance.Uint64(),
-			rawLeaf.UnbanBalance.Uint64(),
+			uint64(0), // TODO: pending rewards. is it stored somewhere else?
+			rawLeaf.AccumulatedBalance.Uint64(),
+			uint64(0), //TODO remove unbann balance,
 			state.Slot,
 			ByteArrayToStringArray(proof.Siblings),
 			"0x"+hex.EncodeToString(tree.Root),

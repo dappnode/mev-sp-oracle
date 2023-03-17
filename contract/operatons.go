@@ -17,6 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TODO: move with fetcher and call it chain interactions
 type Operations struct {
 	cfg             *config.Config
 	ExecutionClient *ethclient.Client

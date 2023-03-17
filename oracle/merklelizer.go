@@ -36,76 +36,68 @@ func NewMerklelizer() *Merklelizer {
 }
 
 type RawLeaf struct {
-	DepositAddress   string
-	PoolRecipient    string
-	ClaimableBalance *big.Int
-	UnbanBalance     *big.Int
+	DepositAddress     string
+	AccumulatedBalance *big.Int
 }
 
 // TODO: Add checks:
 // -New balance to claim matches what was sent to the pool, etc.
 
-// Aggregates all validators indexes that belong to the same pool recipient
-// AND deposit address.
-// TODO: This requires further testing
+// Aggregates all validators indexes that belong to the same deposit address. This
+// allows the merkle tree to hold all validators balance belonging to the same set
+// of validators, that makes claiming cheaper since only one proof is needed for n validators
+// belonging to the same deposit address
 func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) []RawLeaf {
-	// Start all validators to be unprocessed
-	processed := make(map[uint64]bool)
-	for valIndex, _ := range state.PoolRecipientAddresses {
-		processed[valIndex] = false
-	}
 
+	// Creates an array of leaf. Each leaf contains the deposit address and the accumulated balance
+	// for all the validators belonging to the same deposit address
 	allLeafs := make([]RawLeaf, 0)
 
-	// TODO: toLowerCase
-	// TODO Check sizes len(state.PendingRewards), len(state.ClaimableRewards), len(state.UnbanBalances), len(state.DepositAddresses), len(state.PoolRecipientAddresses)
-
 	// Iterate all validators
-	for valIndex, _ := range state.PoolRecipientAddresses {
-		poolRecipient := state.PoolRecipientAddresses[valIndex]
-		depositAddress := state.DepositAddresses[valIndex]
+	for _, validator := range state.Validators {
 
-		poolRecipientClaimableBalance := new(big.Int).SetUint64(0)
-		poolRecipientUnbanBalance := new(big.Int).SetUint64(0)
+		// That match some criteria
+		if validator.ValidatorStatus != Banned && validator.ValidatorStatus != NotSubscribed {
+			found := false
 
-		// Validator already processed
-		if processed[valIndex] {
-			continue
-		}
+			// If the leaf already exists, add the balance to the existing leaf (by deposit address)
+			for _, leaf := range allLeafs {
+				if leaf.DepositAddress == validator.DepositAddress {
+					leaf.AccumulatedBalance.Add(leaf.AccumulatedBalance, validator.AccumulatedRewardsWei)
+					found = true
+					continue
+				}
+			}
 
-		// Iterate all validators again and check if they have the same pool recipient and deposit address
-		for valIndex2, _ := range state.PoolRecipientAddresses {
-			poolRecipient2 := state.PoolRecipientAddresses[valIndex2]
-			depositAddress2 := state.DepositAddresses[valIndex2]
-
-			if poolRecipient == poolRecipient2 && depositAddress == depositAddress2 {
-				// flag as processed
-				processed[valIndex2] = true
-
-				poolRecipientClaimableBalance.Add(poolRecipientClaimableBalance, state.ClaimableRewards[valIndex2])
-				poolRecipientUnbanBalance.Add(poolRecipientUnbanBalance, state.UnbanBalances[valIndex2])
+			// If the leaf does not exist, create a new one, initing the balance to the current validator balance
+			if !found {
+				allLeafs = append(allLeafs, RawLeaf{
+					DepositAddress:     validator.DepositAddress,
+					AccumulatedBalance: new(big.Int).Set(validator.AccumulatedRewardsWei), // Copy the value
+				})
 			}
 		}
-		allLeafs = append(allLeafs, RawLeaf{
-			DepositAddress:   depositAddress,
-			PoolRecipient:    poolRecipient,
-			ClaimableBalance: poolRecipientClaimableBalance,
-			UnbanBalance:     poolRecipientUnbanBalance,
-		})
 	}
 
-	// Add one by one the ones that could not be aggregated (unprocessed)
-	for unprocIndex, _ := range processed {
-		if processed[unprocIndex] {
-			continue
+	// Run a sanity check to make sure the after the transformations we are distributing
+	// the same amount of rewards as the total accumulated rewards
+	allAccumulatedFromValidators := big.NewInt(0)
+	for _, validator := range state.Validators {
+		if validator.ValidatorStatus != Banned && validator.ValidatorStatus != NotSubscribed {
+			allAccumulatedFromValidators.Add(allAccumulatedFromValidators, validator.AccumulatedRewardsWei)
 		}
-		allLeafs = append(allLeafs, RawLeaf{
-			DepositAddress:   state.DepositAddresses[unprocIndex],
-			PoolRecipient:    state.PoolRecipientAddresses[unprocIndex],
-			ClaimableBalance: state.ClaimableRewards[unprocIndex],
-			UnbanBalance:     state.UnbanBalances[unprocIndex],
-		})
 	}
+
+	allAccumulatedFromDeposits := big.NewInt(0)
+	for _, depositAddressAccumulated := range allLeafs {
+		allAccumulatedFromDeposits.Add(allAccumulatedFromDeposits, depositAddressAccumulated.AccumulatedBalance)
+	}
+
+	if allAccumulatedFromValidators.Cmp(allAccumulatedFromDeposits) != 0 {
+		log.Fatal("rewards calculation per validator and per deposit address does not match: ",
+			allAccumulatedFromValidators, " vs ", allAccumulatedFromDeposits)
+	}
+
 	return merklelizer.OrderByDepositAddress(allLeafs)
 }
 
@@ -137,14 +129,11 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 	for _, leaf := range orderedRawLeafs {
 		// TODO: Improve logs and move to debug
 		log.Info("leaf.DepositAddress: ", leaf.DepositAddress)
-		log.Info("leaf.PoolRecipient: ", leaf.PoolRecipient)
-		log.Info("leaf.ClaimableBalance: ", leaf.ClaimableBalance)
-		log.Info("leaf.UnbanBalance: ", leaf.UnbanBalance)
+		log.Info("leaf.ClaimableBalance: ", leaf.AccumulatedBalance)
+
 		leafHash := solsha3.SoliditySHA3(
 			solsha3.Address(leaf.DepositAddress),
-			solsha3.Address(leaf.PoolRecipient),
-			solsha3.Uint256(leaf.ClaimableBalance),
-			solsha3.Uint256(leaf.UnbanBalance),
+			solsha3.Uint256(leaf.AccumulatedBalance),
 		)
 		log.Info("leafHash: ", hex.EncodeToString(leafHash), " Deposit addres: ", leaf.DepositAddress)
 		blocks = append(blocks, &testData{data: leafHash})

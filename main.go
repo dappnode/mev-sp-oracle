@@ -124,7 +124,7 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 		finalizedSlot := finalizedEpoch * SlotsInEpoch
 
 		if finalizedSlot > oracle.State.Slot {
-			err = oracle.AdvanceStateToNextEpoch()
+			err = oracle.AdvanceStateToNextSlot()
 			if err != nil {
 				log.Fatal(err)
 			}
