@@ -53,8 +53,10 @@ func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.In
 			numTxs++
 		}
 	}
+	if numTxs > 1 {
+		log.Fatal("Multiple MEV rewards to the same address found within a block. This should not happen.")
+	}
 	return totalMevReward, numTxs, nil
-
 }
 
 // This call is expensive if its a vanila block. The tip sent to the fee recipient

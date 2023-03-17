@@ -64,22 +64,22 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) {
 	fmt.Println(fromAddress.Hex())
 	nonce, err := o.ExecutionClient.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("could not get pending nonce: ", err)
 	}
 
 	gasPrice, err := o.ExecutionClient.SuggestGasPrice(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("could not get gas price suggestion: ", err)
 	}
 
 	chaindId, err := o.ExecutionClient.NetworkID(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("could not get chaind: ", err)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chaindId)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 	auth.Value = big.NewInt(0) // in wei
@@ -104,5 +104,5 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) {
 		log.Fatal(err)
 	}
 
-	log.Info("Tx sent: ", tx.Hash().Hex())
+	log.Info("Tx sent updating the merkle root. Tx hash: ", tx.Hash().Hex())
 }
