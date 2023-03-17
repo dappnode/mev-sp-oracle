@@ -107,8 +107,7 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 
 	missedBlock := false
 
-	// TODO: Check type and use Capella/Bellatrix
-	var myBlock BellatrixBlock
+	var myBlock VersionedSignedBeaconBlock
 	var reward *big.Int = big.NewInt(0)
 	var sentOk bool = false
 	var rewardType int = -1
@@ -116,7 +115,7 @@ func (or *Oracle) AdvanceStateToNextEpoch() error {
 	if block == nil {
 		missedBlock = true
 	} else {
-		myBlock = BellatrixBlock{*block.Bellatrix}
+		myBlock = VersionedSignedBeaconBlock{block}
 		reward, sentOk, rewardType, err = myBlock.GetSentRewardAndType(or.cfg.PoolAddress, *or.fetcher)
 		if err != nil {
 			log.Fatal(err)
