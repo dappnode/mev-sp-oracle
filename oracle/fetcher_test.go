@@ -47,16 +47,21 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	}
 	var fetcher = NewFetcher(cfgFetcher)
 	folder := "../mock"
-	blockType := "bellatrix"
-	slotToFetch := uint64(5320330)
-	network := "mainnet"
+	blockType := "capella"
+	network := "goerli"
+	slotToFetch := uint64(5214321)
 
 	// Get block
 	signedBeaconBlock, err := fetcher.GetBlockAtSlot(slotToFetch)
 	require.NoError(t, err)
 
+	// Cast to our custom extended block with extra methods
+	extendedSignedBeaconBlock := VersionedSignedBeaconBlock{signedBeaconBlock}
+
 	// Serialize and dump the block to a file
-	mbeel, err := signedBeaconBlock.Bellatrix.MarshalJSON()
+	// Change this Bellatrix, Capella or any other block version
+	// depending on which field you want to store
+	mbeel, err := extendedSignedBeaconBlock.Capella.MarshalJSON()
 	require.NoError(t, err)
 	nameBlock := "block_" + blockType + "_slot_" + strconv.FormatInt(int64(slotToFetch), 10) + "_" + network
 	fblock, err := os.Create(filepath.Join(folder, nameBlock))
@@ -66,7 +71,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	defer fblock.Close()
 
 	// Get block header
-	header, err := fetcher.ExecutionClient.HeaderByNumber(context.Background(), new(big.Int).SetUint64(signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.BlockNumber))
+	header, err := fetcher.ExecutionClient.HeaderByNumber(context.Background(), new(big.Int).SetUint64(extendedSignedBeaconBlock.GetBlockNumber()))
 	require.NoError(t, err)
 
 	// Serialize and dump the block header to a file
@@ -86,7 +91,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	defer fTxs.Close()
 
 	var receiptsBlock []*types.Receipt
-	for _, rawTx := range signedBeaconBlock.Bellatrix.Message.Body.ExecutionPayload.Transactions {
+	for _, rawTx := range extendedSignedBeaconBlock.GetBlockTransactions() {
 		tx, _, err := DecodeTx(rawTx)
 		if err == nil {
 			receipt, err := fetcher.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())

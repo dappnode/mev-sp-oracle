@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"math/big"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/ethereum/go-ethereum/core/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -146,6 +148,35 @@ func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
 	require.Equal(t, big.NewInt(95434044627649514), proposerTip)
 }
 
+func Test_GetProperTip_Goerli_Slot_5214302(t *testing.T) {
+	fileName := "capella_slot_5214302_goerli"
+	block, header, receipts := LoadBlockHeaderReceiptsCapella(fileName)
+	extendedBlock := spec.VersionedSignedBeaconBlock{Capella: &block}
+	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+
+	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(38657065851824731), proposerTip)
+}
+
+func Test_GetMevReward_Goerli_Slot_5214321(t *testing.T) {
+	fileName := "capella_slot_5214321_goerli"
+	block, header, receipts := LoadBlockHeaderReceiptsCapella(fileName)
+	extendedBlock := spec.VersionedSignedBeaconBlock{Capella: &block}
+	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+
+	// Gets the MEV reward that was sent to a specific address
+	mevReward, numTxs, err := myBlock.MevRewardInWei("0x4d496ccc28058b1d74b7a19541663e21154f9c84")
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(15867629069461526), mevReward)
+	require.Equal(t, numTxs, 1)
+
+	// This block was a MEV block, but we can also test the tip
+	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(15992505660349526), proposerTip)
+}
+
 func Test_MevReward_Slot_5320342(t *testing.T) {
 	fileName := "bellatrix_slot_5320342_mainnet"
 	block, _, _ := LoadBlockHeaderReceiptsBellatrix(fileName)
@@ -225,4 +256,45 @@ func LoadBlockHeaderReceiptsBellatrix(file string) (bellatrix.SignedBeaconBlock,
 	}
 
 	return bellatrixblock, headerBlock, txReceipts
+}
+
+func LoadBlockHeaderReceiptsCapella(file string) (capella.SignedBeaconBlock, types.Header, []*types.Receipt) {
+	blockJson, err := os.Open("../mock/block_" + file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	blockByte, err := ioutil.ReadAll(blockJson)
+	if err != nil {
+		log.Fatal("could not read json file: ", err)
+	}
+	var capellaBlock capella.SignedBeaconBlock
+	err = capellaBlock.UnmarshalJSON(blockByte)
+	if err != nil {
+		log.Fatal("could not unmarshal json into capella signed block:", err)
+	}
+
+	var headerBlock types.Header
+	headerJson, err := os.Open("../mock/header_" + file)
+	if err != nil {
+		log.Fatal("could not open header file: ", err)
+	}
+	fmt.Println("jeader", headerJson)
+	headerByte, err := ioutil.ReadAll(headerJson)
+	if err != nil {
+		log.Fatal("could not read header file: ", err)
+	}
+	err = headerBlock.UnmarshalJSON(headerByte)
+	if err != nil {
+		log.Fatal("could not unmarshal header block: ", err)
+	}
+
+	var txReceipts []*types.Receipt
+	txReceiptsJson, err := os.Open("../mock/txreceipts_" + file)
+	txReceiptsByte, err := ioutil.ReadAll(txReceiptsJson)
+	err = json.Unmarshal(txReceiptsByte, &txReceipts)
+	if err != nil {
+		log.Fatal("could not unmarshal tx receipt: ", err)
+	}
+
+	return capellaBlock, headerBlock, txReceipts
 }

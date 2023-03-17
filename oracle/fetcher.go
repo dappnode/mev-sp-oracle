@@ -41,11 +41,20 @@ type Fetcher struct {
 // - pool contract
 func NewFetcher(cfg config.Config) *Fetcher {
 
+	// Dial the execution client
 	executionClient, err := ethclient.Dial(cfg.ExecutionEndpoint)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// Get chainid to ensure the endpoint is working
+	chainId, err := executionClient.ChainID(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Info("Connected succesfully to execution client. ChainId: ", chainId)
+
+	// Dial the consensus client
 	client, err := http.New(context.Background(),
 		http.WithTimeout(60*time.Second),
 		http.WithAddress(cfg.ConsensusEndpoint),
@@ -55,6 +64,28 @@ func NewFetcher(cfg config.Config) *Fetcher {
 		log.Fatal(err)
 	}
 	consensusClient := client.(*http.Service)
+
+	// Get deposit contract to ensure the endpoint is working
+	depositContract, err := consensusClient.DepositContract(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Info("Connected succesfully to consensus client. Deposit contract: ", depositContract)
+
+	// Print sync status of consensus and execution client
+	execSync, err := executionClient.SyncProgress(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Info("Execution client sync state (nil is synced): ", execSync)
+
+	consSync, err := consensusClient.NodeSyncing(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Info("Consensus client sync state: ", consSync)
 
 	return &Fetcher{
 		ConsensusClient: consensusClient,
@@ -79,7 +110,6 @@ func (f *Fetcher) GetBlockAtSlot(slot uint64) (*spec.VersionedSignedBeaconBlock,
 		}
 		break
 	}
-
 	return signedBeaconBlock, err
 }
 
