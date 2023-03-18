@@ -9,6 +9,7 @@ import (
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
 
 	log "github.com/sirupsen/logrus"
+	mt "github.com/txaty/go-merkletree"
 )
 
 var StateFileName = "state.gob"
@@ -65,6 +66,9 @@ type OnchainState struct {
 	Slot       uint64
 	TxHash     string
 	MerkleRoot string
+
+	Tree   *mt.MerkleTree
+	Proofs map[string][][]byte
 	// TODO: Store also proofs
 }
 

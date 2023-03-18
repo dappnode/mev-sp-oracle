@@ -169,10 +169,12 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 			} else {
+				txHash := ""
 				if !cfg.DryRun {
-					txHash := oracle.Operations.UpdateContractMerkleRoot(mRoot)
-					oracle.State.StoreLatestOnchainState(oracle.State.Validators, oracle.State.LatestSlot, txHash, mRoot)
+					txHash = oracle.Operations.UpdateContractMerkleRoot(mRoot)
 				}
+
+				oracle.State.StoreLatestOnchainState(oracle.State.Validators, oracle.State.LatestSlot, txHash, mRoot)
 			}
 		}
 	}

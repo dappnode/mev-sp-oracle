@@ -17,7 +17,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/gorilla/mux"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -85,12 +84,12 @@ type httpOkValidatorState struct {
 }
 
 type httpOkProofs struct {
-	DepositAddress   string   `json:"depositaddress"`
-	MerkleRoot       string   `json:"merkleroot"`
-	CheckpointSlot   uint64   `json:"checkpointslot"`
-	Proofs           []string `json:"proofs"`
-	AvailableBalance string   `json:"availablebalance"`
-	UnbanBalance     string   `json:"unbanbalance"`
+	LeafDepositAddress     string   `json:"leaf_deposit_address"`
+	LeafAccumulatedBalance *big.Int `json:"leaf_accumulated_balance"`
+	MerkleRoot             string   `json:"merkleroot"`
+	CheckpointSlot         uint64   `json:"checkpoint_slot"`
+	Proofs                 []string `json:"merkle_proofs"`
+	RegisteredValidators   []uint64 `json:"registered_validators"`
 }
 
 type ApiService struct {
@@ -249,19 +248,20 @@ func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-	// TODO: move to debug
-	log.WithFields(logrus.Fields{
-		// TODO: more fields
-		"depositaddress": depositAddress,
-	}).Info("handleLatestMerkleProof")
-
-	// TODO get also the root for trazability
-	mPoof, mRoot, slot, avBalance, unbanBalance, err := m.Postgres.GetLatestMerkleProofByDeposit(depositAddress)
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	m.respondOK(w, httpOkProofs{depositAddress, mRoot, slot, mPoof, avBalance, unbanBalance})
+	//if err != nil {
+	//	m.respondError(w, http.StatusInternalServerError, err.Error())
+	//	return
+	//}
+	m.respondOK(w, httpOkProofs{
+		// TODO:
+		/*
+			LeafDepositAddress     string   `json:"leaf_deposit_address"`
+			LeafAccumulatedBalance *big.Int `json:"leaf_accumulated_balance"`
+			MerkleRoot             string   `json:"merkleroot"`
+			CheckpointSlot         uint64   `json:"checkpoint_slot"`
+			Proofs                 []string `json:"merkle_proofs"`
+			RegisteredValidators   []uint64 `json:"registered_validators"`*/
+	})
 }
 
 func (m *ApiService) handleDepositAddressByIndex(w http.ResponseWriter, req *http.Request) {
