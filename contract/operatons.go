@@ -17,6 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TODO: move with fetcher and call it chain interactions
 type Operations struct {
 	cfg             *config.Config
 	ExecutionClient *ethclient.Client
@@ -67,10 +68,13 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) {
 		log.Fatal("could not get pending nonce: ", err)
 	}
 
-	gasPrice, err := o.ExecutionClient.SuggestGasPrice(context.Background())
+	gasTipCap, err := o.ExecutionClient.SuggestGasTipCap(context.Background())
 	if err != nil {
 		log.Fatal("could not get gas price suggestion: ", err)
 	}
+
+	// Unused, leaving for reference
+	_ = gasTipCap
 
 	chaindId, err := o.ExecutionClient.NetworkID(context.Background())
 	if err != nil {
@@ -84,10 +88,13 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) {
 	auth.Nonce = big.NewInt(int64(nonce))
 	auth.Value = big.NewInt(0) // in wei
 	//auth.GasLimit = uint64(300000) // in units
-	// gasPrice works well in testnets?
-	auth.GasPrice = gasPrice
-	//auth.GasPrice = new(big.Int).SetUint64(10)
-	auth.Context = context.Background() // TODO:
+
+	// nil prices automatically estimate prices
+	auth.GasPrice = nil
+	auth.GasFeeCap = nil
+	auth.GasTipCap = nil
+
+	auth.Context = context.Background()
 	auth.NoSend = false
 
 	//address := common.HexToAddress(o.cfg.PoolAddress)
@@ -105,4 +112,12 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) {
 	}
 
 	log.Info("Tx sent updating the merkle root. Tx hash: ", tx.Hash().Hex())
+
+	log.WithFields(log.Fields{
+		"TxHash":            tx.Hash().Hex(),
+		"NewMerkleRoot":     newMerkleRoot,
+		"NewMerleRootBytes": newMerkleRootBytes,
+	}).Info("Tx sent to Ethereum updating rewards merkle root, wait for confirmation")
+
+	// TODO: Wait for confirmation of the tx and log if NOK
 }
