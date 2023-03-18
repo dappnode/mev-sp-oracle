@@ -30,8 +30,7 @@ const (
 )
 
 type ValidatorInfo struct {
-	ValidatorStatus int
-	// TODO: some explanation + reference spec
+	ValidatorStatus       int
 	AccumulatedRewardsWei *big.Int // TODO not sure if this is gwei or wei
 	PendingRewardsWei     *big.Int // TODO not sure if this is gwei or wei
 	CollateralWei         *big.Int // TODO not sure if this is gwei or wei
@@ -50,7 +49,6 @@ type OracleState struct {
 	Network     string
 	PoolAddress string
 	Validators  map[uint64]*ValidatorInfo
-	// TODO: Add merkle root representing this state
 }
 
 func (p *OracleState) SaveStateToFile() {
@@ -61,6 +59,8 @@ func (p *OracleState) SaveStateToFile() {
 
 	defer file.Close()
 
+	mRoot, enoughData := p.GetMerkleRootIfAny()
+
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
 		"File":            StateFileName,
@@ -68,6 +68,8 @@ func (p *OracleState) SaveStateToFile() {
 		"TotalValidators": len(p.Validators),
 		"Network":         p.Network,
 		"PoolAddress":     p.PoolAddress,
+		"MerkleRoot":      mRoot,
+		"EnoughData":      enoughData,
 	}).Info("Saving state to file")
 	encoder.Encode(p)
 }
@@ -87,7 +89,7 @@ func ReadStateFromFile() (*OracleState, error) {
 		log.Fatal(err)
 	}
 
-	// TODO: Run some sanity checks on the recovered state
+	mRoot, enoughData := state.GetMerkleRootIfAny()
 
 	log.WithFields(log.Fields{
 		"File":            StateFileName,
@@ -95,6 +97,8 @@ func ReadStateFromFile() (*OracleState, error) {
 		"TotalValidators": len(state.Validators),
 		"Network":         state.Network,
 		"PoolAddress":     state.PoolAddress,
+		"MerkleRoot":      mRoot,
+		"EnoughData":      enoughData,
 	}).Info("Loaded state from file")
 
 	return &state, nil
