@@ -35,7 +35,7 @@ func NewOperations(cfg *config.Config) *Operations {
 	}
 }
 
-func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) {
+func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
 	log.Info("TODO: sanity check:", newMerkleRoot)
 
@@ -118,6 +118,8 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) {
 		"NewMerkleRoot":     newMerkleRoot,
 		"NewMerleRootBytes": newMerkleRootBytes,
 	}).Info("Tx sent to Ethereum updating rewards merkle root, wait for confirmation")
+
+	return tx.Hash().Hex()
 
 	// TODO: Wait for confirmation of the tx and log if NOK
 }

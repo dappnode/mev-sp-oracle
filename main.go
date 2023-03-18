@@ -32,7 +32,7 @@ func main() {
 
 	fetcher := oracle.NewFetcher(*cfg)
 	oracle := oracle.NewOracle(cfg, fetcher)
-	api := api.NewApiService(*cfg)
+	api := api.NewApiService(*cfg, oracle.State, fetcher)
 	go api.StartHTTPServer()
 
 	// Preparae the database
@@ -170,7 +170,8 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 			} else {
 				if !cfg.DryRun {
-					oracle.Operations.UpdateContractMerkleRoot(mRoot)
+					txHash := oracle.Operations.UpdateContractMerkleRoot(mRoot)
+					oracle.State.StoreLatestOnchainState(oracle.State.Validators, oracle.State.LatestSlot, txHash, mRoot)
 				}
 			}
 		}

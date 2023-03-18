@@ -11,11 +11,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	VanilaBlock int = 0
-	MevBlock        = 1
-)
-
 // This type extends the existing VersionedSignedBeaconBlock with some useful
 // custom methods to get relevant information from the block to be used by
 // the oracle.
