@@ -122,7 +122,7 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 		if correctFeeRec {
 			depositAddress := or.GetDepositAddressOfValidator(proposerKey, slotToProcess)
 			or.State.AddSubscriptionIfNotAlready(proposerIndex, depositAddress, proposerKey)
-			or.State.AdvanceStateMachine(proposerIndex, ProposalWithCorrectFee)
+			or.State.AdvanceStateMachine(proposerIndex, ProposalOk)
 			or.State.IncreaseAllPendingRewards(reward)
 			or.State.ConsolidateBalance(proposerIndex)
 			or.State.AddCorrectProposal(proposerIndex, reward, rewardType, slotToProcess)
@@ -134,7 +134,7 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 		// If the validator was subscribed but the fee recipient was wrong
 		// we ban the validator as it is not following the protocol rules
 		if !correctFeeRec && or.State.IsValidatorSubscribed(proposerIndex) {
-			or.State.AdvanceStateMachine(proposerIndex, ProposalWithWrongFee)
+			or.State.AdvanceStateMachine(proposerIndex, ProposalWrongFee)
 			or.State.IncreaseAllPendingRewards(or.State.Validators[proposerIndex].PendingRewardsWei)
 			or.State.ResetPendingRewards(proposerIndex)
 			or.State.AddWrongFeeProposal(proposerIndex, reward, rewardType, slotToProcess)
@@ -156,7 +156,7 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 	if !proposedOk && or.State.IsValidatorSubscribed(proposerIndex) {
 		// If the validator missed a block, just advance the state machine
 		// there are no rewards to share, but validator state slighly changes
-		//or.State.AdvanceStateMachine(proposerIndex, MissedBlock)
+		or.State.AdvanceStateMachine(proposerIndex, ProposalMissed)
 		or.State.AddMissedProposal(proposerIndex, slotToProcess)
 	}
 

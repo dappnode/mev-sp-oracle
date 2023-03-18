@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +28,7 @@ func Test_IncreasePendingRewards(t *testing.T) {
 	state := NewOracleState(&config.Config{})
 	state.Validators[12] = &ValidatorInfo{
 		DepositAddress:    "0xaa",
-		ValidatorStatus:   Eligible,
+		ValidatorStatus:   Active,
 		PendingRewardsWei: big.NewInt(100),
 	}
 	totalAmount := big.NewInt(130)
@@ -60,10 +59,6 @@ func Test_StateMachine(t *testing.T) {
 	valIndex1 := uint64(1000)
 	valIndex2 := uint64(2000)
 
-	_ = state
-	_ = valIndex1
-	_ = valIndex2
-
 	type stateTest struct {
 		From  int
 		Event int
@@ -71,45 +66,40 @@ func Test_StateMachine(t *testing.T) {
 	}
 
 	stateMachineTestVector := []stateTest{
-		/*
-			{Active, ProposalWithCorrectFee, Active},
-			{Active, ProposalWithWrongFee, Banned},
-			{Active, MissedProposal, ActiveWarned},
-		*/
-		//{Active, UnbanValidator, Active}, // TODO: Test that fails
+		// FromState | Event | EndState
+		{Active, ProposalOk, Active},
+		{Active, ProposalMissed, YellowCard},
+		{Active, ProposalWrongFee, Banned},
+		{Active, Unsubscribe, NotSubscribed},
 
-		/*
-			{ActiveWarned, ProposalWithCorrectFee, Active},
-			{ActiveWarned, ProposalWithWrongFee, Banned},
-			{ActiveWarned, MissedProposal, NotActive},
-		*/
-		//{ActiveWarned, UnbanValidator, ActiveWarned}, // TODO: Test that fails
+		{YellowCard, ProposalOk, Active},
+		{YellowCard, ProposalMissed, RedCard},
+		{YellowCard, ProposalWrongFee, Banned},
+		{YellowCard, Unsubscribe, NotSubscribed},
 
-		/*
-			{NotActive, ProposalWithCorrectFee, ActiveWarned},
-			{NotActive, ProposalWithWrongFee, Banned},
-			{NotActive, MissedProposal, MissedProposal},
-		*/
-		// {NotActive, UnbanValidator, NotActive}, // TODO: Test that fails
+		{RedCard, ProposalOk, YellowCard},
+		{RedCard, ProposalMissed, RedCard},
+		{RedCard, ProposalWrongFee, Banned},
+		{RedCard, Unsubscribe, NotSubscribed},
 
-		{Banned, ProposalWithCorrectFee, Banned},
-		{Banned, ProposalWithWrongFee, Banned},
-		//{Banned, MissedProposal, Banned},
+		{NotSubscribed, ManualSubscription, Active},
+		{NotSubscribed, AutoSubscription, Active},
 	}
-	_ = stateMachineTestVector
 
-	/*
-		for _, testState := range stateMachineTestVector {
-			state.ValidatorState[valIndex1] = testState.From
-			state.ValidatorState[valIndex2] = testState.From
-
-			state.AdvanceStateMachine(valIndex1, testState.Event)
-			state.AdvanceStateMachine(valIndex2, testState.Event)
-
-			require.Equal(t, testState.End, state.ValidatorState[valIndex1])
-			require.Equal(t, testState.End, state.ValidatorState[valIndex2])
+	for _, testState := range stateMachineTestVector {
+		state.Validators[valIndex1] = &ValidatorInfo{
+			ValidatorStatus: testState.From,
 		}
-	*/
+		state.Validators[valIndex2] = &ValidatorInfo{
+			ValidatorStatus: testState.From,
+		}
+
+		state.AdvanceStateMachine(valIndex1, testState.Event)
+		state.AdvanceStateMachine(valIndex2, testState.Event)
+
+		require.Equal(t, testState.End, state.Validators[valIndex1].ValidatorStatus)
+		require.Equal(t, testState.End, state.Validators[valIndex2].ValidatorStatus)
+	}
 }
 func Test_SaveLoadFromToFile(t *testing.T) {
 
@@ -120,8 +110,8 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		Validators:  make(map[uint64]*ValidatorInfo),
 	}
 
-	original.Validators[1] = &ValidatorInfo{
-		ValidatorStatus:       Eligible,
+	original.Validators[10] = &ValidatorInfo{
+		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(1000),
 		PendingRewardsWei:     big.NewInt(1000),
 		CollateralWei:         big.NewInt(1000),
@@ -162,8 +152,8 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		}},
 	}
 
-	original.Validators[13] = &ValidatorInfo{
-		ValidatorStatus:       Eligible,
+	original.Validators[20] = &ValidatorInfo{
+		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(13000),
 		PendingRewardsWei:     big.NewInt(100),
 		CollateralWei:         big.NewInt(1000000),
@@ -204,15 +194,15 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		}},
 	}
 
-	original.Validators[200] = &ValidatorInfo{
-		ValidatorStatus:       Eligible,
+	original.Validators[30] = &ValidatorInfo{
+		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(53000),
 		PendingRewardsWei:     big.NewInt(000),
 		CollateralWei:         big.NewInt(4000000),
 		DepositAddress:        "0xa",
 		ValidatorIndex:        "0xb",
 		ValidatorKey:          "0xc",
-		ProposedBlocksSlots:   []BlockState{},
+		// Empty Proposed blocks
 		MissedBlocksSlots: []BlockState{BlockState{
 			Reward:    big.NewInt(303000),
 			BlockType: VanilaBlock,
@@ -235,10 +225,6 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 
 	recovered, err := ReadStateFromFile()
 	require.NoError(t, err)
-
-	log.Info("orgiinal", original)
-	log.Info("recovered", recovered)
-
 	require.Equal(t, original, recovered)
 }
 
