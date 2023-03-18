@@ -29,6 +29,12 @@ const (
 	MissedProposal             = 2
 )
 
+type BlockState struct {
+	Reward    *big.Int
+	BlockType int
+	Slot      uint64
+}
+
 type ValidatorInfo struct {
 	ValidatorStatus       int
 	AccumulatedRewardsWei *big.Int // TODO not sure if this is gwei or wei
@@ -37,9 +43,9 @@ type ValidatorInfo struct {
 	DepositAddress        string
 	ValidatorIndex        string
 	ValidatorKey          string
-	ProposedBlocksSlots   []uint64
-	MissedBlocksSlots     []uint64
-	WrongFeeBlocksSlots   []uint64
+	ProposedBlocksSlots   []BlockState
+	MissedBlocksSlots     []BlockState
+	WrongFeeBlocksSlots   []BlockState
 
 	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
 }
@@ -129,6 +135,31 @@ func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
 	return false
 }
 
+func (state *OracleState) AddCorrectProposal(validatorIndex uint64, reward *big.Int, blockType int, slot uint64) {
+	newBlock := &BlockState{
+		Reward:    reward,
+		BlockType: blockType,
+		Slot:      slot,
+	}
+	state.Validators[validatorIndex].ProposedBlocksSlots = append(state.Validators[validatorIndex].ProposedBlocksSlots, *newBlock)
+}
+
+func (state *OracleState) AddMissedProposal(validatorIndex uint64, slot uint64) {
+	newBlock := &BlockState{
+		Slot: slot,
+	}
+	state.Validators[validatorIndex].MissedBlocksSlots = append(state.Validators[validatorIndex].MissedBlocksSlots, *newBlock)
+}
+
+func (state *OracleState) AddWrongFeeProposal(validatorIndex uint64, reward *big.Int, blockType int, slot uint64) {
+	newBlock := &BlockState{
+		Reward:    reward,
+		BlockType: blockType,
+		Slot:      slot,
+	}
+	state.Validators[validatorIndex].WrongFeeBlocksSlots = append(state.Validators[validatorIndex].WrongFeeBlocksSlots, *newBlock)
+}
+
 func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAddress string, validatorKey string) {
 	validator, found := state.Validators[valIndex]
 	if !found {
@@ -138,9 +169,9 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAd
 			PendingRewardsWei:     big.NewInt(0),
 			DepositAddress:        depositAddress,
 			ValidatorKey:          validatorKey,
-			ProposedBlocksSlots:   make([]uint64, 0),
-			MissedBlocksSlots:     make([]uint64, 0),
-			WrongFeeBlocksSlots:   make([]uint64, 0),
+			ProposedBlocksSlots:   make([]BlockState, 0),
+			MissedBlocksSlots:     make([]BlockState, 0),
+			WrongFeeBlocksSlots:   make([]BlockState, 0),
 		}
 		state.Validators[valIndex] = validator
 	}

@@ -8,7 +8,6 @@ import (
 	"mev-sp-oracle/api"
 	"mev-sp-oracle/config"
 	"mev-sp-oracle/oracle"
-	or "mev-sp-oracle/oracle"
 	"mev-sp-oracle/postgres"
 	"os"
 	"os/signal"
@@ -97,12 +96,13 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 	*/
 
 	// Try to resume syncing from latest known state from file
-	recoveredState, err := or.ReadStateFromFile()
-	if err == nil {
-		oracle.State = recoveredState
-	} else {
-		log.Info("Previous state not found or could not be loaded, syncing from the begining")
-	}
+	// TODO: Temporally disabled until further tested
+	//recoveredState, err := or.ReadStateFromFile()
+	//if err == nil {
+	//	oracle.State = recoveredState
+	//} else {
+	//	log.Info("Previous state not found or could not be loaded, syncing from the begining")
+	//}
 	log.Info("Starting to process from slot: ", oracle.State.LatestSlot)
 
 	for {
@@ -145,6 +145,16 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 			}).Info("Waiting for new finalized slot")
 
 			time.Sleep(15 * time.Second)
+		}
+
+		// How often we store data in the database in slots
+		UpdateDbIntervalSlots := uint64(1)
+		if oracle.State.LatestSlot%UpdateDbIntervalSlots == 0 {
+			// TODO: Unused. As a nice to have we can store
+			// the intermediate validator balances in db
+			// So a valaidator can see it balance over time.
+			// Not feasible to store this in memory
+
 		}
 
 		// Every CheckPointSizeInSlots we commit the state

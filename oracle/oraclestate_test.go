@@ -128,9 +128,38 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		DepositAddress:        "0xa",
 		ValidatorIndex:        "0xb",
 		ValidatorKey:          "0xc",
-		ProposedBlocksSlots:   []uint64{1, 10, 20},
-		MissedBlocksSlots:     []uint64{4, 10, 20},
-		WrongFeeBlocksSlots:   []uint64{7, 110, 203},
+		ProposedBlocksSlots: []BlockState{
+			BlockState{
+				Reward:    big.NewInt(1000),
+				BlockType: VanilaBlock,
+				Slot:      1000,
+			}, BlockState{
+				Reward:    big.NewInt(12000),
+				BlockType: VanilaBlock,
+				Slot:      3000,
+			}, BlockState{
+				Reward:    big.NewInt(7000),
+				BlockType: MevBlock,
+				Slot:      6000,
+			}},
+		MissedBlocksSlots: []BlockState{BlockState{
+			Reward:    big.NewInt(1000),
+			BlockType: VanilaBlock,
+			Slot:      500,
+		}, BlockState{
+			Reward:    big.NewInt(1000),
+			BlockType: VanilaBlock,
+			Slot:      12000,
+		}},
+		WrongFeeBlocksSlots: []BlockState{BlockState{
+			Reward:    big.NewInt(1000),
+			BlockType: VanilaBlock,
+			Slot:      500,
+		}, BlockState{
+			Reward:    big.NewInt(1000),
+			BlockType: VanilaBlock,
+			Slot:      12000,
+		}},
 	}
 
 	original.Validators[13] = &ValidatorInfo{
@@ -141,9 +170,38 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		DepositAddress:        "0xa",
 		ValidatorIndex:        "0xb",
 		ValidatorKey:          "0xc",
-		ProposedBlocksSlots:   []uint64{31, 120, 420},
-		MissedBlocksSlots:     []uint64{44, 130, 204},
-		WrongFeeBlocksSlots:   []uint64{74, 1410, 2503},
+		ProposedBlocksSlots: []BlockState{
+			BlockState{
+				Reward:    big.NewInt(1000),
+				BlockType: VanilaBlock,
+				Slot:      1000,
+			}, BlockState{
+				Reward:    big.NewInt(12000),
+				BlockType: VanilaBlock,
+				Slot:      3000,
+			}, BlockState{
+				Reward:    big.NewInt(7000),
+				BlockType: MevBlock,
+				Slot:      6000,
+			}},
+		MissedBlocksSlots: []BlockState{BlockState{
+			Reward:    big.NewInt(33000),
+			BlockType: VanilaBlock,
+			Slot:      800,
+		}, BlockState{
+			Reward:    big.NewInt(11000),
+			BlockType: VanilaBlock,
+			Slot:      15000,
+		}},
+		WrongFeeBlocksSlots: []BlockState{BlockState{
+			Reward:    big.NewInt(14000),
+			BlockType: VanilaBlock,
+			Slot:      700,
+		}, BlockState{
+			Reward:    big.NewInt(18000),
+			BlockType: VanilaBlock,
+			Slot:      19000,
+		}},
 	}
 
 	original.Validators[200] = &ValidatorInfo{
@@ -154,9 +212,21 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		DepositAddress:        "0xa",
 		ValidatorIndex:        "0xb",
 		ValidatorKey:          "0xc",
-		ProposedBlocksSlots:   []uint64{5, 6, 7},
-		MissedBlocksSlots:     []uint64{8, 9, 10},
-		WrongFeeBlocksSlots:   []uint64{11, 12, 13},
+		ProposedBlocksSlots:   []BlockState{},
+		MissedBlocksSlots: []BlockState{BlockState{
+			Reward:    big.NewInt(303000),
+			BlockType: VanilaBlock,
+			Slot:      12200,
+		}},
+		WrongFeeBlocksSlots: []BlockState{BlockState{
+			Reward:    big.NewInt(15000),
+			BlockType: VanilaBlock,
+			Slot:      800,
+		}, BlockState{
+			Reward:    big.NewInt(189000),
+			BlockType: VanilaBlock,
+			Slot:      232000,
+		}},
 	}
 
 	StateFileName = "test_state.gob"

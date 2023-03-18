@@ -125,7 +125,11 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 			or.State.AdvanceStateMachine(proposerIndex, ProposalWithCorrectFee)
 			or.State.IncreaseAllPendingRewards(reward)
 			or.State.ConsolidateBalance(proposerIndex)
-			or.State.Validators[proposerIndex].ProposedBlocksSlots = append(or.State.Validators[proposerIndex].ProposedBlocksSlots, slotToProcess)
+			or.State.AddCorrectProposal(proposerIndex, reward, rewardType, slotToProcess)
+
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 		// If the validator was subscribed but the fee recipient was wrong
 		// we ban the validator as it is not following the protocol rules
@@ -133,39 +137,38 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 			or.State.AdvanceStateMachine(proposerIndex, ProposalWithWrongFee)
 			or.State.IncreaseAllPendingRewards(or.State.Validators[proposerIndex].PendingRewardsWei)
 			or.State.ResetPendingRewards(proposerIndex)
-			or.State.Validators[proposerIndex].WrongFeeBlocksSlots = append(or.State.Validators[proposerIndex].WrongFeeBlocksSlots, slotToProcess)
+			or.State.AddWrongFeeProposal(proposerIndex, reward, rewardType, slotToProcess)
 		}
 	}
+
+	/* TODO: THis is not necesary, everything is served from memory.
+	err := or.Postgres.StoreBlockInDb(
+		"TODOtimestamp",
+		slotToProcess,
+		proposerKey,
+		proposerIndex,
+		RewardTypeToString(rewardType),
+		*reward,
+		1, // TODO Ok wrong missed
+	)*/
 
 	// If the validator was not subscribed and missed proposed the block in this slot
 	if !proposedOk && or.State.IsValidatorSubscribed(proposerIndex) {
 		// If the validator missed a block, just advance the state machine
 		// there are no rewards to share, but validator state slighly changes
 		//or.State.AdvanceStateMachine(proposerIndex, MissedBlock)
-		or.State.Validators[proposerIndex].MissedBlocksSlots = append(or.State.Validators[proposerIndex].MissedBlocksSlots, slotToProcess)
+		or.State.AddMissedProposal(proposerIndex, slotToProcess)
 	}
-
-	// TODO: Enable this back.
-	/*
-		rewardTypeString := "unset"
-		if rewardType == VanilaBlock {
-			rewardTypeString = "vanila"
-		} else if rewardType == MevBlock {
-			rewardTypeString = "mev"
-		}
-		err = or.Postgres.StoreBlockInDb(
-			"TODO",
-			uint64(slotDuty.Slot),
-			pubKey,
-			valIndexDuty,
-			rewardTypeString,
-			*reward,
-			1, // TODO
-		)
-		if err != nil {
-			log.Fatal(err)
-		}*/
 
 	or.State.LatestSlot = slotToProcess + 1
 	return nil
+}
+
+func RewardTypeToString(rewardType int) string {
+	if rewardType == VanilaBlock {
+		return "vanila"
+	} else if rewardType == MevBlock {
+		return "mev"
+	}
+	return "unset"
 }
