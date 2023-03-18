@@ -57,25 +57,23 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 	for _, validator := range state.Validators {
 
 		// That match some criteria
-		if validator.ValidatorStatus != Banned && validator.ValidatorStatus != NotSubscribed {
-			found := false
+		found := false
 
-			// If the leaf already exists, add the balance to the existing leaf (by deposit address)
-			for _, leaf := range allLeafs {
-				if leaf.DepositAddress == validator.DepositAddress {
-					leaf.AccumulatedBalance.Add(leaf.AccumulatedBalance, validator.AccumulatedRewardsWei)
-					found = true
-					continue
-				}
+		// If the leaf already exists, add the balance to the existing leaf (by deposit address)
+		for _, leaf := range allLeafs {
+			if leaf.DepositAddress == validator.DepositAddress {
+				leaf.AccumulatedBalance.Add(leaf.AccumulatedBalance, validator.AccumulatedRewardsWei)
+				found = true
+				continue
 			}
+		}
 
-			// If the leaf does not exist, create a new one, initing the balance to the current validator balance
-			if !found {
-				allLeafs = append(allLeafs, RawLeaf{
-					DepositAddress:     validator.DepositAddress,
-					AccumulatedBalance: new(big.Int).Set(validator.AccumulatedRewardsWei), // Copy the value
-				})
-			}
+		// If the leaf does not exist, create a new one, initing the balance to the current validator balance
+		if !found {
+			allLeafs = append(allLeafs, RawLeaf{
+				DepositAddress:     validator.DepositAddress,
+				AccumulatedBalance: new(big.Int).Set(validator.AccumulatedRewardsWei), // Copy the value
+			})
 		}
 	}
 
@@ -83,9 +81,7 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 	// the same amount of rewards as the total accumulated rewards
 	allAccumulatedFromValidators := big.NewInt(0)
 	for _, validator := range state.Validators {
-		if validator.ValidatorStatus != Banned && validator.ValidatorStatus != NotSubscribed {
-			allAccumulatedFromValidators.Add(allAccumulatedFromValidators, validator.AccumulatedRewardsWei)
-		}
+		allAccumulatedFromValidators.Add(allAccumulatedFromValidators, validator.AccumulatedRewardsWei)
 	}
 
 	allAccumulatedFromDeposits := big.NewInt(0)
@@ -112,7 +108,7 @@ func (merklelizer *Merklelizer) OrderByDepositAddress(leafs []RawLeaf) []RawLeaf
 }
 
 // return map of deposit address -> and its hashed leaf. rethink this
-func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[string]mt.DataBlock, map[string]RawLeaf, *mt.MerkleTree) {
+func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[string]mt.DataBlock, map[string]RawLeaf, *mt.MerkleTree, bool) {
 
 	blocks := make([]mt.DataBlock, 0)
 
@@ -142,8 +138,9 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 	}
 
 	if len(blocks) <= 1 {
-		// TODO handle this.
-		log.Fatal("TODO: cant generate tree with less than 2 blocks")
+		// Returns false meaning that we dont have enough data to generate a merkle tree
+		// Expected behaviour at the begining with none or just 1 validator registered
+		return nil, nil, nil, false
 	}
 
 	tree, err := mt.New(&mt.Config{
@@ -152,6 +149,7 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		Mode:             mt.ModeTreeBuild,
 		DoNotHashLeaves:  true,
 	}, blocks)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -173,7 +171,7 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		}
 	}
 
-	return depositToLeaf, depositToRawLeaf, tree
+	return depositToLeaf, depositToRawLeaf, tree, true
 
 	// TODO: Update contract with root.
 	// TODO: Generate dump with proofs.

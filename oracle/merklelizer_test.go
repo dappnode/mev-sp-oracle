@@ -40,7 +40,7 @@ func Test_GenerateTreeFromState(t *testing.T) {
 	}
 
 	// TODO: add test to _, _
-	_, _, tree := merklelizer.GenerateTreeFromState(state)
+	_, _, tree, _ := merklelizer.GenerateTreeFromState(state)
 	require.Equal(t, "9ff9fc5b0bb88bd93251c1d46e3977801ab3275b83bdf7088380cc824fb57932", hex.EncodeToString(tree.Root))
 
 }

@@ -130,21 +130,34 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 			}
 			log.Info("[", oracle.State.Slot, "/", finalizedSlot, "] Done processing slot. Remaining slots: ", finalizedSlot-oracle.State.Slot)
 		} else {
-			log.Info("Waiting for new finalized slot")
+			log.WithFields(log.Fields{
+				"finalizedSlot":    finalizedSlot,
+				"finalizedEpoch":   finalizedEpoch,
+				"oracleStateSlot":  oracle.State.Slot,
+				"oracleStateEpoch": oracle.State.Slot / SlotsInEpoch,
+			}).Info("Waiting for new finalized slot")
+
 			time.Sleep(15 * time.Second)
 		}
 
 		// TODO: Rethink this a bit. Do not run in the first block we process, and think about edge cases
 		if (oracle.State.Slot-cfg.DeployedSlot)%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached, slot: ", oracle.State.Slot)
-			err, mRoot := oracle.State.DumpOracleStateToDatabase()
-			if !cfg.DryRun {
-				oracle.Operations.UpdateContractMerkleRoot(mRoot)
-			}
+			err, mRoot, enoughData := oracle.State.DumpOracleStateToDatabase()
 			// TODO: By now just panic
 			if err != nil {
 				log.Fatal("Failed dumping oracle state to db: ", err)
 			}
+
+			if !enoughData {
+				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
+				continue
+			}
+
+			if !cfg.DryRun {
+				oracle.Operations.UpdateContractMerkleRoot(mRoot)
+			}
+
 			oracle.State.LogClaimableBalances()
 			oracle.State.LogPendingBalances()
 		}

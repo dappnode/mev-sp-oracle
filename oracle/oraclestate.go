@@ -132,14 +132,18 @@ func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
 	return false
 }
 
-func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64) {
+func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAddress string, validatorKey string) {
 	validator, found := state.Validators[valIndex]
 	if !found {
 		validator = &ValidatorInfo{
 			ValidatorStatus:       Eligible,
 			AccumulatedRewardsWei: big.NewInt(0),
 			PendingRewardsWei:     big.NewInt(0),
-			// TODO: not sure if I have to initialize the rest of the fields
+			DepositAddress:        depositAddress,
+			ValidatorKey:          validatorKey,
+			ProposedBlocksSlots:   make([]uint64, 0),
+			MissedBlocksSlots:     make([]uint64, 0),
+			WrongFeeBlocksSlots:   make([]uint64, 0),
 		}
 		state.Validators[valIndex] = validator
 	}
@@ -236,7 +240,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 // Note that this is a proof of concept. All data is stored in the memory
 // and dumped to the db on each checkpoint, but at some point
 // this may become unfeasible.
-func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD: returning here the merkle root doesnt make sense. quick workaround
+func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { // TOOD: returning here the merkle root doesnt make sense. quick workaround
 	log.Info("Dumping all state to database")
 
 	// TODO: Define a type on validator parameters to store and stop
@@ -244,7 +248,10 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD:
 
 	mk := NewMerklelizer()
 	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
-	depositToLeaf, depositToRawLeaf, tree := mk.GenerateTreeFromState(state)
+	depositToLeaf, depositToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(state)
+	if !enoughData {
+		return nil, "", enoughData
+	}
 	merkleRootStr := hex.EncodeToString(tree.Root)
 	log.Info("Merkle root: ", merkleRootStr)
 
@@ -279,7 +286,7 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD:
 			ByteArrayToStringArray(proof.Siblings),
 			"0x"+hex.EncodeToString(tree.Root))
 		if err != nil {
-			return err, ""
+			return err, "", false
 		}
 	}
 
@@ -320,6 +327,6 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string) { // TOOD:
 
 	}
 
-	return nil, merkleRootStr
+	return nil, merkleRootStr, true
 
 }

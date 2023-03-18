@@ -74,7 +74,28 @@ func (or *Oracle) UpdateSubscriptions(block VersionedSignedBeaconBlock) {
 		if err != nil {
 			log.Fatal(err)
 		}*/
+}
 
+// TODO: Remove the slot from the input, makes no sense
+func (or *Oracle) GetDepositAddressOfValidator(validatorPubKey string, slot uint64) string {
+	depositAddress, err := or.Postgres.GetDepositAddressOfValidatorKey(validatorPubKey)
+	if err == nil {
+		return depositAddress
+	}
+	log.Warn("Deposit key not found for ", validatorPubKey, ". Expected in goerli. Using a default one. err: ", err)
+
+	// TODO: Remove this in production. Used in goerli for testing with differenet addresses
+	someDepositAddresses := []string{
+		"0x001eDa52592fE2f8a28dA25E8033C263744b1b6E",
+		"0x0029a125E6A3f058628Bd619C91f481e4470D673",
+		"0x003718fb88964A1F167eCf205c7f04B25FF46B8E",
+		"0x004b1EaBc3ea60331a01fFfC3D63E5F6B3aB88B3",
+		"0x005CD1608e40d1e775a97d12e4f594029567C071",
+		"0x0069c9017BDd6753467c138449eF98320be1a4E4",
+		"0x007cF0936ACa64Ef22C0019A616801Bec7FCCECF",
+	}
+	//Just pick a "random" one to not always the same
+	return someDepositAddresses[slot%7]
 }
 
 func (or *Oracle) AdvanceStateToNextSlot() error {
@@ -85,7 +106,6 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 
 	// Get the block if any and who proposed it (or should have proposed it)
 	proposerIndex, proposerKey, proposedOk, block := or.GetBlockIfAny(slotToProcess)
-	_ = proposerKey
 
 	// TODO: Update subscriptions with the info from this block (fee rec) + listening to the smart contract
 	// this also updates the deposit address and all the information of the validator.
@@ -100,90 +120,51 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 
 		// Manual subscription. If feeRec is ok, means the reward was sent to the pool
 		if correctFeeRec {
-			or.State.AddSubscriptionIfNotAlready(proposerIndex)
+			depositAddress := or.GetDepositAddressOfValidator(proposerKey, slotToProcess)
+			or.State.AddSubscriptionIfNotAlready(proposerIndex, depositAddress, proposerKey)
 			or.State.AdvanceStateMachine(proposerIndex, ProposalWithCorrectFee)
 			or.State.IncreaseAllPendingRewards(reward)
 			or.State.ConsolidateBalance(proposerIndex)
-		} else {
-			// The validator set a wrong fee recipient, ban it forever
-			// and give its pending rewards to the rest
+			or.State.Validators[proposerIndex].ProposedBlocksSlots = append(or.State.Validators[proposerIndex].ProposedBlocksSlots, slotToProcess)
+		}
+		// If the validator was subscribed but the fee recipient was wrong
+		// we ban the validator as it is not following the protocol rules
+		if !correctFeeRec && or.State.IsValidatorSubscribed(proposerIndex) {
 			or.State.AdvanceStateMachine(proposerIndex, ProposalWithWrongFee)
 			or.State.IncreaseAllPendingRewards(or.State.Validators[proposerIndex].PendingRewardsWei)
 			or.State.ResetPendingRewards(proposerIndex)
-			// TODO: What about its claimable rewards? ban also?
+			or.State.Validators[proposerIndex].WrongFeeBlocksSlots = append(or.State.Validators[proposerIndex].WrongFeeBlocksSlots, slotToProcess)
 		}
-	} else {
+	}
+
+	// If the validator was not subscribed and missed proposed the block in this slot
+	if !proposedOk && or.State.IsValidatorSubscribed(proposerIndex) {
 		// If the validator missed a block, just advance the state machine
 		// there are no rewards to share, but validator state slighly changes
 		//or.State.AdvanceStateMachine(proposerIndex, MissedBlock)
+		or.State.Validators[proposerIndex].MissedBlocksSlots = append(or.State.Validators[proposerIndex].MissedBlocksSlots, slotToProcess)
 	}
 
-	// Check if proposal belongs to a subscription from the smart contract
-	//if or.IsValidatorSubscribed(valIndexDuty, contractSubscriptions) {
-	// Temporally disable auto subscriptions
-	if false {
-
-	} else {
-		// If the block was not missed and the validator is not subscribed
-		// check if the reward was sent to the pool, and automatically subscribe it.
-		//if !missedBlock && sentOk {
-		// If not already subscribed
-		//pubKey := "0x" + hex.EncodeToString(slotDuty.PubKey[:])
-		// Move this somewhere else
-		//log.Info(pubKey)
-		//depositAddress, err := or.Postgres.GetDepositAddressOfValidatorKey(pubKey)
-		// TODO: Remove this in production
-		//if err != nil {
-		//	log.Warn("Deposit key not found for ", pubKey, ". Expected in goerli. Using a default one. err: ", err)
-		// If it errors, use a goerli address we control, only for debuging. Remove for production
-		//	someDepositAddresses := []string{
-		//		"0x001eDa52592fE2f8a28dA25E8033C263744b1b6E",
-		//		"0x0029a125E6A3f058628Bd619C91f481e4470D673",
-		//		"0x003718fb88964A1F167eCf205c7f04B25FF46B8E",
-		//		"0x004b1EaBc3ea60331a01fFfC3D63E5F6B3aB88B3",
-		//		"0x005CD1608e40d1e775a97d12e4f594029567C071",
-		//		"0x0069c9017BDd6753467c138449eF98320be1a4E4",
-		//		"0x007cF0936ACa64Ef22C0019A616801Bec7FCCECF",
-		//	}
-		// Just pick a "random" one to not always the same
-		//	depositAddress = someDepositAddresses[slotDuty.Slot%7]
-		//}
-		/*
-			log.Info("Auto subscribing validator: ", valIndexDuty, " with deposit address: ", depositAddress)
-			or.State.AddSubscriptionIfNotAlready(valIndexDuty)
-			or.State.IncreaseAllPendingRewards(reward)
-			or.State.ConsolidateBalance(valIndexDuty)
-			or.State.ProposedBlocks[valIndexDuty] = append(or.State.ProposedBlocks[valIndexDuty], uint64(slotDuty.Slot))
-		*/
-
-		// if the validator already proposed a block this is already set
-		//or.State.DepositAddresses[valIndexDuty] = depositAddress
-		//or.State.ValidatorKey[valIndexDuty] = pubKey
-		// TODO: perhaps not needed anymore. just same value as deposit address
-		//or.State.PoolRecipientAddresses[valIndexDuty] = depositAddress
-
-		// TODO: quick PoC. todo store blocks that were missed.
-
-		/*
-			rewardTypeString := "unset"
-			if rewardType == VanilaBlock {
-				rewardTypeString = "vanila"
-			} else if rewardType == MevBlock {
-				rewardTypeString = "mev"
-			}
-			err = or.Postgres.StoreBlockInDb(
-				"TODO",
-				uint64(slotDuty.Slot),
-				pubKey,
-				valIndexDuty,
-				rewardTypeString,
-				*reward,
-				1, // TODO
-			)
-			if err != nil {
-				log.Fatal(err)
-			}*/
-	}
+	// TODO: Enable this back.
+	/*
+		rewardTypeString := "unset"
+		if rewardType == VanilaBlock {
+			rewardTypeString = "vanila"
+		} else if rewardType == MevBlock {
+			rewardTypeString = "mev"
+		}
+		err = or.Postgres.StoreBlockInDb(
+			"TODO",
+			uint64(slotDuty.Slot),
+			pubKey,
+			valIndexDuty,
+			rewardTypeString,
+			*reward,
+			1, // TODO
+		)
+		if err != nil {
+			log.Fatal(err)
+		}*/
 
 	or.State.Slot = slotToProcess + 1
 	or.State.ProcessedSlots = or.State.ProcessedSlots + 1

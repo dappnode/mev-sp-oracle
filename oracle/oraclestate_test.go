@@ -12,7 +12,7 @@ import (
 
 func Test_AddSubscription(t *testing.T) {
 	state := NewOracleState(&config.Config{})
-	state.AddSubscriptionIfNotAlready(10)
+	state.AddSubscriptionIfNotAlready(10, "0x", "0x")
 	state.IncreaseAllPendingRewards(big.NewInt(100))
 	state.ConsolidateBalance(10)
 	state.IncreaseAllPendingRewards(big.NewInt(200))
@@ -20,7 +20,7 @@ func Test_AddSubscription(t *testing.T) {
 	require.Equal(t, big.NewInt(100), state.Validators[10].AccumulatedRewardsWei)
 
 	// check that adding again doesnt reset the subscription
-	state.AddSubscriptionIfNotAlready(10)
+	state.AddSubscriptionIfNotAlready(10, "0x", "0x")
 	require.Equal(t, big.NewInt(200), state.Validators[10].PendingRewardsWei)
 	require.Equal(t, big.NewInt(100), state.Validators[10].AccumulatedRewardsWei)
 }
