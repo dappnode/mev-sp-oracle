@@ -125,7 +125,7 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 	for _, leaf := range orderedRawLeafs {
 		// TODO: Improve logs and move to debug
 		log.Info("leaf.DepositAddress: ", leaf.DepositAddress)
-		log.Info("leaf.ClaimableBalance: ", leaf.AccumulatedBalance)
+		log.Info("leaf.AccumulatedBalance: ", leaf.AccumulatedBalance)
 
 		leafHash := solsha3.SoliditySHA3(
 			solsha3.Address(leaf.DepositAddress),

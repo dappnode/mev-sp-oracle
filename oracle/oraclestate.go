@@ -9,9 +9,16 @@ import (
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
 
 	log "github.com/sirupsen/logrus"
+	mt "github.com/txaty/go-merkletree"
 )
 
 var StateFileName = "state.gob"
+
+// Types of block rewards
+const (
+	VanilaBlock int = 0
+	MevBlock        = 1
+)
 
 // States of the state machine
 const (
@@ -53,11 +60,24 @@ type ValidatorInfo struct {
 	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
 }
 
+// Represents the latest commited state onchain
+type OnchainState struct {
+	Validators map[uint64]*ValidatorInfo
+	Slot       uint64
+	TxHash     string
+	MerkleRoot string
+
+	Tree   *mt.MerkleTree
+	Proofs map[string][][]byte
+	// TODO: Store also proofs
+}
+
 type OracleState struct {
-	LatestSlot  uint64
-	Network     string
-	PoolAddress string
-	Validators  map[uint64]*ValidatorInfo
+	LatestSlot          uint64
+	Network             string
+	PoolAddress         string
+	Validators          map[uint64]*ValidatorInfo
+	LatestCommitedState OnchainState
 }
 
 func (p *OracleState) SaveStateToFile() {
@@ -124,6 +144,27 @@ func NewOracleState(cfg *config.Config) *OracleState {
 
 		Validators: make(map[uint64]*ValidatorInfo, 0),
 	}
+}
+
+func (state *OracleState) StoreLatestOnchainState(
+	validators map[uint64]*ValidatorInfo,
+	slot uint64,
+	txHash string,
+	merkleRoot string) {
+
+	// Quick way of coping the whole state
+	validatorsCopy := make(map[uint64]*ValidatorInfo)
+	for k2, v2 := range validators {
+		validatorsCopy[k2] = v2
+	}
+
+	state.LatestCommitedState = OnchainState{
+		Validators: validatorsCopy,
+		TxHash:     txHash,
+		MerkleRoot: merkleRoot,
+		Slot:       slot,
+	}
+
 }
 
 func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
@@ -443,4 +484,30 @@ func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 	log.Info("Merkle root: ", merkleRootStr)
 
 	return merkleRootStr, true
+}
+
+func RewardTypeToString(rewardType int) string {
+	if rewardType == VanilaBlock {
+		return "vanila"
+	} else if rewardType == MevBlock {
+		return "mev"
+	}
+	log.Fatal("unknown reward type")
+	return ""
+}
+
+func ValidatorStateToString(valState int) string {
+	if valState == Active {
+		return "active"
+	} else if valState == YellowCard {
+		return "yellowcard"
+	} else if valState == RedCard {
+		return "redcard"
+	} else if valState == NotSubscribed {
+		return "notsubscribed"
+	} else if valState == Banned {
+		return "banned"
+	}
+	log.Fatal("unknown validator state")
+	return ""
 }

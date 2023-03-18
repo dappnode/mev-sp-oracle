@@ -152,12 +152,3 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 	or.State.LatestSlot = slotToProcess + 1
 	return nil
 }
-
-func RewardTypeToString(rewardType int) string {
-	if rewardType == VanilaBlock {
-		return "vanila"
-	} else if rewardType == MevBlock {
-		return "mev"
-	}
-	return "unset"
-}
