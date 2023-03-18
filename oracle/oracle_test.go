@@ -21,7 +21,7 @@ func Test_EndToEnd_VanilaReward(t *testing.T) {
 		CheckPointSizeInSlots: 5,
 		DeployedSlot:          5344344,
 	}, fetcher)
-	oracle.State.Slot = oracle.cfg.DeployedSlot - 1
+	oracle.State.LatestSlot = oracle.cfg.DeployedSlot - 1
 	err := oracle.AdvanceStateToNextSlot()
 	require.NoError(t, err)
 	//log.Info("checkpoint", checkpointInfo)
@@ -62,7 +62,7 @@ func Test_EndToEnd_NoSubscriptions(t *testing.T) {
 		CheckPointSizeInSlots: 100,
 		DeployedSlot:          5323601,
 	}, fetcher)
-	oracle.State.Slot = 5323600
+	oracle.State.LatestSlot = 5323600
 	err := oracle.AdvanceStateToNextSlot()
 	require.NoError(t, err)
 	//log.Info("checkpoint", checkpointInfo)

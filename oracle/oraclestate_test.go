@@ -114,21 +114,57 @@ func Test_StateMachine(t *testing.T) {
 func Test_SaveLoadFromToFile(t *testing.T) {
 
 	original := &OracleState{
-		Slot:        1,
+		LatestSlot:  1,
 		Network:     "mainnet",
 		PoolAddress: "0x1234",
 		Validators:  make(map[uint64]*ValidatorInfo),
 	}
 
-	// TODO: Add all fields in ValidatorState
-	original.Validators[1] = &ValidatorInfo{ValidatorStatus: Eligible}
-	original.Validators[90] = &ValidatorInfo{ValidatorStatus: YellowCard}
+	original.Validators[1] = &ValidatorInfo{
+		ValidatorStatus:       Eligible,
+		AccumulatedRewardsWei: big.NewInt(1000),
+		PendingRewardsWei:     big.NewInt(1000),
+		CollateralWei:         big.NewInt(1000),
+		DepositAddress:        "0xa",
+		ValidatorIndex:        "0xb",
+		ValidatorKey:          "0xc",
+		ProposedBlocksSlots:   []uint64{1, 10, 20},
+		MissedBlocksSlots:     []uint64{4, 10, 20},
+		WrongFeeBlocksSlots:   []uint64{7, 110, 203},
+	}
 
-	err := original.SaveStateToFile()
-	defer os.Remove("state.gob")
-	require.NoError(t, err)
+	original.Validators[13] = &ValidatorInfo{
+		ValidatorStatus:       Eligible,
+		AccumulatedRewardsWei: big.NewInt(13000),
+		PendingRewardsWei:     big.NewInt(100),
+		CollateralWei:         big.NewInt(1000000),
+		DepositAddress:        "0xa",
+		ValidatorIndex:        "0xb",
+		ValidatorKey:          "0xc",
+		ProposedBlocksSlots:   []uint64{31, 120, 420},
+		MissedBlocksSlots:     []uint64{44, 130, 204},
+		WrongFeeBlocksSlots:   []uint64{74, 1410, 2503},
+	}
+
+	original.Validators[200] = &ValidatorInfo{
+		ValidatorStatus:       Eligible,
+		AccumulatedRewardsWei: big.NewInt(53000),
+		PendingRewardsWei:     big.NewInt(000),
+		CollateralWei:         big.NewInt(4000000),
+		DepositAddress:        "0xa",
+		ValidatorIndex:        "0xb",
+		ValidatorKey:          "0xc",
+		ProposedBlocksSlots:   []uint64{5, 6, 7},
+		MissedBlocksSlots:     []uint64{8, 9, 10},
+		WrongFeeBlocksSlots:   []uint64{11, 12, 13},
+	}
+
+	StateFileName = "test_state.gob"
+	original.SaveStateToFile()
+	defer os.Remove(StateFileName)
 
 	recovered, err := ReadStateFromFile()
+	require.NoError(t, err)
 
 	log.Info("orgiinal", original)
 	log.Info("recovered", recovered)

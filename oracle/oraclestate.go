@@ -1,17 +1,17 @@
 package oracle
 
 import (
-	"context"
 	"encoding/gob"
 	"encoding/hex"
 	"math/big"
 	"os"
 
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
-	"mev-sp-oracle/postgres"
 
 	log "github.com/sirupsen/logrus"
 )
+
+var StateFileName = "state.gob"
 
 // States of the state machine
 const (
@@ -30,11 +30,11 @@ const (
 )
 
 type ValidatorInfo struct {
-	// see spec
 	ValidatorStatus int
 	// TODO: some explanation + reference spec
 	AccumulatedRewardsWei *big.Int // TODO not sure if this is gwei or wei
 	PendingRewardsWei     *big.Int // TODO not sure if this is gwei or wei
+	CollateralWei         *big.Int // TODO not sure if this is gwei or wei
 	DepositAddress        string
 	ValidatorIndex        string
 	ValidatorKey          string
@@ -43,80 +43,73 @@ type ValidatorInfo struct {
 	WrongFeeBlocksSlots   []uint64
 
 	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
-
-	// TODO:
-	CollateralWei *big.Int // TODO not sure if this is gwei or wei
 }
 
-// TODO: add stuff to serialize to json
-// TODO state into is not a good name
 type OracleState struct {
-	// When the state was updated
-	TimestampGeneration string // TODO unused
-
-	// Amount of processed blocks
-	ProcessedSlots uint64 // TODO does this make sense?
-
-	// Slot of this state
-	Slot        uint64
+	LatestSlot  uint64
 	Network     string
 	PoolAddress string
-
-	Validators map[uint64]*ValidatorInfo
-
-	// TODO this should go here as is not really part of the state.
-	postgres *postgres.Postgresql
+	Validators  map[uint64]*ValidatorInfo
+	// TODO: Add merkle root representing this state
 }
 
-func (p *OracleState) SaveStateToFile() error {
-	file, err := os.Create("state.gob")
+func (p *OracleState) SaveStateToFile() {
+	file, err := os.Create(StateFileName)
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
 
 	defer file.Close()
 
 	encoder := gob.NewEncoder(file)
+	log.WithFields(log.Fields{
+		"File":            StateFileName,
+		"LatestSlot":      p.LatestSlot,
+		"TotalValidators": len(p.Validators),
+		"Network":         p.Network,
+		"PoolAddress":     p.PoolAddress,
+	}).Info("Saving state to file")
 	encoder.Encode(p)
-
-	return nil
 }
 
 func ReadStateFromFile() (*OracleState, error) {
 	state := OracleState{}
 
-	file, err := os.Open("state.gob")
+	file, err := os.Open(StateFileName)
+
 	if err != nil {
 		return nil, err
 	}
 
-	defer file.Close()
-
 	decoder := gob.NewDecoder(file)
-	decoder.Decode(&state)
+	err = decoder.Decode(&state)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// TODO: Run some sanity checks on the recovered state
+
+	log.WithFields(log.Fields{
+		"File":            StateFileName,
+		"LatestSlot":      state.LatestSlot,
+		"TotalValidators": len(state.Validators),
+		"Network":         state.Network,
+		"PoolAddress":     state.PoolAddress,
+	}).Info("Loaded state from file")
 
 	return &state, nil
 }
 
 func NewOracleState(cfg *config.Config) *OracleState {
-	postgres, err := postgres.New(cfg.PostgresEndpoint)
-	if err != nil {
-		log.Fatal(err)
-	}
 	return &OracleState{
 		// Start by default at the first slot when the oracle was deployed
-		Slot: cfg.DeployedSlot,
-
-		// Assume no block were processed
-		ProcessedSlots: uint64(0),
+		LatestSlot: cfg.DeployedSlot, // TODO: Not sure if -1
 
 		// Onchain oracle info
 		Network:     cfg.Network,
 		PoolAddress: cfg.PoolAddress,
 
 		Validators: make(map[uint64]*ValidatorInfo, 0),
-
-		postgres: postgres,
 	}
 }
 
@@ -185,13 +178,13 @@ func (state *OracleState) ResetPendingRewards(valIndex uint64) {
 
 func (state *OracleState) LogPendingBalances() {
 	for valIndex, validator := range state.Validators {
-		log.Info("SlotState: ", state.Slot, " Pending: ", valIndex, ": ", validator.PendingRewardsWei)
+		log.Info("SlotState: ", state.LatestSlot, " Pending: ", valIndex, ": ", validator.PendingRewardsWei)
 	}
 }
 
 func (state *OracleState) LogClaimableBalances() {
 	for valIndex, validator := range state.Validators {
-		log.Info("SlotState: ", state.Slot, " Claimable: ", valIndex, ": ", validator.AccumulatedRewardsWei)
+		log.Info("SlotState: ", state.LatestSlot, " Claimable: ", valIndex, ": ", validator.AccumulatedRewardsWei)
 	}
 }
 
@@ -199,6 +192,7 @@ func (state *OracleState) LogClaimableBalances() {
 // TODO: Review this!!
 func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 	switch state.Validators[valIndex].ValidatorStatus {
+	// TODO: Print also event + state change
 	case Eligible:
 		switch event {
 		case ProposalWithCorrectFee:
@@ -240,6 +234,8 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 // Note that this is a proof of concept. All data is stored in the memory
 // and dumped to the db on each checkpoint, but at some point
 // this may become unfeasible.
+
+/* TODO: Move this somewhere else
 func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { // TOOD: returning here the merkle root doesnt make sense. quick workaround
 	log.Info("Dumping all state to database")
 
@@ -269,7 +265,7 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { //
 			log.Fatal("Error generating proof", err)
 		}
 
-		_, err = state.postgres.Db.Exec(
+		_, err = state.Postgres.Db.Exec(
 			context.Background(),
 			postgres.InsertRewardsTable,
 
@@ -282,7 +278,7 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { //
 			len(validator.ProposedBlocksSlots),
 			len(validator.MissedBlocksSlots),
 			len(validator.WrongFeeBlocksSlots),
-			state.Slot,
+			state.LatestSlot,
 			ByteArrayToStringArray(proof.Siblings),
 			"0x"+hex.EncodeToString(tree.Root))
 		if err != nil {
@@ -307,7 +303,7 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { //
 		test := ByteArrayToStringArray(proof.Siblings)
 		_ = test
 
-		_, err = state.postgres.Db.Exec(
+		_, err = state.Postgres.Db.Exec(
 			context.Background(),
 			postgres.InsertDepositAddressRewardsTable,
 			depositAddress,
@@ -315,7 +311,7 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { //
 			uint64(0), // TODO: pending rewards. is it stored somewhere else?
 			rawLeaf.AccumulatedBalance.Uint64(),
 			uint64(0), //TODO remove unbann balance,
-			state.Slot,
+			state.LatestSlot,
 			ByteArrayToStringArray(proof.Siblings),
 			"0x"+hex.EncodeToString(tree.Root),
 		)
@@ -329,4 +325,18 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { //
 
 	return nil, merkleRootStr, true
 
+}
+*/
+
+func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
+	mk := NewMerklelizer()
+	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
+	_, _, tree, enoughData := mk.GenerateTreeFromState(state)
+	if !enoughData {
+		return "", enoughData
+	}
+	merkleRootStr := hex.EncodeToString(tree.Root)
+	log.Info("Merkle root: ", merkleRootStr)
+
+	return merkleRootStr, true
 }

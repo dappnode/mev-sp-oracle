@@ -102,7 +102,7 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 	// TODO: Get block and listen for new subscriptions
 
 	// TODO: Ensure somehow that we dont process a slot twice.
-	slotToProcess := or.State.Slot
+	slotToProcess := or.State.LatestSlot
 
 	// Get the block if any and who proposed it (or should have proposed it)
 	proposerIndex, proposerKey, proposedOk, block := or.GetBlockIfAny(slotToProcess)
@@ -166,7 +166,6 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 			log.Fatal(err)
 		}*/
 
-	or.State.Slot = slotToProcess + 1
-	or.State.ProcessedSlots = or.State.ProcessedSlots + 1
+	or.State.LatestSlot = slotToProcess + 1
 	return nil
 }

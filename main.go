@@ -8,6 +8,7 @@ import (
 	"mev-sp-oracle/api"
 	"mev-sp-oracle/config"
 	"mev-sp-oracle/oracle"
+	or "mev-sp-oracle/oracle"
 	"mev-sp-oracle/postgres"
 	"os"
 	"os/signal"
@@ -95,8 +96,14 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 		}
 	*/
 
-	// TODO: resume from file
-	log.Info("Starting to process from slot: ", oracle.State.Slot)
+	// Try to resume syncing from latest known state from file
+	recoveredState, err := or.ReadStateFromFile()
+	if err == nil {
+		oracle.State = recoveredState
+	} else {
+		log.Info("Previous state not found or could not be loaded, syncing from the begining")
+	}
+	log.Info("Starting to process from slot: ", oracle.State.LatestSlot)
 
 	for {
 
@@ -123,43 +130,39 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 		finalizedEpoch := uint64(finality.Finalized.Epoch)
 		finalizedSlot := finalizedEpoch * SlotsInEpoch
 
-		if finalizedSlot > oracle.State.Slot {
+		if finalizedSlot > oracle.State.LatestSlot {
 			err = oracle.AdvanceStateToNextSlot()
 			if err != nil {
 				log.Fatal(err)
 			}
-			log.Info("[", oracle.State.Slot, "/", finalizedSlot, "] Done processing slot. Remaining slots: ", finalizedSlot-oracle.State.Slot)
+			log.Info("[", oracle.State.LatestSlot, "/", finalizedSlot, "] Done processing slot. Remaining slots: ", finalizedSlot-oracle.State.LatestSlot)
 		} else {
 			log.WithFields(log.Fields{
 				"finalizedSlot":    finalizedSlot,
 				"finalizedEpoch":   finalizedEpoch,
-				"oracleStateSlot":  oracle.State.Slot,
-				"oracleStateEpoch": oracle.State.Slot / SlotsInEpoch,
+				"oracleStateSlot":  oracle.State.LatestSlot,
+				"oracleStateEpoch": oracle.State.LatestSlot / SlotsInEpoch,
 			}).Info("Waiting for new finalized slot")
 
 			time.Sleep(15 * time.Second)
 		}
 
-		// TODO: Rethink this a bit. Do not run in the first block we process, and think about edge cases
-		if (oracle.State.Slot-cfg.DeployedSlot)%cfg.CheckPointSizeInSlots == 0 {
-			log.Info("Checkpoint reached, slot: ", oracle.State.Slot)
-			err, mRoot, enoughData := oracle.State.DumpOracleStateToDatabase()
-			// TODO: By now just panic
-			if err != nil {
-				log.Fatal("Failed dumping oracle state to db: ", err)
-			}
+		// Every CheckPointSizeInSlots we commit the state
+		if oracle.State.LatestSlot%cfg.CheckPointSizeInSlots == 0 {
+			log.Info("Checkpoint reached, slot: ", oracle.State.LatestSlot)
+			mRoot, enoughData := oracle.State.GetMerkleRootIfAny()
+
+			oracle.State.SaveStateToFile()
+			oracle.State.LogClaimableBalances()
+			oracle.State.LogPendingBalances()
 
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
-				continue
+			} else {
+				if !cfg.DryRun {
+					oracle.Operations.UpdateContractMerkleRoot(mRoot)
+				}
 			}
-
-			if !cfg.DryRun {
-				oracle.Operations.UpdateContractMerkleRoot(mRoot)
-			}
-
-			oracle.State.LogClaimableBalances()
-			oracle.State.LogPendingBalances()
 		}
 	}
 }
