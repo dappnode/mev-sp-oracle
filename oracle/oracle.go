@@ -141,17 +141,6 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 		}
 	}
 
-	/* TODO: THis is not necesary, everything is served from memory.
-	err := or.Postgres.StoreBlockInDb(
-		"TODOtimestamp",
-		slotToProcess,
-		proposerKey,
-		proposerIndex,
-		RewardTypeToString(rewardType),
-		*reward,
-		1, // TODO Ok wrong missed
-	)*/
-
 	// If the validator was not subscribed and missed proposed the block in this slot
 	if !proposedOk && or.State.IsValidatorSubscribed(proposerIndex) {
 		// If the validator missed a block, just advance the state machine
