@@ -166,8 +166,10 @@ func (state *OracleState) AddWrongFeeProposal(validatorIndex uint64, reward *big
 func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAddress string, validatorKey string) {
 	validator, found := state.Validators[valIndex]
 	if !found {
+		// If not found and not manually subscribed, we trigger the AutoSubscription event
+		// Instantiate the validator
 		validator = &ValidatorInfo{
-			ValidatorStatus:       Active,
+			ValidatorStatus:       NotSubscribed,
 			AccumulatedRewardsWei: big.NewInt(0),
 			PendingRewardsWei:     big.NewInt(0),
 			DepositAddress:        depositAddress,
@@ -177,6 +179,9 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAd
 			WrongFeeBlocksSlots:   make([]BlockState, 0),
 		}
 		state.Validators[valIndex] = validator
+
+		// And update it state according to the event
+		state.AdvanceStateMachine(valIndex, AutoSubscription)
 	}
 }
 
