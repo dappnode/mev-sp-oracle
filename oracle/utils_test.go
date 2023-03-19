@@ -89,3 +89,12 @@ func Test_ByteArrayToStringArray(t *testing.T) {
 	})
 	require.Equal(t, "0x31,0x32,0x33", test1)
 }
+
+func Test_ByteArrayToArray(t *testing.T) {
+	test1 := ByteArrayToArray([][]byte{
+		[]byte("1"),
+		[]byte("2"),
+		[]byte("3"),
+	})
+	require.Equal(t, []string{"0x31", "0x32", "0x33"}, test1)
+}

@@ -137,7 +137,7 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		depositToRawLeaf[leaf.DepositAddress] = leaf
 	}
 
-	if len(blocks) <= 1 {
+	if len(blocks) < 2 {
 		// Returns false meaning that we dont have enough data to generate a merkle tree
 		// Expected behaviour at the begining with none or just 1 validator registered
 		return nil, nil, nil, false

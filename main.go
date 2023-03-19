@@ -144,7 +144,7 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 				"oracleStateEpoch": oracle.State.LatestSlot / SlotsInEpoch,
 			}).Info("Waiting for new finalized slot")
 
-			time.Sleep(15 * time.Second)
+			time.Sleep(30 * time.Second)
 		}
 
 		// How often we store data in the database in slots
@@ -160,21 +160,22 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 		// Every CheckPointSizeInSlots we commit the state
 		if oracle.State.LatestSlot%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached, slot: ", oracle.State.LatestSlot)
-			mRoot, enoughData := oracle.State.GetMerkleRootIfAny()
+
+			// mRoot, enoughData := oracle.State.GetMerkleRootIfAny()
+			enoughData := oracle.State.StoreLatestOnchainState()
 
 			oracle.State.SaveStateToFile()
-			oracle.State.LogClaimableBalances()
+			oracle.State.LogAccumulatedBalances()
 			oracle.State.LogPendingBalances()
 
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 			} else {
-				txHash := ""
+				//txHash := ""
 				if !cfg.DryRun {
-					txHash = oracle.Operations.UpdateContractMerkleRoot(mRoot)
+					txHash := oracle.Operations.UpdateContractMerkleRoot(oracle.State.LatestCommitedState.MerkleRoot)
+					_ = txHash
 				}
-
-				oracle.State.StoreLatestOnchainState(oracle.State.Validators, oracle.State.LatestSlot, txHash, mRoot)
 			}
 		}
 	}
