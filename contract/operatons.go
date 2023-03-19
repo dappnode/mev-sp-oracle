@@ -37,19 +37,22 @@ func NewOperations(cfg *config.Config) *Operations {
 
 func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
-	log.Info("TODO: sanity check:", newMerkleRoot)
-
+	// Parse merkle root to byte array
 	newMerkleRootBytes := [32]byte{}
 	unboundedBytes := common.Hex2Bytes(newMerkleRoot)
-	log.Info("unboundedBytes:", unboundedBytes, " ", len(unboundedBytes))
 
 	if len(unboundedBytes) != 32 {
 		log.Fatal("wrong merkle root length: ", newMerkleRoot)
 	}
 	copy(newMerkleRootBytes[:], common.Hex2Bytes(newMerkleRoot))
 
-	log.Info("new merkle root:", hex.EncodeToString(newMerkleRootBytes[:]))
+	// Sanity check to ensure the converted tree matches the original
+	if hex.EncodeToString(newMerkleRootBytes[:]) != newMerkleRoot {
+		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
+	}
 
+	// Load private key signing the tx. This address must hold enough Eth
+	// to pay for the tx fees, otherwise it will fail
 	privateKey, err := crypto.HexToECDSA(o.cfg.DeployerPrivateKey)
 	if err != nil {
 		log.Fatal(err)
@@ -68,12 +71,11 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("could not get pending nonce: ", err)
 	}
 
+	// Unused, leaving for reference. We rely on automatic gas estimation, see below (nil values)
 	gasTipCap, err := o.ExecutionClient.SuggestGasTipCap(context.Background())
 	if err != nil {
 		log.Fatal("could not get gas price suggestion: ", err)
 	}
-
-	// Unused, leaving for reference
 	_ = gasTipCap
 
 	chaindId, err := o.ExecutionClient.NetworkID(context.Background())
@@ -86,8 +88,10 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
-	auth.Value = big.NewInt(0) // in wei
-	//auth.GasLimit = uint64(300000) // in units
+
+	// Important that the value is 0. Otherwise we would be sending Eth
+	// and thats not neccessary.
+	auth.Value = big.NewInt(0)
 
 	// nil prices automatically estimate prices
 	auth.GasPrice = nil
@@ -106,17 +110,15 @@ func (o *Operations) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal(err)
 	}
 
+	// Create a tx calling the update rewards root function with the new merkle root
 	tx, err := instance.UpdateRewardsRoot(auth, newMerkleRootBytes)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Info("Tx sent updating the merkle root. Tx hash: ", tx.Hash().Hex())
-
 	log.WithFields(log.Fields{
-		"TxHash":            tx.Hash().Hex(),
-		"NewMerkleRoot":     newMerkleRoot,
-		"NewMerleRootBytes": newMerkleRootBytes,
+		"TxHash":        tx.Hash().Hex(),
+		"NewMerkleRoot": newMerkleRoot,
 	}).Info("Tx sent to Ethereum updating rewards merkle root, wait for confirmation")
 
 	return tx.Hash().Hex()

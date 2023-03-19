@@ -144,7 +144,7 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 				"oracleStateEpoch": oracle.State.LatestSlot / SlotsInEpoch,
 			}).Info("Waiting for new finalized slot")
 
-			time.Sleep(15 * time.Second)
+			time.Sleep(30 * time.Second)
 		}
 
 		// How often we store data in the database in slots

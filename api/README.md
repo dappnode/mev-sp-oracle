@@ -5,7 +5,7 @@ This document contains some non-exhaustive documentation for the oracle api, wit
 
 // TODO: modify this to validatorindex=xxx
 ```console
-curl localhost:7300/validatorstate/179434
+curl localhost:7300/validatoronchainstate/179434
 ```
 
 curl localhost:7300/status

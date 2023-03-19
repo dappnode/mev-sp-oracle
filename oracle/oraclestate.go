@@ -161,7 +161,6 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
 	depositToLeaf, depositToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(state)
 	if !enoughData {
-		log.Warn("TODO not sure what to do here, not enough data to create a tree")
 		return false
 	}
 	merkleRootStr := hex.EncodeToString(tree.Root)
