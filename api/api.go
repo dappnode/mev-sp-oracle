@@ -29,8 +29,14 @@ const (
 	pathDepositAddressByIndex = "/depositadddress/{valindex}"
 
 	// TODO: better valindex=xxx
+
+	// TODO: Perhaps rethink this a bit. There are two types of state:
+	// - The state that the oracle knows of
+	// - The state that is already submitted onchain
 	pathValidatorOnchainStateByIndex  = "/validatoronchainstate/{valindex}"
 	pathValidatorOffchainStateByIndex = "/validatoroffchainstate/{valindex}"
+
+	// TODO: Get all validators for a deposit address
 
 	pathValidatorStateByDeposit = ""
 
@@ -68,7 +74,7 @@ type httpOkDepositAddress struct {
 }
 
 type httpOkValidatorState struct {
-	StatusType            string   `json:"statustype"`
+	StatusType            string   `json:"statustype"` // TODO: populate
 	ValidatorStatus       string   `json:"validatorstatus"`
 	AccumulatedRewardsWei *big.Int `json:"accumulated_rewards_wei"`
 	PendingRewardsWei     *big.Int `json:"pending_rewards_wei"`
@@ -244,23 +250,39 @@ func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Re
 	depositAddress := vars["depositaddress"]
 
 	if !IsValidAddress(depositAddress) {
-		m.respondError(w, http.StatusBadRequest, "invalid depositAddress")
+		m.respondError(w, http.StatusBadRequest, "invalid depositAddress: "+depositAddress)
 		return
 	}
 
-	//if err != nil {
-	//	m.respondError(w, http.StatusInternalServerError, err.Error())
-	//	return
-	//}
+	// Get the proofs of this deposit address (to be used onchain to claim rewards)
+	proofs, proofFound := m.OracleState.LatestCommitedState.Proofs[depositAddress]
+	if !proofFound {
+		m.respondError(w, http.StatusBadRequest, "could not find proof for depositAddress: "+depositAddress)
+		return
+	}
+
+	// Get the leafs of this deposit address (to be used onchain to claim rewards)
+	leafs, leafsFound := m.OracleState.LatestCommitedState.Leafs[depositAddress]
+	if !leafsFound {
+		m.respondError(w, http.StatusBadRequest, "could not find leafs for depositAddress: "+depositAddress)
+		return
+	}
+
+	// Get validators that are registered to this deposit address in the pool
+	registeredValidators := make([]uint64, 0)
+	for valIndex, validator := range m.OracleState.LatestCommitedState.Validators {
+		if validator.DepositAddress == depositAddress {
+			registeredValidators = append(registeredValidators, valIndex)
+		}
+	}
+
 	m.respondOK(w, httpOkProofs{
-		// TODO:
-		/*
-			LeafDepositAddress     string   `json:"leaf_deposit_address"`
-			LeafAccumulatedBalance *big.Int `json:"leaf_accumulated_balance"`
-			MerkleRoot             string   `json:"merkleroot"`
-			CheckpointSlot         uint64   `json:"checkpoint_slot"`
-			Proofs                 []string `json:"merkle_proofs"`
-			RegisteredValidators   []uint64 `json:"registered_validators"`*/
+		LeafDepositAddress:     leafs.DepositAddress,
+		LeafAccumulatedBalance: leafs.AccumulatedBalance,
+		MerkleRoot:             m.OracleState.LatestCommitedState.MerkleRoot,
+		CheckpointSlot:         m.OracleState.LatestCommitedState.Slot,
+		Proofs:                 proofs,
+		RegisteredValidators:   registeredValidators,
 	})
 }
 

@@ -58,3 +58,12 @@ func ByteArrayToStringArray(arr [][]byte) string {
 
 	return strings.Join(result, ",")
 }
+
+func ByteArrayToArray(arr [][]byte) []string {
+	result := make([]string, 0)
+	for _, v := range arr {
+		result = append(result, "0x"+hex.EncodeToString(v))
+	}
+
+	return result
+}

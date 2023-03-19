@@ -51,7 +51,7 @@ type ValidatorInfo struct {
 	PendingRewardsWei     *big.Int // TODO not sure if this is gwei or wei
 	CollateralWei         *big.Int // TODO not sure if this is gwei or wei
 	DepositAddress        string
-	ValidatorIndex        string
+	ValidatorIndex        string // TODO: this should be uint64
 	ValidatorKey          string
 	ProposedBlocksSlots   []BlockState
 	MissedBlocksSlots     []BlockState
@@ -68,8 +68,8 @@ type OnchainState struct {
 	MerkleRoot string
 
 	Tree   *mt.MerkleTree
-	Proofs map[string][][]byte
-	// TODO: Store also proofs
+	Proofs map[string][]string
+	Leafs  map[string]RawLeaf
 }
 
 type OracleState struct {
@@ -146,25 +146,71 @@ func NewOracleState(cfg *config.Config) *OracleState {
 	}
 }
 
-func (state *OracleState) StoreLatestOnchainState(
-	validators map[uint64]*ValidatorInfo,
-	slot uint64,
-	txHash string,
-	merkleRoot string) {
+// Returns false if there wasnt enough data to create a merkle tree
+func (state *OracleState) StoreLatestOnchainState() bool {
+
+	log.Info("freezing state")
 
 	// Quick way of coping the whole state
 	validatorsCopy := make(map[uint64]*ValidatorInfo)
-	for k2, v2 := range validators {
+	for k2, v2 := range state.Validators {
 		validatorsCopy[k2] = v2
+	}
+
+	mk := NewMerklelizer()
+	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
+	depositToLeaf, depositToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(state)
+	if !enoughData {
+		log.Warn("TODO not sure what to do here, not enough data to create a tree")
+		return false
+	}
+	merkleRootStr := hex.EncodeToString(tree.Root)
+	log.Info("Merkle root: StoreLatestOnchainState", merkleRootStr)
+
+	// Merkle proofs for each deposit address
+	proofs := make(map[string][]string)
+	leafs := make(map[string]RawLeaf)
+	for depositAddress, rawLeaf := range depositToRawLeaf {
+		// Extra sanity check to make sure the deposit address is the same as the key
+		if depositAddress != rawLeaf.DepositAddress {
+			log.Fatal("Deposit address in raw leaf doesnt match the key")
+		}
+		log.Info("deposit", depositAddress)
+		log.Info("rawLeaf", rawLeaf)
+
+		block := depositToLeaf[depositAddress]
+
+		serrr, err := block.Serialize()
+		if err != nil {
+			log.Fatal("Error serializing block", err)
+		}
+
+		log.Info("Hash of leaf is: ", hex.EncodeToString(serrr))
+		proof, err := tree.GenerateProof(block)
+		if err != nil {
+			log.Fatal("could not generate proof for block: ", err)
+		}
+
+		//test := ByteArrayToStringArray(proof.Siblings)
+		//log.Info("Proofs for: ", depositAddress, " rawLeaf: ", rawLeaf, " are:", test)
+
+		// Store the proofs of the deposit address (to be used onchain)
+		proofs[depositAddress] = ByteArrayToArray(proof.Siblings)
+
+		// Store the leafs (to be used onchain)
+		leafs[depositAddress] = rawLeaf
 	}
 
 	state.LatestCommitedState = OnchainState{
 		Validators: validatorsCopy,
-		TxHash:     txHash,
-		MerkleRoot: merkleRoot,
-		Slot:       slot,
+		//TxHash:     txHash, // TODO: Not sure if to store it
+		MerkleRoot: merkleRootStr,
+		Slot:       state.LatestSlot,
+		Proofs:     proofs,
+		Leafs:      leafs,
 	}
 
+	return true
 }
 
 func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
@@ -266,7 +312,7 @@ func (state *OracleState) LogPendingBalances() {
 	}
 }
 
-func (state *OracleState) LogClaimableBalances() {
+func (state *OracleState) LogAccumulatedBalances() {
 	for valIndex, validator := range state.Validators {
 		log.Info("SlotState: ", state.LatestSlot, " Claimable: ", valIndex, ": ", validator.AccumulatedRewardsWei)
 	}
@@ -375,6 +421,10 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 	}
 }
 
+// TODO: Add function that dumps the current state to the database
+// Its a nice to have to track the validator balance evolution over the
+// time
+
 // Dumps all the oracle state to the db
 // Note that this is a proof of concept. All data is stored in the memory
 // and dumped to the db on each checkpoint, but at some point
@@ -473,6 +523,7 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { //
 }
 */
 
+// TODO: Remove this and get the merkle tree from somewhere else. See stored state
 func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 	mk := NewMerklelizer()
 	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
