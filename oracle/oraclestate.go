@@ -325,26 +325,26 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 		switch event {
 		case ProposalOk:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalOk",
-				"State Change": "Active -> Active",
+				"Event":       "ProposalOk",
+				"StateChange": "Active -> Active",
 			}).Info("ValidatorIndex: ", valIndex)
 			state.Validators[valIndex].ValidatorStatus = Active
 		case ProposalWrongFee:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalWrongFee",
-				"State Change": "Active -> Banned",
+				"Event":       "ProposalWrongFee",
+				"StateChange": "Active -> Banned",
 			}).Info("ValidatorIndex: ", valIndex)
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalMissed",
-				"State Change": "Active -> YellowCard",
+				"Event":       "ProposalMissed",
+				"StateChange": "Active -> YellowCard",
 			}).Info("ValidatorIndex: ", valIndex)
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case Unsubscribe:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalMissed",
-				"State Change": "Active -> NotSubscribed",
+				"Event":       "ProposalMissed",
+				"StateChange": "Active -> NotSubscribed",
 			}).Info("ValidatorIndex: ", valIndex)
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -352,69 +352,79 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 		switch event {
 		case ProposalOk:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalOk",
-				"State Change": "YellowCard -> Active",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "ProposalOk",
+				"StateChange":     "YellowCard -> Active",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case ProposalWrongFee:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalWrongFee",
-				"State Change": "YellowCard -> Banned",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "ProposalWrongFee",
+				"StateChange":     "YellowCard -> Banned",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalMissed",
-				"State Change": "YellowCard -> RedCard",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "ProposalMissed",
+				"StateChange":     "YellowCard -> RedCard",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalMissed",
-				"State Change": "YellowCard -> NotSubscribed",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "ProposalMissed",
+				"StateChange":     "YellowCard -> NotSubscribed",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
 	case RedCard:
 		switch event {
 		case ProposalOk:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalOk",
-				"State Change": "RedCard -> YellowCard",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "ProposalOk",
+				"StateChange":     "RedCard -> YellowCard",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case ProposalWrongFee:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalWrongFee",
-				"State Change": "RedCard -> Banned",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "ProposalWrongFee",
+				"StateChange":     "RedCard -> Banned",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalMissed",
-				"State Change": "RedCard -> RedCard",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "ProposalMissed",
+				"StateChange":     "RedCard -> RedCard",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
 			log.WithFields(log.Fields{
-				"Event":        "ProposalMissed",
-				"State Change": "RedCard -> NotSubscribed",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "ProposalMissed",
+				"StateChange":     "RedCard -> NotSubscribed",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
 	case NotSubscribed:
 		switch event {
 		case ManualSubscription:
 			log.WithFields(log.Fields{
-				"Event":        "ManualSubscription",
-				"State Change": "NotSubscribed -> Active",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "ManualSubscription",
+				"StateChange":     "NotSubscribed -> Active",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case AutoSubscription:
 			log.WithFields(log.Fields{
-				"Event":        "AutoSubscription",
-				"State Change": "NotSubscribed -> Active",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":           "AutoSubscription",
+				"StateChange":     "NotSubscribed -> Active",
+				"ValidatorIndex:": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		}
 	}

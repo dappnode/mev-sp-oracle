@@ -43,6 +43,7 @@ func main() {
 	// Preparae the database
 	// TODO: Dirty, to be safe. Clean db at startup until we can safely resume. The idea is
 	// to resume from the last checkpoint.
+	// TODO: Remove all this, just for tests.
 	_, err = oracle.Postgres.Db.Exec(context.Background(), "drop table if exists t_oracle_validator_balances")
 	if err != nil {
 		log.Fatal("error cleaning table t_oracle_validator_balances at startup: ", err)
@@ -109,6 +110,9 @@ func mainLoop(oracle *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config
 	//	log.Info("Previous state not found or could not be loaded, syncing from the begining")
 	//}
 	log.Info("Starting to process from slot: ", oracle.State.LatestSlot)
+
+	// TODO: Before doing anything, get merkle root from chain to avoid
+	// overriding the existing one. Also load from file
 
 	for {
 

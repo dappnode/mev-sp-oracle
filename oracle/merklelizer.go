@@ -17,7 +17,6 @@ type testData struct {
 }
 
 func (t *testData) Serialize() ([]byte, error) {
-	log.Info("serializing", hex.EncodeToString(t.data))
 	return t.data, nil
 }
 
@@ -114,7 +113,7 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 
 	orderedRawLeafs := merklelizer.AggregateValidatorsIndexes(state)
 
-	log.Info("orderedRawLeafs", orderedRawLeafs)
+	log.Info("Generating tree containing ", len(orderedRawLeafs), " leafs")
 
 	// TODO: refactor this.
 	// Stores the deposit address -> hashed leaf
@@ -123,18 +122,17 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 	depositToRawLeaf := make(map[string]RawLeaf, 0)
 
 	for _, leaf := range orderedRawLeafs {
-		// TODO: Improve logs and move to debug
-		log.Info("leaf.DepositAddress: ", leaf.DepositAddress)
-		log.Info("leaf.AccumulatedBalance: ", leaf.AccumulatedBalance)
-
 		leafHash := solsha3.SoliditySHA3(
 			solsha3.Address(leaf.DepositAddress),
 			solsha3.Uint256(leaf.AccumulatedBalance),
 		)
-		log.Info("leafHash: ", hex.EncodeToString(leafHash), " Deposit addres: ", leaf.DepositAddress)
 		blocks = append(blocks, &testData{data: leafHash})
 		depositToLeaf[leaf.DepositAddress] = &testData{data: leafHash}
 		depositToRawLeaf[leaf.DepositAddress] = leaf
+
+		log.Info("leafHash: ", hex.EncodeToString(leafHash), " Deposit addres: ", leaf.DepositAddress)
+		log.Info("leaf.DepositAddress: ", leaf.DepositAddress)
+		log.Info("leaf.AccumulatedBalance: ", leaf.AccumulatedBalance)
 	}
 
 	if len(blocks) < 2 {
@@ -154,20 +152,22 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		log.Fatal(err)
 	}
 
-	// TODO: Improve logs, use debug
+	// TODO: Improve logs, use debug. TODO: unused?
 	for i := 0; i < len(blocks); i++ {
-		serrr, err := blocks[i].Serialize()
+		serialized, err := blocks[i].Serialize()
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Info("Proof of block index :", i, " blockhash:  ", hex.EncodeToString(serrr))
+		_ = serialized
+		//log.Info("Proof of block index :", i, " blockhash:  ", hex.EncodeToString(serialized))
 		proof0, err := tree.GenerateProof(blocks[i])
 		if err != nil {
 			log.Fatal(err)
 		}
 		for j, proof := range proof0.Siblings {
 			_ = j
-			log.Info("proof: ", hex.EncodeToString(proof))
+			_ = proof
+			//log.Info("proof: ", hex.EncodeToString(proof))
 		}
 	}
 

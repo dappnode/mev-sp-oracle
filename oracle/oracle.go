@@ -106,7 +106,13 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 	// TODO: Update subscriptions with the info from this block (fee rec) + listening to the smart contract
 	// this also updates the deposit address and all the information of the validator.
 
+	// If the block was proposed (not missed)
 	if proposedOk {
+		blockNumber := block.GetBlockNumber()
+		_ = blockNumber
+
+		or.onchain.GetRewardsRoot()
+
 		// If the block was proposed ok
 		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.onchain)
 		_ = rewardType
