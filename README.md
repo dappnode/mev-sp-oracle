@@ -44,15 +44,6 @@ $ ./mev-sp-oracle \
 --deployer-private-key=xxx (todo use file)
 ```
 
-## Misc
-
-* Generate `contract/abi.go` from contract. A one json liner.
-* Generate `contract.go` from abi as follows:
-
-```concole
-abigen --abi=contract/abi.abi --pkg=contract --out=contract/contract.go
-```
-
 ## How to deploy
 
 ### Goerli Testnet
@@ -108,8 +99,3 @@ DEPLOYER_PRIVATE_KEY=xxx
 ```
 docker-compose up -d
 ```
-
-
-todo: metabase. store balances
-allow to filter by checkpint
-allow to see balances of validator. use combom box to filter validator key (or peerhaps algo deposit address)

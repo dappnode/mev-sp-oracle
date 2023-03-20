@@ -15,12 +15,12 @@ func Test_EndToEnd_VanilaReward(t *testing.T) {
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	var fetcher = NewFetcher(cfg)
+	var onchain = NewOnchain(cfg)
 	oracle := NewOracle(&config.Config{
 		PoolAddress:           "0xffee087852cb4898e6c3532e776e68bc68b1143b",
 		CheckPointSizeInSlots: 5,
 		DeployedSlot:          5344344,
-	}, fetcher)
+	}, onchain)
 	oracle.State.LatestSlot = oracle.cfg.DeployedSlot - 1
 	err := oracle.AdvanceStateToNextSlot()
 	require.NoError(t, err)
@@ -36,12 +36,12 @@ func Test_EndToEnd_MevReward(t *testing.T) {
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	var fetcher = NewFetcher(cfg)
+	var onchain = NewOnchain(cfg)
 	oracle := NewOracle(&config.Config{
 		PoolAddress:           "0x4675c7e5baafbffbca748158becba61ef3b0a263",
 		CheckPointSizeInSlots: 5,
 		DeployedSlot:          5323502,
-	}, fetcher)
+	}, onchain)
 	//checkpointInfo, err := oracle.CalculateCheckpointRewards(0)
 	//require.NoError(t, err)
 	//log.Info("checkpoint", checkpointInfo)
@@ -56,12 +56,12 @@ func Test_EndToEnd_NoSubscriptions(t *testing.T) {
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	var fetcher = NewFetcher(cfg)
+	var onchain = NewOnchain(cfg)
 	oracle := NewOracle(&config.Config{
 		PoolAddress:           "0x4675c7e5baafbffbca748158becba61ef3b0a263",
 		CheckPointSizeInSlots: 100,
 		DeployedSlot:          5323601,
-	}, fetcher)
+	}, onchain)
 	oracle.State.LatestSlot = 5323600
 	err := oracle.AdvanceStateToNextSlot()
 	require.NoError(t, err)
@@ -107,9 +107,9 @@ func Test_IsValidatorSubscribed(t *testing.T) {
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	var fetcher = NewFetcher(cfg)
-	_ = fetcher
-	//oracle := NewOracle(&config.Config{}, fetcher)
+	var onchain = NewOnchain(cfg)
+	_ = onchain
+	//oracle := NewOracle(&config.Config{}, onchain)
 	//var subscriptions = Subscriptions{
 	// TODO: missing many fields in here
 	//subscriptions: map[uint64]string{

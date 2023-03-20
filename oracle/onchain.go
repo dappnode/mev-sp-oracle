@@ -2,22 +2,32 @@ package oracle
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"encoding/hex"
+	"fmt"
 	"math/big"
 	"strconv"
 	"time"
 
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
+	"mev-sp-oracle/contract"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog"
 	log "github.com/sirupsen/logrus"
 )
+
+// This file provides different functions to access the blockchain state from both consensus and
+// execution layer and modifying the its state via smart contract calls.
 
 type EpochDuties struct {
 	Epoch  uint64
@@ -30,16 +40,17 @@ type EpochDuties struct {
 // Note that the cache is meant to store only one epoch's duties
 var ProposalDutyCache EpochDuties
 
-type Fetcher struct {
+type Onchain struct {
 	ConsensusClient *http.Service
 	ExecutionClient *ethclient.Client
+	Cfg             *config.Config
 }
 
 // Fetches external data:
 // - consensus client
 // - execution client
 // - pool contract
-func NewFetcher(cfg config.Config) *Fetcher {
+func NewOnchain(cfg config.Config) *Onchain {
 
 	// Dial the execution client
 	executionClient, err := ethclient.Dial(cfg.ExecutionEndpoint)
@@ -72,6 +83,11 @@ func NewFetcher(cfg config.Config) *Fetcher {
 	}
 	log.Info("Connected succesfully to consensus client. Deposit contract: ", depositContract)
 
+	if depositContract.ChainID != uint64(chainId.Int64()) {
+		log.Fatal("ChainId from consensus and execution client do not match: ",
+			depositContract.ChainID, " vs ", uint64(chainId.Int64()))
+	}
+
 	// Print sync status of consensus and execution client
 	execSync, err := executionClient.SyncProgress(context.Background())
 	if err != nil {
@@ -87,14 +103,15 @@ func NewFetcher(cfg config.Config) *Fetcher {
 
 	log.Info("Consensus client sync state: ", consSync)
 
-	return &Fetcher{
+	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
+		Cfg:             &cfg,
 	}
 }
 
 // TODO: rename to getConsensusblock?
-func (f *Fetcher) GetBlockAtSlot(slot uint64) (*spec.VersionedSignedBeaconBlock, error) {
+func (f *Onchain) GetBlockAtSlot(slot uint64) (*spec.VersionedSignedBeaconBlock, error) {
 
 	// TODO: set custom timeouts
 	slotStr := strconv.FormatUint(slot, 10)
@@ -113,7 +130,7 @@ func (f *Fetcher) GetBlockAtSlot(slot uint64) (*spec.VersionedSignedBeaconBlock,
 	return signedBeaconBlock, err
 }
 
-func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
+func (f *Onchain) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 	// Hardcoded
 	slotsInEpoch := uint64(32)
 	epoch := slot / slotsInEpoch
@@ -153,7 +170,7 @@ func (f *Fetcher) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 }
 
 // This function is expensive as gets every tx receipt from the block. Use only if needed
-func (f *Fetcher) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellatrix.Transaction) (*types.Header, []*types.Receipt, error) {
+func (f *Onchain) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellatrix.Transaction) (*types.Header, []*types.Receipt, error) {
 
 	var header *types.Header
 	var err error
@@ -190,29 +207,93 @@ func (f *Fetcher) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellat
 	return header, receipts, nil
 }
 
-// TODO:
-func (f *Fetcher) GetSubscriptions() *Subscriptions {
-	// manual subscriptions from the smart contract
-	var manualSubscriptions = Subscriptions{
-		blockHeigh: "0", // todo whatever.
-		slotHeigh:  "",  //todo not sure
+func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
-		// TODO: perhaps define subscription type
-		subscriptions: map[uint64]string{
-			/*
-				268288: "0x", //TODO: add start/end
-				342517: "0x",
-				306361: "0x",
-				77334:  "0x",
-				307966: "0x",
+	// Parse merkle root to byte array
+	newMerkleRootBytes := [32]byte{}
+	unboundedBytes := common.Hex2Bytes(newMerkleRoot)
 
-				481020: "0x", // propose mev block at 5323504
-				168929: "0x", // proposes vanila block at 5323506
-				195242: "0x", // proposes mev block at  5323505 0x4675c7e5baafbffbca748158becba61ef3b0a263
-
-				210588: "0x",*/
-		},
+	if len(unboundedBytes) != 32 {
+		log.Fatal("wrong merkle root length: ", newMerkleRoot)
 	}
-	return &manualSubscriptions
+	copy(newMerkleRootBytes[:], common.Hex2Bytes(newMerkleRoot))
 
+	// Sanity check to ensure the converted tree matches the original
+	if hex.EncodeToString(newMerkleRootBytes[:]) != newMerkleRoot {
+		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
+	}
+
+	// Load private key signing the tx. This address must hold enough Eth
+	// to pay for the tx fees, otherwise it will fail
+	privateKey, err := crypto.HexToECDSA(o.Cfg.DeployerPrivateKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatal("error casting public key to ECDSA")
+	}
+
+	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+	fmt.Println(fromAddress.Hex())
+	nonce, err := o.ExecutionClient.PendingNonceAt(context.Background(), fromAddress)
+	if err != nil {
+		log.Fatal("could not get pending nonce: ", err)
+	}
+
+	// Unused, leaving for reference. We rely on automatic gas estimation, see below (nil values)
+	gasTipCap, err := o.ExecutionClient.SuggestGasTipCap(context.Background())
+	if err != nil {
+		log.Fatal("could not get gas price suggestion: ", err)
+	}
+	_ = gasTipCap
+
+	chaindId, err := o.ExecutionClient.NetworkID(context.Background())
+	if err != nil {
+		log.Fatal("could not get chaind: ", err)
+	}
+
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chaindId)
+	if err != nil {
+		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
+	}
+	auth.Nonce = big.NewInt(int64(nonce))
+
+	// Important that the value is 0. Otherwise we would be sending Eth
+	// and thats not neccessary.
+	auth.Value = big.NewInt(0)
+
+	// nil prices automatically estimate prices
+	auth.GasPrice = nil
+	auth.GasFeeCap = nil
+	auth.GasTipCap = nil
+
+	auth.Context = context.Background()
+	auth.NoSend = false
+
+	//address := common.HexToAddress(o.cfg.PoolAddress)
+	// TODO: hardcoding a different address for testing
+	address := common.HexToAddress("0x25eB524fAbe93979D299158a1c7D1FF6628e0356")
+
+	instance, err := contract.NewContract(address, o.ExecutionClient)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create a tx calling the update rewards root function with the new merkle root
+	tx, err := instance.UpdateRewardsRoot(auth, newMerkleRootBytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.WithFields(log.Fields{
+		"TxHash":        tx.Hash().Hex(),
+		"NewMerkleRoot": newMerkleRoot,
+	}).Info("Tx sent to Ethereum updating rewards merkle root, wait for confirmation")
+
+	return tx.Hash().Hex()
+
+	// TODO: Wait for confirmation of the tx and log if NOK
 }

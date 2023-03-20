@@ -102,11 +102,11 @@ type ApiService struct {
 	srv           *http.Server
 	Postgres      *postgres.Postgresql
 	OracleState   *oracle.OracleState
-	Fetcher       *oracle.Fetcher
+	Onchain       *oracle.Onchain
 	ApiListenAddr string
 }
 
-func NewApiService(cfg config.Config, state *oracle.OracleState, fetcher *oracle.Fetcher) *ApiService {
+func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle.Onchain) *ApiService {
 	postgres, err := postgres.New(cfg.PostgresEndpoint)
 	if err != nil {
 		log.Fatal(err)
@@ -117,7 +117,7 @@ func NewApiService(cfg config.Config, state *oracle.OracleState, fetcher *oracle
 		ApiListenAddr: "0.0.0.0:7300",
 		Postgres:      postgres,
 		OracleState:   state,
-		Fetcher:       fetcher,
+		Onchain:       onchain,
 	}
 }
 
@@ -191,17 +191,17 @@ func (m *ApiService) handleRoot(w http.ResponseWriter, req *http.Request) {
 }
 
 func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
-	chainId, err := m.Fetcher.ExecutionClient.ChainID(context.Background())
+	chainId, err := m.Onchain.ExecutionClient.ChainID(context.Background())
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get exex chainid: "+err.Error())
 	}
 
-	depositContract, err := m.Fetcher.ConsensusClient.DepositContract(context.Background())
+	depositContract, err := m.Onchain.ConsensusClient.DepositContract(context.Background())
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get deposit contract: "+err.Error())
 	}
 
-	execSync, err := m.Fetcher.ExecutionClient.SyncProgress(context.Background())
+	execSync, err := m.Onchain.ExecutionClient.SyncProgress(context.Background())
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get exec sync progress: "+err.Error())
 	}
@@ -212,7 +212,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		execInSync = true
 	}
 
-	consSync, err := m.Fetcher.ConsensusClient.NodeSyncing(context.Background())
+	consSync, err := m.Onchain.ConsensusClient.NodeSyncing(context.Background())
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get consensus sync progress: "+err.Error())
 	}
@@ -223,7 +223,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		consInSync = true
 	}
 
-	finality, err := m.Fetcher.ConsensusClient.Finality(context.Background(), "finalized")
+	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), "finalized")
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get consensus latest finalized slot: "+err.Error())
 	}
@@ -294,7 +294,7 @@ func (m *ApiService) handleDepositAddressByIndex(w http.ResponseWriter, req *htt
 		return
 	}
 
-	valInfo, err := m.Fetcher.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
+	valInfo, err := m.Onchain.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
 	valPubKeyByte := valInfo[phase0.ValidatorIndex(valIndex)].Validator.PublicKey
 	valPubKeyStr := "0x" + hex.EncodeToString(valPubKeyByte[:])
 
