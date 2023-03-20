@@ -266,6 +266,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	auth.Value = big.NewInt(0)
 
 	// nil prices automatically estimate prices
+	// TODO: Perhaps overpay to make sure the tx is not stuck forever.
 	auth.GasPrice = nil
 	auth.GasFeeCap = nil
 	auth.GasTipCap = nil
@@ -291,9 +292,31 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	log.WithFields(log.Fields{
 		"TxHash":        tx.Hash().Hex(),
 		"NewMerkleRoot": newMerkleRoot,
-	}).Info("Tx sent to Ethereum updating rewards merkle root, wait for confirmation")
+	}).Info("Tx sent to Ethereum updating rewards merkle root, wait to be validated")
+
+	// Leave 5 minutes for the tx to be validated
+	deadline := time.Now().Add(5 * time.Minute)
+	ctx, cancelCtx := context.WithDeadline(context.Background(), deadline)
+	defer cancelCtx()
+
+	// It stops waiting when the context is canceled.
+	receipt, err := bind.WaitMined(ctx, o.ExecutionClient, tx)
+	if ctx.Err() != nil {
+		log.Fatal("Timeout expired for waiting for tx to be validated, txHash: ", tx.Hash().Hex(), " err:", err)
+	}
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		log.Fatal("Tx failed, err: ", receipt.Status, " hash: ", tx.Hash().Hex())
+	}
+
+	// Tx was sent and validated correctly, print receipt info
+	log.WithFields(log.Fields{
+		"Status":            receipt.Status,
+		"CumulativeGasUsed": receipt.CumulativeGasUsed,
+		"TxHash":            receipt.TxHash,
+		"GasUsed":           receipt.GasUsed,
+		"BlockHash":         receipt.BlockHash.Hex(),
+		"BlockNumber":       receipt.BlockNumber,
+	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
 	return tx.Hash().Hex()
-
-	// TODO: Wait for confirmation of the tx and log if NOK
 }

@@ -24,6 +24,11 @@ var SlotsInEpoch = uint64(32)
 // Goerli/Prater
 // ./mev-sp-oracle --consensus-endpoint="http://127.0.0.1:5051" --execution-endpoint="http://127.0.0.1:8545" --deployed-slot=4500000 --pool-address="0x455e5aa18469bc6ccef49594645666c587a3a71b" --checkpoint-size=10
 func main() {
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter.FullTimestamp = true
+	log.SetFormatter(customFormatter)
+
 	log.Info("mev-sp-oracle")
 	cfg, err := config.NewCliConfig()
 	if err != nil {
