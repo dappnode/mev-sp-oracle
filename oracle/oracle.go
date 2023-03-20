@@ -3,23 +3,21 @@ package oracle
 import (
 	"encoding/hex"
 	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
-	"mev-sp-oracle/contract"
 	"mev-sp-oracle/postgres"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type Oracle struct {
-	fetcher    *Fetcher
-	cfg        *config.Config
-	State      *OracleState
-	Operations *contract.Operations
-	Postgres   *postgres.Postgresql
+	onchain  *Onchain
+	cfg      *config.Config
+	State    *OracleState
+	Postgres *postgres.Postgresql
 }
 
 func NewOracle(
 	cfg *config.Config,
-	fetcher *Fetcher) *Oracle {
+	onchain *Onchain) *Oracle {
 	state := NewOracleState(cfg)
 
 	postgres, err := postgres.New(cfg.PostgresEndpoint)
@@ -27,13 +25,11 @@ func NewOracle(
 		log.Fatal(err)
 	}
 
-	operations := contract.NewOperations(cfg)
 	oracle := &Oracle{
-		cfg:        cfg,
-		fetcher:    fetcher,
-		State:      state,
-		Postgres:   postgres,
-		Operations: operations,
+		cfg:      cfg,
+		onchain:  onchain,
+		State:    state,
+		Postgres: postgres,
 	}
 
 	return oracle
@@ -43,7 +39,7 @@ func NewOracle(
 // by wether the block was missed or not (true = ok proposal) and the block if it was not missed
 func (or *Oracle) GetBlockIfAny(slot uint64) (uint64, string, bool, *VersionedSignedBeaconBlock) {
 	// Gets the duty, indicating which validator should propose the block at this slot
-	slotDuty, err := or.fetcher.GetProposalDuty(slot)
+	slotDuty, err := or.onchain.GetProposalDuty(slot)
 	if err != nil {
 		log.Fatal("could not get proposal duty: ", err)
 	}
@@ -52,7 +48,7 @@ func (or *Oracle) GetBlockIfAny(slot uint64) (uint64, string, bool, *VersionedSi
 	valIndexDuty := uint64(slotDuty.ValidatorIndex)
 	valPublicKey := "0x" + hex.EncodeToString(slotDuty.PubKey[:])
 
-	proposedBlock, err := or.fetcher.GetBlockAtSlot(slot)
+	proposedBlock, err := or.onchain.GetBlockAtSlot(slot)
 	if err != nil {
 		log.Fatal("could not get block at slot:", err)
 	}
@@ -70,7 +66,7 @@ func (or *Oracle) UpdateSubscriptions(block VersionedSignedBeaconBlock) {
 	/*
 		proposerIndex := uint64(block.GetProposerIndex())
 
-		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.fetcher)
+		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.onchain)
 		if err != nil {
 			log.Fatal(err)
 		}*/
@@ -112,7 +108,7 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 
 	if proposedOk {
 		// If the block was proposed ok
-		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.fetcher)
+		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.onchain)
 		_ = rewardType
 		if err != nil {
 			log.Fatal(err)

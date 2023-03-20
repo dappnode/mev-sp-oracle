@@ -57,12 +57,12 @@ func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.In
 // This call is expensive if its a vanila block. The tip sent to the fee recipient
 // has to be calculated by iterating all txs and adding the tips as per EIP1559.
 // This requires to get every single tx receipt from the block, hence needing
-// the fetcher to get the receipts from the consensus layer.s
+// the onchain to get the receipts from the consensus layer.s
 // Note that that this call is cheaper when the block is a MEV block, as there is no
 // need to reconstruct the tip from the txs.
 func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 	poolAddress string,
-	fetcher Fetcher) (*big.Int, bool, int, error) {
+	onchain Onchain) (*big.Int, bool, int, error) {
 
 	var reward *big.Int = big.NewInt(0)
 	err := *new(error)
@@ -73,7 +73,7 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 	if b.GetFeeRecipient() == poolAddress {
 		// vanila block, we get the tip from the block
 		blockNumber := new(big.Int).SetUint64(b.GetBlockNumber())
-		header, receipts, err := fetcher.GetExecHeaderAndReceipts(blockNumber, b.GetBlockTransactions())
+		header, receipts, err := onchain.GetExecHeaderAndReceipts(blockNumber, b.GetBlockTransactions())
 		if err != nil {
 			log.Fatal(err)
 		}

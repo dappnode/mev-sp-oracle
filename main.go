@@ -30,9 +30,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fetcher := oracle.NewFetcher(*cfg)
-	oracle := oracle.NewOracle(cfg, fetcher)
-	api := api.NewApiService(*cfg, oracle.State, fetcher)
+	onchain := oracle.NewOnchain(*cfg)
+	oracle := oracle.NewOracle(cfg, onchain)
+	api := api.NewApiService(*cfg, oracle.State, onchain)
 	go api.StartHTTPServer()
 
 	// Preparae the database
@@ -71,7 +71,7 @@ func main() {
 		log.Fatal("error creating table t_pool_blocks ", err)
 	}
 
-	go mainLoop(oracle, fetcher, cfg)
+	go mainLoop(oracle, onchain, cfg)
 
 	// Wait for signal.
 	sigCh := make(chan os.Signal, 1)
@@ -87,9 +87,9 @@ func main() {
 	log.Info("Stopping mev-sp-oracle")
 }
 
-func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config) {
+func mainLoop(oracle *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config) {
 	/*
-		syncProgress, err := fetcher.ExecutionClient.SyncProgress(context.Background())
+		syncProgress, err := onchain.ExecutionClient.SyncProgress(context.Background())
 		if err != nil {
 			log.Error(err)
 		}
@@ -107,7 +107,7 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 
 	for {
 
-		headSlot, err := fetcher.ConsensusClient.NodeSyncing(context.Background())
+		headSlot, err := onchain.ConsensusClient.NodeSyncing(context.Background())
 		if err != nil {
 			log.Error("Could not get node sync status:", err)
 			time.Sleep(15 * time.Second)
@@ -120,7 +120,7 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 			continue
 		}
 
-		finality, err := fetcher.ConsensusClient.Finality(context.Background(), "finalized")
+		finality, err := onchain.ConsensusClient.Finality(context.Background(), "finalized")
 		if err != nil {
 			log.Error("Could not get finalized status:", err)
 			time.Sleep(15 * time.Second)
@@ -173,7 +173,7 @@ func mainLoop(oracle *oracle.Oracle, fetcher *oracle.Fetcher, cfg *config.Config
 			} else {
 				//txHash := ""
 				if !cfg.DryRun {
-					txHash := oracle.Operations.UpdateContractMerkleRoot(oracle.State.LatestCommitedState.MerkleRoot)
+					txHash := onchain.UpdateContractMerkleRoot(oracle.State.LatestCommitedState.MerkleRoot)
 					_ = txHash
 				}
 			}

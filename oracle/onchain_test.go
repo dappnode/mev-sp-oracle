@@ -24,13 +24,13 @@ import (
 // Fetches the balance of a given address
 func Test_FetchFromExecution(t *testing.T) {
 	t.Skip("Skipping test")
-	var cfgFetcher = config.Config{
+	var cfgOnchain = config.Config{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	var fetcherTest = NewFetcher(cfgFetcher)
+	var onchainTest = NewOnchain(cfgOnchain)
 	account := common.HexToAddress("0xf573d99385c05c23b24ed33de616ad16a43a0919")
-	balance, err := fetcherTest.ExecutionClient.BalanceAt(context.Background(), account, nil)
+	balance, err := onchainTest.ExecutionClient.BalanceAt(context.Background(), account, nil)
 	require.NoError(t, err)
 	expectedValue, ok := new(big.Int).SetString("25893180161173005034", 10)
 	require.True(t, ok)
@@ -41,18 +41,18 @@ func Test_FetchFromExecution(t *testing.T) {
 func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	t.Skip("Skipping test")
 
-	var cfgFetcher = config.Config{
+	var cfgOnchain = config.Config{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	var fetcher = NewFetcher(cfgFetcher)
+	var onchain = NewOnchain(cfgOnchain)
 	folder := "../mock"
 	blockType := "capella"
 	network := "goerli"
 	slotToFetch := uint64(5214321)
 
 	// Get block
-	signedBeaconBlock, err := fetcher.GetBlockAtSlot(slotToFetch)
+	signedBeaconBlock, err := onchain.GetBlockAtSlot(slotToFetch)
 	require.NoError(t, err)
 
 	// Cast to our custom extended block with extra methods
@@ -71,7 +71,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	defer fblock.Close()
 
 	// Get block header
-	header, err := fetcher.ExecutionClient.HeaderByNumber(context.Background(), new(big.Int).SetUint64(extendedSignedBeaconBlock.GetBlockNumber()))
+	header, err := onchain.ExecutionClient.HeaderByNumber(context.Background(), new(big.Int).SetUint64(extendedSignedBeaconBlock.GetBlockNumber()))
 	require.NoError(t, err)
 
 	// Serialize and dump the block header to a file
@@ -94,7 +94,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	for _, rawTx := range extendedSignedBeaconBlock.GetBlockTransactions() {
 		tx, _, err := DecodeTx(rawTx)
 		if err == nil {
-			receipt, err := fetcher.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
+			receipt, err := onchain.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
 			require.NoError(t, err)
 			receiptsBlock = append(receiptsBlock, receipt)
 		}
