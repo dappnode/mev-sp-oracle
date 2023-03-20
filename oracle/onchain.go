@@ -44,6 +44,7 @@ type Onchain struct {
 	ConsensusClient *http.Service
 	ExecutionClient *ethclient.Client
 	Cfg             *config.Config
+	Contract        *contract.Contract
 }
 
 // Fetches external data:
@@ -103,10 +104,19 @@ func NewOnchain(cfg config.Config) *Onchain {
 
 	log.Info("Consensus client sync state: ", consSync)
 
+	// TODO: Get this from Config.
+	// Instantiate the smoothing pool contract to run get/set operations on it
+	address := common.HexToAddress("0x25eb524fabe93979d299158a1c7d1ff6628e0356")
+	contract, err := contract.NewContract(address, executionClient)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
 		Cfg:             &cfg,
+		Contract:        contract,
 	}
 }
 
@@ -207,6 +217,56 @@ func (f *Onchain) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellat
 	return header, receipts, nil
 }
 
+// This function is a proof of concept. It detects the new rewards root
+// event, but can return nothing if no event was emitted in that block
+// TODO: This is not useful for merkle root, but use as an inspiration for
+// other events: subscribe, unsubscribe.
+func (o *Onchain) GetMerkleRootEventByBlock(blockNumber uint64) string {
+	// Not the most effective way, but we just need to advance one by one.
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	itr, err := o.Contract.FilterUpdateRewardsRoot(filterOpts)
+
+	// Loop over all found events
+	merkleRoot := make([]string, 0)
+	for itr.Next() {
+		event := itr.Event
+		log.WithFields(log.Fields{
+			"Address":    event.Raw.Address.Hex(),
+			"MerkleRoot": hex.EncodeToString(event.NewRewardsRoot[:]),
+			"BlocNumber": event.Raw.BlockNumber,
+			"TxHash":     event.Raw.TxHash,
+		}).Info("Detected NewRewardsRoot Event")
+		merkleRoot = append(merkleRoot, hex.EncodeToString(event.NewRewardsRoot[:]))
+	}
+	err = itr.Close()
+	if err != nil {
+		log.Fatal("could not close iterator for new merkle roots", err)
+	}
+
+	if len(merkleRoot) > 1 {
+		log.Fatal("detected more than one different merkle root in the same block")
+	} else if len(merkleRoot) == 0 {
+		return ""
+	}
+
+	return "0x" + merkleRoot[0]
+}
+
+func (o *Onchain) GetRewardsRoot() {
+
+	callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+	rewardsRoot, err := o.Contract.RewardsRoot(callOpts)
+	if err != nil {
+		log.Fatal("could not get rewards root from pool contract: ", err)
+	}
+
+	log.Info("rewards root", "0x"+hex.EncodeToString(rewardsRoot[:]))
+}
+
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
 	// Parse merkle root to byte array
@@ -223,6 +283,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
 	}
 
+	// TODO: Extract some of these things out of the function
 	// Load private key signing the tx. This address must hold enough Eth
 	// to pay for the tx fees, otherwise it will fail
 	privateKey, err := crypto.HexToECDSA(o.Cfg.DeployerPrivateKey)
@@ -266,6 +327,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	auth.Value = big.NewInt(0)
 
 	// nil prices automatically estimate prices
+	// TODO: Perhaps overpay to make sure the tx is not stuck forever.
 	auth.GasPrice = nil
 	auth.GasFeeCap = nil
 	auth.GasTipCap = nil
@@ -291,9 +353,31 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	log.WithFields(log.Fields{
 		"TxHash":        tx.Hash().Hex(),
 		"NewMerkleRoot": newMerkleRoot,
-	}).Info("Tx sent to Ethereum updating rewards merkle root, wait for confirmation")
+	}).Info("Tx sent to Ethereum updating rewards merkle root, wait to be validated")
+
+	// Leave 5 minutes for the tx to be validated
+	deadline := time.Now().Add(5 * time.Minute)
+	ctx, cancelCtx := context.WithDeadline(context.Background(), deadline)
+	defer cancelCtx()
+
+	// It stops waiting when the context is canceled.
+	receipt, err := bind.WaitMined(ctx, o.ExecutionClient, tx)
+	if ctx.Err() != nil {
+		log.Fatal("Timeout expired for waiting for tx to be validated, txHash: ", tx.Hash().Hex(), " err:", err)
+	}
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		log.Fatal("Tx failed, err: ", receipt.Status, " hash: ", tx.Hash().Hex())
+	}
+
+	// Tx was sent and validated correctly, print receipt info
+	log.WithFields(log.Fields{
+		"Status":            receipt.Status,
+		"CumulativeGasUsed": receipt.CumulativeGasUsed,
+		"TxHash":            receipt.TxHash,
+		"GasUsed":           receipt.GasUsed,
+		"BlockHash":         receipt.BlockHash.Hex(),
+		"BlockNumber":       receipt.BlockNumber,
+	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
 	return tx.Hash().Hex()
-
-	// TODO: Wait for confirmation of the tx and log if NOK
 }
