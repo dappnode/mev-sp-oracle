@@ -33,11 +33,32 @@ type Config struct {
 // go build -v -ldflags="-X 'github.com/xxx/yyy/config.ReleaseVersion=x.y.z'"
 var ReleaseVersion = "custom-build"
 
+var MainRelays = []string{
+	"boost-relay.flashbots.net",
+	"bloxroute.max-profit.blxrbdn.com",
+	"bloxroute.ethical.blxrbdn.com",
+	"bloxroute.regulated.blxrbdn.com",
+	"builder-relay-mainnet.blocknative.com",
+	"relay.edennetwork.io",
+	"mainnet-relay.securerpc.com",
+	"relayooor.wtf",
+	"relay.ultrasound.money",
+	"agnostic-relay.net",
+	"aestus.live",
+}
+var TestRelays = []string{
+	"builder-relay-goerli.flashbots.net",
+	"bloxroute.max-profit.builder.goerli.blxrbdn.com",
+	"builder-relay-goerli.blocknative.com/",
+	"relay-goerli.edennetwork.io",
+	"goerli-relay.securerpc.com",
+}
+
 func NewCliConfig() (*Config, error) {
 	var version = flag.Bool("version", false, "Prints the release version and exits")
 	var consensusEndpoint = flag.String("consensus-endpoint", "", "Ethereum consensus endpoint")
 	var executionEndpoint = flag.String("execution-endpoint", "", "Ethereum execution endpoint")
-	var network = flag.String("network", "", "Network to run in: mainnet|goerli")
+	var network = flag.String("network", "mainnet", "Network to run in: mainnet|goerli")
 	var poolAddress = flag.String("pool-address", "", "Address of the smoothing pool contract")
 	var deployedSlot = flag.Uint64("deployed-slot", 0, "Deployed slot of the smart contract: slot, not block")
 	var checkPointSizeInSlots = flag.Uint64("checkpoint-size", 0, "Size in slots for each checkpoint, used to generate dumps and update merkle roots")

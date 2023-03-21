@@ -39,6 +39,7 @@ const (
 	pathDepositAddressByIndex = "/depositadddress/{valindex}"
 	pathPoolStatistics        = "/poolstatistics"
 	pathDonations             = "/donations"
+	pathValidatorRelayers     = "/registeredrelays/{valpubkey}"
 
 	// TODO: better valindex=xxx
 
@@ -145,12 +146,19 @@ type httpOkProofs struct {
 	RegisteredValidators   []uint64 `json:"registered_validators"`
 }
 
+type httpOkRelayersState struct {
+	Registered           bool     `json:"registered"`
+	RegisteredRelayers   []string `json:"registered_relayers"`
+	UnRegisteredRelayers []string `json:"unregistered_relayers"`
+}
+
 type ApiService struct {
 	srv           *http.Server
 	Postgres      *postgres.Postgresql
 	OracleState   *oracle.OracleState
 	Onchain       *oracle.Onchain
 	ApiListenAddr string
+	Network       string
 }
 
 func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle.Onchain) *ApiService {
@@ -166,6 +174,7 @@ func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle
 		Postgres:      postgres,
 		OracleState:   state,
 		Onchain:       onchain,
+		Network:       cfg.Network,
 	}
 }
 
@@ -198,6 +207,7 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc(pathLatestMerkleRoot, m.handleLatestMerkleRoot)
 	r.HandleFunc(pathLatestCheckpoint, m.handleLatestCheckpoint)
 	r.HandleFunc(pathDepositAddressByIndex, m.handleDepositAddressByIndex)
+	r.HandleFunc(pathValidatorRelayers, m.handleValidatorRelayers).Methods(http.MethodGet)
 
 	r.HandleFunc(pathValidatorOnchainStateByIndex, m.handleValidatorOnchainStateByIndex)
 	r.HandleFunc(pathValidatorOffchainStateByIndex, m.handleValidatorOffchainStateByIndex)
@@ -525,7 +535,58 @@ func (m *ApiService) handleValidatorOffchainStateByIndex(w http.ResponseWriter, 
 	})
 }
 
+func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	valPubKey := vars["valpubkey"]
+	if !IsValidPubkey(valPubKey) {
+		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid validator pubkey format"))
+		return
+	}
+	var registeredRelays []string
+	var unregisteredRelays []string
+	registered := false
+	var relays []string
+
+	if m.Network == "mainnet" {
+		relays = config.MainRelays
+
+	} else {
+		relays = config.TestRelays
+	}
+
+	for _, relay := range relays {
+		url := fmt.Sprintf("https://%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
+		resp, err := http.Get(url)
+		if err != nil {
+			m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			registeredRelays = append(registeredRelays, relay)
+		} else {
+			unregisteredRelays = append(unregisteredRelays, relay)
+		}
+	}
+
+	if len(registeredRelays) != 0 {
+		registered = true
+	}
+
+	m.respondOK(w, httpOkRelayersState{
+		Registered:           registered,
+		RegisteredRelayers:   registeredRelays,
+		UnRegisteredRelayers: unregisteredRelays,
+	})
+}
+
 func IsValidAddress(v string) bool {
 	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
+	return re.MatchString(v)
+}
+
+func IsValidPubkey(v string) bool {
+	re := regexp.MustCompile("^0x[0-9a-fA-f]{96}$")
 	return re.MatchString(v)
 }
