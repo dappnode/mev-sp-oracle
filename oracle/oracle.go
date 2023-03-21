@@ -111,7 +111,7 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 		blockNumber := block.GetBlockNumber()
 		_ = blockNumber
 
-		or.onchain.GetRewardsRoot()
+		// or.onchain.GetRewardsRoot()
 
 		// If the block was proposed ok
 		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.onchain)
