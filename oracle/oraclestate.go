@@ -78,6 +78,10 @@ type OracleState struct {
 	PoolAddress         string
 	Validators          map[uint64]*ValidatorInfo
 	LatestCommitedState OnchainState
+
+	PoolFeesPercent     int
+	PoolFeesAddress     string
+	PoolAccumulatedFees *big.Int
 }
 
 func (p *OracleState) SaveStateToFile() {
@@ -143,6 +147,10 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		PoolAddress: cfg.PoolAddress,
 
 		Validators: make(map[uint64]*ValidatorInfo, 0),
+
+		PoolFeesPercent:     cfg.PoolFeesPercent,
+		PoolFeesAddress:     cfg.PoolFeesAddress,
+		PoolAccumulatedFees: big.NewInt(0),
 	}
 }
 
@@ -288,16 +296,41 @@ func (state *OracleState) GetEligibleValidators() []uint64 {
 }
 
 func (state *OracleState) IncreaseAllPendingRewards(
-	totalAmount *big.Int) {
+	reward *big.Int) {
 
 	eligibleValidators := state.GetEligibleValidators()
 	numEligibleValidators := big.NewInt(int64(len(eligibleValidators)))
 
-	amountToIncrease := big.NewInt(0).Div(totalAmount, numEligibleValidators)
-	// TODO: Rounding problems. Evenly distribute the remainder
+	log.Info("enter here")
 
+	// The pool takes PoolFeesPercent cut of the rewards
+	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(state.PoolFeesPercent)))
+
+	// Calculate the pool cut
+	poolCut := big.NewInt(0).Div(aux, big.NewInt(100))
+
+	// And remainder of above operation
+	remainder1 := big.NewInt(0).Mod(aux, big.NewInt(100))
+
+	// The amount to share is the reward minus the pool cut + remainder
+	toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
+	toShareAllValidators.Sub(toShareAllValidators, remainder1)
+
+	// Each validator gets that divided by numEligibleValidators
+	perValidatorReward := big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
+	// And remainder of above operation
+	remainder2 := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
+
+	// Total fees for the pool are: the cut (%) + the remainders
+	totalFees := big.NewInt(0).Add(poolCut, remainder1)
+	totalFees.Add(totalFees, remainder2)
+
+	// Increase pool rewards (fees)
+	state.PoolAccumulatedFees.Add(state.PoolAccumulatedFees, totalFees)
+
+	// Increase eligible validators rewards
 	for _, eligibleIndex := range eligibleValidators {
-		state.Validators[eligibleIndex].PendingRewardsWei.Add(state.Validators[eligibleIndex].PendingRewardsWei, amountToIncrease)
+		state.Validators[eligibleIndex].PendingRewardsWei.Add(state.Validators[eligibleIndex].PendingRewardsWei, perValidatorReward)
 	}
 }
 

@@ -24,6 +24,99 @@ func Test_AddSubscription(t *testing.T) {
 	require.Equal(t, big.NewInt(100), state.Validators[10].AccumulatedRewardsWei)
 }
 
+func Test_IncreaseAllPendingRewards_1(t *testing.T) {
+
+	state := NewOracleState(&config.Config{
+		PoolFeesPercent: 0,
+		PoolFeesAddress: "0x",
+	})
+
+	// Subscribe 3 validators with no balance
+	state.AddSubscriptionIfNotAlready(1, "0x", "0x")
+	state.AddSubscriptionIfNotAlready(2, "0x", "0x")
+	state.AddSubscriptionIfNotAlready(3, "0x", "0x")
+
+	state.IncreaseAllPendingRewards(big.NewInt(10000))
+
+	// Note that in this case even with PoolFeesPercent: 0, the pool gets the remainder
+	require.Equal(t, big.NewInt(3333), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(3333), state.Validators[2].PendingRewardsWei)
+	require.Equal(t, big.NewInt(3333), state.Validators[3].PendingRewardsWei)
+	require.Equal(t, big.NewInt(1), state.PoolAccumulatedFees)
+}
+
+func Test_IncreaseAllPendingRewards_2(t *testing.T) {
+
+	state := NewOracleState(&config.Config{
+		PoolFeesPercent: 10,
+		PoolFeesAddress: "0x",
+	})
+
+	// Subscribe 3 validators with no balance
+	state.AddSubscriptionIfNotAlready(1, "0x", "0x")
+	state.AddSubscriptionIfNotAlready(2, "0x", "0x")
+	state.AddSubscriptionIfNotAlready(3, "0x", "0x")
+
+	state.IncreaseAllPendingRewards(big.NewInt(10000))
+
+	// Note that in this case even with PoolFeesPercent: 0, the pool gets the remainder
+	require.Equal(t, big.NewInt(3000), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(3000), state.Validators[2].PendingRewardsWei)
+	require.Equal(t, big.NewInt(3000), state.Validators[3].PendingRewardsWei)
+	require.Equal(t, big.NewInt(1000), state.PoolAccumulatedFees)
+}
+
+func Test_IncreaseAllPendingRewards_3(t *testing.T) {
+
+	// Multiple test with different combinations of: fee, reward, validators
+
+	type pendingRewardTest struct {
+		FeePercent       int
+		Reward           []*big.Int
+		AmountValidators int
+	}
+
+	tests := []pendingRewardTest{
+		// FeePercent |Reward | AmountValidators
+		{0, []*big.Int{big.NewInt(100)}, 1},
+		{0, []*big.Int{big.NewInt(500)}, 2},
+		{0, []*big.Int{big.NewInt(398)}, 3},
+		{10, []*big.Int{big.NewInt(0)}, 1},
+		{15, []*big.Int{big.NewInt(23033)}, 1},
+		{33, []*big.Int{big.NewInt(99999)}, 5},
+		{33, []*big.Int{big.NewInt(1)}, 5},
+		{33, []*big.Int{big.NewInt(1), big.NewInt(403342)}, 200},
+		{12, []*big.Int{big.NewInt(32000000000000), big.NewInt(333333333333), big.NewInt(345676543234567)}, 233},
+		{14, []*big.Int{big.NewInt(32000000000000), big.NewInt(333333333333), big.NewInt(345676543234567), big.NewInt(9)}, 99},
+	}
+
+	for _, test := range tests {
+		state := NewOracleState(&config.Config{
+			PoolFeesPercent: test.FeePercent,
+			PoolFeesAddress: "0x",
+		})
+		for i := 0; i < test.AmountValidators; i++ {
+			state.AddSubscriptionIfNotAlready(uint64(i), "0x", "0x")
+		}
+
+		totalRewards := big.NewInt(0)
+		for _, reward := range test.Reward {
+			state.IncreaseAllPendingRewards(reward)
+			totalRewards.Add(totalRewards, reward)
+		}
+
+		totalDistributedRewards := big.NewInt(0)
+		totalDistributedRewards.Add(totalDistributedRewards, state.PoolAccumulatedFees)
+		for i := 0; i < test.AmountValidators; i++ {
+			totalDistributedRewards.Add(totalDistributedRewards, state.Validators[uint64(i)].PendingRewardsWei)
+		}
+
+		// Assert that the rewards that were shared, equal the ones that we had
+		// kirchhoff law, what comes in = what it goes out!
+		require.Equal(t, totalDistributedRewards, totalRewards)
+	}
+}
+
 func Test_IncreasePendingRewards(t *testing.T) {
 	state := NewOracleState(&config.Config{})
 	state.Validators[12] = &ValidatorInfo{
