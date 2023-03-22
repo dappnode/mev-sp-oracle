@@ -7,7 +7,7 @@ import (
 	"context"
 	"mev-sp-oracle/api"
 	"mev-sp-oracle/config"
-	"mev-sp-oracle/oracle"
+	or "mev-sp-oracle/oracle"
 	"mev-sp-oracle/postgres"
 	"os"
 	"os/signal"
@@ -35,8 +35,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	onchain := oracle.NewOnchain(*cfg)
-	oracle := oracle.NewOracle(cfg, onchain)
+	onchain := or.NewOnchain(*cfg)
+	oracle := or.NewOracle(cfg, onchain)
 	api := api.NewApiService(*cfg, oracle.State, onchain)
 	go api.StartHTTPServer()
 
@@ -93,7 +93,7 @@ func main() {
 	log.Info("Stopping mev-sp-oracle")
 }
 
-func mainLoop(oracle *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config) {
+func mainLoop(oracle *or.Oracle, onchain *or.Onchain, cfg *config.Config) {
 	/*
 		syncProgress, err := onchain.ExecutionClient.SyncProgress(context.Background())
 		if err != nil {
@@ -144,7 +144,9 @@ func mainLoop(oracle *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config
 			if err != nil {
 				log.Fatal(err)
 			}
-			log.Info("[", oracle.State.LatestSlot, "/", finalizedSlot, "] Done processing slot. Remaining slots: ", finalizedSlot-oracle.State.LatestSlot)
+			slotToLatestFinalized := finalizedSlot - oracle.State.LatestSlot
+			log.Info("[", oracle.State.LatestSlot, "/", finalizedSlot, "] Done processing slot. Remaining: ",
+				slotToLatestFinalized, " (", or.SlotsToTime(slotToLatestFinalized), " ago)")
 		} else {
 			log.WithFields(log.Fields{
 				"finalizedSlot":    finalizedSlot,

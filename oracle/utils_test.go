@@ -98,3 +98,9 @@ func Test_ByteArrayToArray(t *testing.T) {
 	})
 	require.Equal(t, []string{"0x31", "0x32", "0x33"}, test1)
 }
+
+func Test_SlotsToTime(t *testing.T) {
+	require.Equal(t, "12 seconds", SlotsToTime(1))
+	require.Equal(t, "2 minutes", SlotsToTime(10))
+	require.Equal(t, "1 day 9 hours 20 minutes", SlotsToTime(10000))
+}
