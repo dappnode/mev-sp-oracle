@@ -4,8 +4,10 @@ import (
 	"encoding/hex"
 	"math/big"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/hako/durafmt"
 )
 
 func ToBytes20(x []byte) [20]byte {
@@ -66,4 +68,15 @@ func ByteArrayToArray(arr [][]byte) []string {
 	}
 
 	return result
+}
+
+// Converts from slots to readable time (eg 1 day 9 hours 20 minutes)
+func SlotsToTime(slots uint64) string {
+	// Hardcoded. Mainnet Ethereum configuration
+	SecondsInSlot := uint64(12)
+
+	timeduration := time.Duration(slots*SecondsInSlot) * time.Second
+	strDuration := durafmt.Parse(timeduration).String()
+
+	return strDuration
 }

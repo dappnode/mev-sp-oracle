@@ -5,6 +5,7 @@ go 1.19
 
 require (
 	github.com/gorilla/mux v1.8.0
+	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/jackc/pgx/v4 v4.17.2
 	github.com/miguelmota/go-solidity-sha3 v0.1.1
 	github.com/pkg/errors v0.9.1
