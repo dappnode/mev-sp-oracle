@@ -2,11 +2,14 @@ package config
 
 import (
 	"bufio"
+	"crypto/ecdsa"
 	"flag"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -15,14 +18,14 @@ type Config struct {
 	ExecutionEndpoint     string
 	Network               string
 	PoolAddress           string
+	UpdaterAddress        string
 	DeployedSlot          uint64
 	CheckPointSizeInSlots uint64
 	PostgresEndpoint      string
 	DeployerPrivateKey    string
+	PoolFeesPercent       int
+	PoolFeesAddress       string
 	DryRun                bool
-
-	// Debug flags, never use in production
-	DebugHardcodedSubscriptions []uint64
 }
 
 // By default the release is a custom build. CI takes care of upgrading it with
@@ -39,10 +42,9 @@ func NewCliConfig() (*Config, error) {
 	var checkPointSizeInSlots = flag.Uint64("checkpoint-size", 0, "Size in slots for each checkpoint, used to generate dumps and update merkle roots")
 	var postgresEndpoint = flag.String("postgres-endpoint", "", "Postgres endpoint")
 	var deployerPrivateKey = flag.String("deployer-private-key", "", "Private key of the deployer account")
+	var poolFeesPercent = flag.Int("pool-fees-percent", -1, "Percent of fees pool-fees-percent takes [0-100]")
+	var poolFeesAddress = flag.String("pool-fees-address", "", "Ethereum account with 0x where pool fees go to")
 	var dryRun = flag.Bool("dry-run", false, "If enabled, the pool contract will not be updated")
-
-	// Debug flags, never use in production
-	var debugHardcodedSubscriptionsFile = flag.String("debug-subscriptions-file", "", "Path to file containing a list of hardcoded validator indexes, one per line")
 	flag.Parse()
 
 	if *version {
@@ -50,33 +52,64 @@ func NewCliConfig() (*Config, error) {
 		os.Exit(0)
 	}
 
-	var debugHardcodedSubscriptions []uint64
-	var err error
+	// Some simple cli argument validation
 
-	// Only to debug: Read hardcoded subscriptions from a file
-	if *debugHardcodedSubscriptionsFile != "" {
-		debugHardcodedSubscriptions, err = ReadHardcodedSubscriptions(*debugHardcodedSubscriptionsFile)
-		if err != nil {
-			log.Fatal(err)
-		}
+	// Mandatory flag
+	if *poolFeesAddress == "" {
+		log.Fatal("pool-fees-address flag is not present")
+	}
+
+	// Mandatory flag
+	if *poolFeesPercent == -1 {
+		log.Fatal("pool-fees-percent flag is not present")
+	}
+
+	// Mandatory flag
+	if *network != "mainnet" && *network != "goerli" {
+		log.Fatal("wrong network provided, must be mainnet or goerli")
+	}
+
+	if *poolFeesAddress == *poolAddress {
+		log.Fatal("pool-fees-address and pool-address can't be equal")
+	}
+
+	if !*dryRun && *deployerPrivateKey == "" {
+		log.Fatal("you must provide a private key to update the contract root")
+	}
+
+	// Check deployerPrivateKey is valid
+	pKey, err := crypto.HexToECDSA(*deployerPrivateKey)
+	if err != nil {
+		log.Fatal("wrong private key, couldn't parse it: ", err)
+	}
+
+	publicKey := pKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatal("error casting public key to ECDSA")
+	}
+
+	if !common.IsHexAddress(*poolAddress) {
+		log.Fatal("pool-address: ", *poolAddress, " is not a valid address")
+	}
+
+	if !common.IsHexAddress(*poolFeesAddress) {
+		log.Fatal("pool-fees-address: ", *poolFeesAddress, " is not a valid address")
 	}
 
 	conf := &Config{
-		ConsensusEndpoint:           *consensusEndpoint,
-		ExecutionEndpoint:           *executionEndpoint,
-		Network:                     *network,
-		PoolAddress:                 *poolAddress,
-		DeployedSlot:                *deployedSlot,
-		CheckPointSizeInSlots:       *checkPointSizeInSlots,
-		DebugHardcodedSubscriptions: debugHardcodedSubscriptions,
-		PostgresEndpoint:            *postgresEndpoint,
-		DeployerPrivateKey:          *deployerPrivateKey,
-		DryRun:                      *dryRun,
-	}
-	if conf.DryRun {
-		log.Warn("The pool contract will NOT be updated, running in dry-run mode")
-	} else {
-		log.Warn("The pool contract will be updated. Make sure it has balance to cover tx fees")
+		ConsensusEndpoint:     *consensusEndpoint,
+		ExecutionEndpoint:     *executionEndpoint,
+		Network:               *network,
+		PoolAddress:           *poolAddress,
+		UpdaterAddress:        crypto.PubkeyToAddress(*publicKeyECDSA).Hex(),
+		DeployedSlot:          *deployedSlot,
+		CheckPointSizeInSlots: *checkPointSizeInSlots,
+		PostgresEndpoint:      *postgresEndpoint,
+		DeployerPrivateKey:    *deployerPrivateKey,
+		PoolFeesPercent:       *poolFeesPercent,
+		PoolFeesAddress:       *poolFeesAddress,
+		DryRun:                *dryRun,
 	}
 	logConfig(conf)
 	return conf, nil
@@ -84,19 +117,30 @@ func NewCliConfig() (*Config, error) {
 
 func logConfig(cfg *Config) {
 	log.WithFields(log.Fields{
-		"ConsensusEndpoint":           cfg.ConsensusEndpoint,
-		"ExecutionEndpoint":           cfg.ExecutionEndpoint,
-		"Network":                     cfg.Network,
-		"PoolAddress":                 cfg.PoolAddress,
-		"DeployedSlot":                cfg.DeployedSlot,
-		"CheckPointSizeInSlots":       cfg.CheckPointSizeInSlots,
-		"PostgresEndpoint":            cfg.PostgresEndpoint,
-		"DebugHardcodedSubscriptions": cfg.DebugHardcodedSubscriptions,
-		"DeployerPrivateKey":          "TODO: use a file with protected password",
-		"DryRun":                      cfg.DryRun,
+		"ConsensusEndpoint":     cfg.ConsensusEndpoint,
+		"ExecutionEndpoint":     cfg.ExecutionEndpoint,
+		"Network":               cfg.Network,
+		"PoolAddress":           cfg.PoolAddress,
+		"UpdaterAddress":        cfg.UpdaterAddress,
+		"DeployedSlot":          cfg.DeployedSlot,
+		"CheckPointSizeInSlots": cfg.CheckPointSizeInSlots,
+		"PostgresEndpoint":      cfg.PostgresEndpoint,
+		"DeployerPrivateKey":    "TODO: use a file with protected password",
+		"PoolFeesPercent":       cfg.PoolFeesPercent,
+		"PoolFeesAddress":       cfg.PoolFeesAddress,
+		"DryRun":                cfg.DryRun,
 	}).Info("Cli Config:")
+
+	log.Info("The smoothing pool at ", cfg.PoolAddress, " takes a cut of ", cfg.PoolFeesPercent, "% ensure you control the keys for ", cfg.PoolAddress, " to claim the fees")
+
+	if cfg.DryRun {
+		log.Warn("The pool contract will NOT be updated, running in dry-run mode")
+	} else {
+		log.Warn("The pool contract will be updated. Make the account has balance to cover tx fees: ", cfg.UpdaterAddress)
+	}
 }
 
+// TODO: Unused
 func ReadHardcodedSubscriptions(filePath string) ([]uint64, error) {
 	preSubscribedIndexes := make([]uint64, 0)
 	file, err := os.Open(filePath)

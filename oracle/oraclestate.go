@@ -78,6 +78,10 @@ type OracleState struct {
 	PoolAddress         string
 	Validators          map[uint64]*ValidatorInfo
 	LatestCommitedState OnchainState
+
+	PoolFeesPercent     int
+	PoolFeesAddress     string
+	PoolAccumulatedFees *big.Int
 }
 
 func (p *OracleState) SaveStateToFile() {
@@ -88,7 +92,8 @@ func (p *OracleState) SaveStateToFile() {
 
 	defer file.Close()
 
-	mRoot, enoughData := p.GetMerkleRootIfAny()
+	// Dont run this again, take the existing data
+	//mRoot, enoughData := p.GetMerkleRootIfAny()
 
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
@@ -97,8 +102,8 @@ func (p *OracleState) SaveStateToFile() {
 		"TotalValidators": len(p.Validators),
 		"Network":         p.Network,
 		"PoolAddress":     p.PoolAddress,
-		"MerkleRoot":      mRoot,
-		"EnoughData":      enoughData,
+		//"MerkleRoot":      mRoot,
+		//"EnoughData":      enoughData,
 	}).Info("Saving state to file")
 	encoder.Encode(p)
 }
@@ -143,13 +148,17 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		PoolAddress: cfg.PoolAddress,
 
 		Validators: make(map[uint64]*ValidatorInfo, 0),
+
+		PoolFeesPercent:     cfg.PoolFeesPercent,
+		PoolFeesAddress:     cfg.PoolFeesAddress,
+		PoolAccumulatedFees: big.NewInt(0),
 	}
 }
 
 // Returns false if there wasnt enough data to create a merkle tree
 func (state *OracleState) StoreLatestOnchainState() bool {
 
-	log.Info("freezing state")
+	log.Info("Freezing Validators state")
 
 	// Quick way of coping the whole state
 	validatorsCopy := make(map[uint64]*ValidatorInfo)
@@ -164,34 +173,24 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 		return false
 	}
 	merkleRootStr := hex.EncodeToString(tree.Root)
-	log.Info("Merkle root: StoreLatestOnchainState", merkleRootStr)
+	log.Info("Merkle root: ", merkleRootStr)
 
 	// Merkle proofs for each deposit address
 	proofs := make(map[string][]string)
 	leafs := make(map[string]RawLeaf)
 	for depositAddress, rawLeaf := range depositToRawLeaf {
+
 		// Extra sanity check to make sure the deposit address is the same as the key
 		if depositAddress != rawLeaf.DepositAddress {
 			log.Fatal("Deposit address in raw leaf doesnt match the key")
 		}
-		log.Info("deposit", depositAddress)
-		log.Info("rawLeaf", rawLeaf)
 
 		block := depositToLeaf[depositAddress]
-
-		serrr, err := block.Serialize()
-		if err != nil {
-			log.Fatal("Error serializing block", err)
-		}
-
-		log.Info("Hash of leaf is: ", hex.EncodeToString(serrr))
 		proof, err := tree.GenerateProof(block)
+
 		if err != nil {
 			log.Fatal("could not generate proof for block: ", err)
 		}
-
-		//test := ByteArrayToStringArray(proof.Siblings)
-		//log.Info("Proofs for: ", depositAddress, " rawLeaf: ", rawLeaf, " are:", test)
 
 		// Store the proofs of the deposit address (to be used onchain)
 		proofs[depositAddress] = ByteArrayToArray(proof.Siblings)
@@ -288,16 +287,39 @@ func (state *OracleState) GetEligibleValidators() []uint64 {
 }
 
 func (state *OracleState) IncreaseAllPendingRewards(
-	totalAmount *big.Int) {
+	reward *big.Int) {
 
 	eligibleValidators := state.GetEligibleValidators()
 	numEligibleValidators := big.NewInt(int64(len(eligibleValidators)))
 
-	amountToIncrease := big.NewInt(0).Div(totalAmount, numEligibleValidators)
-	// TODO: Rounding problems. Evenly distribute the remainder
+	// The pool takes PoolFeesPercent cut of the rewards
+	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(state.PoolFeesPercent)))
 
+	// Calculate the pool cut
+	poolCut := big.NewInt(0).Div(aux, big.NewInt(100))
+
+	// And remainder of above operation
+	remainder1 := big.NewInt(0).Mod(aux, big.NewInt(100))
+
+	// The amount to share is the reward minus the pool cut + remainder
+	toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
+	toShareAllValidators.Sub(toShareAllValidators, remainder1)
+
+	// Each validator gets that divided by numEligibleValidators
+	perValidatorReward := big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
+	// And remainder of above operation
+	remainder2 := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
+
+	// Total fees for the pool are: the cut (%) + the remainders
+	totalFees := big.NewInt(0).Add(poolCut, remainder1)
+	totalFees.Add(totalFees, remainder2)
+
+	// Increase pool rewards (fees)
+	state.PoolAccumulatedFees.Add(state.PoolAccumulatedFees, totalFees)
+
+	// Increase eligible validators rewards
 	for _, eligibleIndex := range eligibleValidators {
-		state.Validators[eligibleIndex].PendingRewardsWei.Add(state.Validators[eligibleIndex].PendingRewardsWei, amountToIncrease)
+		state.Validators[eligibleIndex].PendingRewardsWei.Add(state.Validators[eligibleIndex].PendingRewardsWei, perValidatorReward)
 	}
 }
 
