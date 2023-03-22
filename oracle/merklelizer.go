@@ -4,7 +4,9 @@ import (
 	"encoding/hex"
 	"math/big"
 	"sort"
+	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
 
 	solsha3 "github.com/miguelmota/go-solidity-sha3"
@@ -70,8 +72,10 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 		// If the leaf does not exist, create a new one, initing the balance to the current validator balance
 		if !found {
 			allLeafs = append(allLeafs, RawLeaf{
-				DepositAddress:     validator.DepositAddress,
-				AccumulatedBalance: new(big.Int).Set(validator.AccumulatedRewardsWei), // Copy the value
+				// All rewards are aggregated by deposit address
+				DepositAddress: validator.DepositAddress,
+				// Copy the value
+				AccumulatedBalance: new(big.Int).Set(validator.AccumulatedRewardsWei),
 			})
 		}
 	}
@@ -93,7 +97,42 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 			allAccumulatedFromValidators, " vs ", allAccumulatedFromDeposits)
 	}
 
-	return merklelizer.OrderByDepositAddress(allLeafs)
+	// Order the leafs by deposit address
+	orderedByDepositAddress := merklelizer.OrderByDepositAddress(allLeafs)
+
+	// Sanity check to ensure the PoolAddress is not already in the link of DepositAddress
+	// This should never happen and would be a weird missconfiguration
+	for _, leaf := range orderedByDepositAddress {
+		if strings.ToLower(leaf.DepositAddress) == strings.ToLower(state.PoolAddress) {
+			log.Fatal("the PoolAddress is equal to one of the DepositAddress. ",
+				"PoolAddress: ", state.PoolAddress, " DepositAddress: ", leaf.DepositAddress)
+		}
+
+	}
+
+	// Prepend the leaf with the pool fees to the list of leafs. Always the first
+	poolFeesLeaf := RawLeaf{
+		DepositAddress:     state.PoolAddress,
+		AccumulatedBalance: new(big.Int).Set(state.PoolAccumulatedFees),
+	}
+
+	// Pool rewards leaf (address + balance) is the first. Note that the DepositAddress name is reused
+	// which could be missleading
+	orderedByDepositAddress = append([]RawLeaf{poolFeesLeaf}, orderedByDepositAddress...)
+
+	// Before returning the leaf, ensure all of them are valid addresses
+	for _, leaf := range orderedByDepositAddress {
+		if !common.IsHexAddress(leaf.DepositAddress) {
+			log.Fatal("leaf contained a wrong deposit address: ", leaf.DepositAddress)
+		}
+
+		// To avoid compatibility problems, all DepositAddress should be in lowercase
+		if strings.ToLower(leaf.DepositAddress) != leaf.DepositAddress {
+			log.Fatal("all deposit address should be in lowercase: ", leaf.DepositAddress)
+		}
+	}
+
+	return orderedByDepositAddress
 }
 
 // Sort by deposit address

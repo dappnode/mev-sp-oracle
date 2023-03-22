@@ -196,21 +196,19 @@ func Test_StateMachine(t *testing.T) {
 }
 func Test_SaveLoadFromToFile(t *testing.T) {
 
-	original := &OracleState{
-		LatestSlot:  1,
+	state := NewOracleState(&config.Config{
+		PoolAddress: "0x0000000000000000000000000000000000000000",
 		Network:     "mainnet",
-		PoolAddress: "0x1234",
-		Validators:  make(map[uint64]*ValidatorInfo),
-	}
+	})
 
-	original.Validators[10] = &ValidatorInfo{
+	state.Validators[10] = &ValidatorInfo{
 		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(1000),
 		PendingRewardsWei:     big.NewInt(1000),
 		CollateralWei:         big.NewInt(1000),
-		DepositAddress:        "0xa",
-		ValidatorIndex:        "0xb",
-		ValidatorKey:          "0xc",
+		DepositAddress:        "0xa000000000000000000000000000000000000000",
+		ValidatorIndex:        "0xb000000000000000000000000000000000000000",
+		ValidatorKey:          "0xc", // TODO: Fix this, should be uint64
 		ProposedBlocksSlots: []BlockState{
 			BlockState{
 				Reward:    big.NewInt(1000),
@@ -245,13 +243,13 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		}},
 	}
 
-	original.Validators[20] = &ValidatorInfo{
+	state.Validators[20] = &ValidatorInfo{
 		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(13000),
 		PendingRewardsWei:     big.NewInt(100),
 		CollateralWei:         big.NewInt(1000000),
-		DepositAddress:        "0xa",
-		ValidatorIndex:        "0xb",
+		DepositAddress:        "0xa000000000000000000000000000000000000000",
+		ValidatorIndex:        "0xb000000000000000000000000000000000000000",
 		ValidatorKey:          "0xc",
 		ProposedBlocksSlots: []BlockState{
 			BlockState{
@@ -287,13 +285,13 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		}},
 	}
 
-	original.Validators[30] = &ValidatorInfo{
+	state.Validators[30] = &ValidatorInfo{
 		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(53000),
 		PendingRewardsWei:     big.NewInt(000),
 		CollateralWei:         big.NewInt(4000000),
-		DepositAddress:        "0xa",
-		ValidatorIndex:        "0xb",
+		DepositAddress:        "0xa000000000000000000000000000000000000000",
+		ValidatorIndex:        "0xb000000000000000000000000000000000000000",
 		ValidatorKey:          "0xc",
 		// Empty Proposed blocks
 		MissedBlocksSlots: []BlockState{BlockState{
@@ -313,12 +311,12 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 	}
 
 	StateFileName = "test_state.gob"
-	original.SaveStateToFile()
 	defer os.Remove(StateFileName)
+	state.SaveStateToFile()
 
 	recovered, err := ReadStateFromFile()
 	require.NoError(t, err)
-	require.Equal(t, original, recovered)
+	require.Equal(t, state, recovered)
 }
 
 // TODO: Add more tests when spec settled

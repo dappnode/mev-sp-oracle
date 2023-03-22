@@ -301,8 +301,6 @@ func (state *OracleState) IncreaseAllPendingRewards(
 	eligibleValidators := state.GetEligibleValidators()
 	numEligibleValidators := big.NewInt(int64(len(eligibleValidators)))
 
-	log.Info("enter here")
-
 	// The pool takes PoolFeesPercent cut of the rewards
 	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(state.PoolFeesPercent)))
 
