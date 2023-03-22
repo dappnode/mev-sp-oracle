@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"crypto/ecdsa"
 	"flag"
 	"os"
 	"strconv"
@@ -17,6 +18,7 @@ type Config struct {
 	ExecutionEndpoint     string
 	Network               string
 	PoolAddress           string
+	UpdaterAddress        string
 	DeployedSlot          uint64
 	CheckPointSizeInSlots uint64
 	PostgresEndpoint      string
@@ -62,14 +64,29 @@ func NewCliConfig() (*Config, error) {
 		log.Fatal("pool-fees-percent flag is not present")
 	}
 
+	// Mandatory flag
+	if *network != "mainnet" && *network != "goerli" {
+		log.Fatal("wrong network provided, must be mainnet or goerli")
+	}
+
 	if *poolFeesAddress == *poolAddress {
 		log.Fatal("pool-fees-address and pool-address can't be equal")
 	}
 
+	if !*dryRun && *deployerPrivateKey == "" {
+		log.Fatal("you must provide a private key to update the contract root")
+	}
+
 	// Check deployerPrivateKey is valid
-	_, err := crypto.HexToECDSA(*deployerPrivateKey)
+	pKey, err := crypto.HexToECDSA(*deployerPrivateKey)
 	if err != nil {
 		log.Fatal("wrong private key, couldn't parse it: ", err)
+	}
+
+	publicKey := pKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatal("error casting public key to ECDSA")
 	}
 
 	if !common.IsHexAddress(*poolAddress) {
@@ -85,6 +102,7 @@ func NewCliConfig() (*Config, error) {
 		ExecutionEndpoint:     *executionEndpoint,
 		Network:               *network,
 		PoolAddress:           *poolAddress,
+		UpdaterAddress:        crypto.PubkeyToAddress(*publicKeyECDSA).Hex(),
 		DeployedSlot:          *deployedSlot,
 		CheckPointSizeInSlots: *checkPointSizeInSlots,
 		PostgresEndpoint:      *postgresEndpoint,
@@ -92,11 +110,6 @@ func NewCliConfig() (*Config, error) {
 		PoolFeesPercent:       *poolFeesPercent,
 		PoolFeesAddress:       *poolFeesAddress,
 		DryRun:                *dryRun,
-	}
-	if conf.DryRun {
-		log.Warn("The pool contract will NOT be updated, running in dry-run mode")
-	} else {
-		log.Warn("The pool contract will be updated. Make sure it has balance to cover tx fees")
 	}
 	logConfig(conf)
 	return conf, nil
@@ -108,6 +121,7 @@ func logConfig(cfg *Config) {
 		"ExecutionEndpoint":     cfg.ExecutionEndpoint,
 		"Network":               cfg.Network,
 		"PoolAddress":           cfg.PoolAddress,
+		"UpdaterAddress":        cfg.UpdaterAddress,
 		"DeployedSlot":          cfg.DeployedSlot,
 		"CheckPointSizeInSlots": cfg.CheckPointSizeInSlots,
 		"PostgresEndpoint":      cfg.PostgresEndpoint,
@@ -116,6 +130,14 @@ func logConfig(cfg *Config) {
 		"PoolFeesAddress":       cfg.PoolFeesAddress,
 		"DryRun":                cfg.DryRun,
 	}).Info("Cli Config:")
+
+	log.Info("The smoothing pool at ", cfg.PoolAddress, " takes a cut of ", cfg.PoolFeesPercent, "% ensure you control the keys for ", cfg.PoolAddress, " to claim the fees")
+
+	if cfg.DryRun {
+		log.Warn("The pool contract will NOT be updated, running in dry-run mode")
+	} else {
+		log.Warn("The pool contract will be updated. Make the account has balance to cover tx fees: ", cfg.UpdaterAddress)
+	}
 }
 
 // TODO: Unused

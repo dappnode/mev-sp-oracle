@@ -35,13 +35,17 @@ Use `--dry-run` to avoid updating the contract, useful when you want to recreate
 ```console
 $ go build
 $ ./mev-sp-oracle \
+./mev-sp-oracle \
 --consensus-endpoint="http://127.0.0.1:5051" \
 --execution-endpoint="http://127.0.0.1:8545" \
 --postgres-endpoint="postgres://xxx:yyy@localhost:5432" \
---deployed-slot=4500000 \
+--deployed-slot=5195000 \
 --pool-address="0x455e5aa18469bc6ccef49594645666c587a3a71b" \
---checkpoint-size=50 \
---deployer-private-key=xxx (todo use file)
+--checkpoint-size=100 \
+--deployer-private-key="xxx" \ TODO: use file
+--pool-fees-percent=10 \
+--pool-fees-address=0x95222290dd7278aa3ddd389cc1e1d165cc4bafe5 \
+--network=goerli
 ```
 
 ## How to deploy

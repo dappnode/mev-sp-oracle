@@ -92,7 +92,8 @@ func (p *OracleState) SaveStateToFile() {
 
 	defer file.Close()
 
-	mRoot, enoughData := p.GetMerkleRootIfAny()
+	// Dont run this again, take the existing data
+	//mRoot, enoughData := p.GetMerkleRootIfAny()
 
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
@@ -101,8 +102,8 @@ func (p *OracleState) SaveStateToFile() {
 		"TotalValidators": len(p.Validators),
 		"Network":         p.Network,
 		"PoolAddress":     p.PoolAddress,
-		"MerkleRoot":      mRoot,
-		"EnoughData":      enoughData,
+		//"MerkleRoot":      mRoot,
+		//"EnoughData":      enoughData,
 	}).Info("Saving state to file")
 	encoder.Encode(p)
 }
@@ -157,7 +158,7 @@ func NewOracleState(cfg *config.Config) *OracleState {
 // Returns false if there wasnt enough data to create a merkle tree
 func (state *OracleState) StoreLatestOnchainState() bool {
 
-	log.Info("freezing state")
+	log.Info("Freezing Validators state")
 
 	// Quick way of coping the whole state
 	validatorsCopy := make(map[uint64]*ValidatorInfo)
@@ -172,34 +173,24 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 		return false
 	}
 	merkleRootStr := hex.EncodeToString(tree.Root)
-	log.Info("Merkle root: StoreLatestOnchainState", merkleRootStr)
+	log.Info("Merkle root: ", merkleRootStr)
 
 	// Merkle proofs for each deposit address
 	proofs := make(map[string][]string)
 	leafs := make(map[string]RawLeaf)
 	for depositAddress, rawLeaf := range depositToRawLeaf {
+
 		// Extra sanity check to make sure the deposit address is the same as the key
 		if depositAddress != rawLeaf.DepositAddress {
 			log.Fatal("Deposit address in raw leaf doesnt match the key")
 		}
-		log.Info("deposit", depositAddress)
-		log.Info("rawLeaf", rawLeaf)
 
 		block := depositToLeaf[depositAddress]
-
-		serrr, err := block.Serialize()
-		if err != nil {
-			log.Fatal("Error serializing block", err)
-		}
-
-		log.Info("Hash of leaf is: ", hex.EncodeToString(serrr))
 		proof, err := tree.GenerateProof(block)
+
 		if err != nil {
 			log.Fatal("could not generate proof for block: ", err)
 		}
-
-		//test := ByteArrayToStringArray(proof.Siblings)
-		//log.Info("Proofs for: ", depositAddress, " rawLeaf: ", rawLeaf, " are:", test)
 
 		// Store the proofs of the deposit address (to be used onchain)
 		proofs[depositAddress] = ByteArrayToArray(proof.Siblings)

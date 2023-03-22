@@ -72,8 +72,8 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 		// If the leaf does not exist, create a new one, initing the balance to the current validator balance
 		if !found {
 			allLeafs = append(allLeafs, RawLeaf{
-				// All rewards are aggregated by deposit address
-				DepositAddress: validator.DepositAddress,
+				// In lowercase to avoid confusion when claiming
+				DepositAddress: strings.ToLower(validator.DepositAddress),
 				// Copy the value
 				AccumulatedBalance: new(big.Int).Set(validator.AccumulatedRewardsWei),
 			})
@@ -112,7 +112,7 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 
 	// Prepend the leaf with the pool fees to the list of leafs. Always the first
 	poolFeesLeaf := RawLeaf{
-		DepositAddress:     state.PoolAddress,
+		DepositAddress:     strings.ToLower(state.PoolAddress),
 		AccumulatedBalance: new(big.Int).Set(state.PoolAccumulatedFees),
 	}
 
@@ -152,7 +152,9 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 
 	orderedRawLeafs := merklelizer.AggregateValidatorsIndexes(state)
 
-	log.Info("Generating tree containing ", len(orderedRawLeafs), " leafs")
+	log.WithFields(log.Fields{
+		"Leafs": len(orderedRawLeafs),
+	}).Info("Generating tree")
 
 	// TODO: refactor this.
 	// Stores the deposit address -> hashed leaf
@@ -169,9 +171,12 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		depositToLeaf[leaf.DepositAddress] = &testData{data: leafHash}
 		depositToRawLeaf[leaf.DepositAddress] = leaf
 
-		log.Info("leafHash: ", hex.EncodeToString(leafHash), " Deposit addres: ", leaf.DepositAddress)
-		log.Info("leaf.DepositAddress: ", leaf.DepositAddress)
-		log.Info("leaf.AccumulatedBalance: ", leaf.AccumulatedBalance)
+		log.WithFields(log.Fields{
+			"DepositAddress":     leaf.DepositAddress,
+			"AccumulatedBalance": leaf.AccumulatedBalance,
+			"LeafHash":           hex.EncodeToString(leafHash),
+		}).Info("Leaf information")
+
 	}
 
 	if len(blocks) < 2 {
@@ -211,7 +216,4 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 	}
 
 	return depositToLeaf, depositToRawLeaf, tree, true
-
-	// TODO: Update contract with root.
-	// TODO: Generate dump with proofs.
 }
