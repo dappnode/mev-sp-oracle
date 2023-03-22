@@ -25,8 +25,8 @@ The oracle shall contain the following configuration parameters, that will deter
 * `OWNER_ADDRESS`: Address with `0x` prefix of the account allowed to update the smoothing pool contract.
 * `POOL_CONTRACT_ADDRESS`: Address with `0x` prefix of the smoothing pool contract.
 * `NETWORK`: Network where rewards are being calculated: `mainnet` or `goerli`.
-* `FEES_OWNER_ADDRESS`: Address with `0x` prefix of the account that can claim the smoothing pool fees.
-* `POOL_FEES_PERCENT`: Amount in % that `FEES_OWNER_ADDRESS` gets for every reward sent to the smoothing pool. Note that it also gets rounding remainders on top, but this is almost neglectable.
+* `POOL_FEES_ADDRESS`: Address with `0x` prefix of the account that can claim the smoothing pool fees.
+* `POOL_FEES_PERCENT`: Amount in % that `POOL_FEES_ADDRESS` gets for every reward sent to the smoothing pool. Note that it also gets rounding remainders on top, but this is almost neglectable.
 
 ## Source of rewards
 
@@ -94,13 +94,21 @@ All validator rewards are updated on every **finalized** block that is added to 
   * Each validator gets its `PendingRewards` increased by `reward/active_subscriptions`.
   * The proposer of the block gets `AccumulatedRewards+=PendingRewards` and `PendingRewards=0`, meaning that it consolidates its balance, converting all pending rewards into accumulated rewards ready to claim.
 * If a new manual subscription is detected with `COLLATERAL_GWEI`, update `PendingRewards+=COLLATERAL_GWEI`. Since its pending, whenever the validator proposes a block, the collateral will be returned, since it will be added to the accumulated rewards.
-* If reward is coming from a donation, increase al validators `PendingRewards` increased by `reward/active_subscriptions`.
+* If reward is coming from a donation, increase all validators `PendingRewards` increased by `reward/active_subscriptions`.
 
 
 TODO: Draw diagram with flow.
+TODO: Include subscriptions and unsubscriptions
 
-> note: fees are not considered in the calculation TODO:
-* talk about the account that gets the fees and the configured %. TODO: Still unclear how to handle it
+When calculating the rewards, the pool operator takes a cut for each reward that is sent to the pool, where `POOL_FEES_ADDRESS` gets `POOL_FEES_PERCENT`. Note that the funds are not sent *per se* to the `POOL_FEES_ADDRESS` but they are added as a leaf in the merkle tree (see next section). In other words, the owner of the pool can claim the fees as if it were a validator, by providing a valid merkle proof and using said address as sender.
+
+For each reward (see types of rewards) that is sent to the pool, its distributed as follows:
+* Get the amount of eligible validators (validators that are eligible for rewards) `Active` or `YellowCard` state.
+* The pool takes `POOL_FEES_PERCENT` of that reward, increasing its balance `AccumulatedRewards` by that amount + remainder (if any). Note that all the arithmetic is integer based without decimals, hence the remainder.
+* The reward minus the cut (and remainder) is shared among all eligible validators. Note that if there is also a reminder, it goes to the `POOL_FEES_PERCENT`, increasing its `AccumulatedRewards`.
+* Each eligible validator gets its `PendingRewards` increased by that amount.
+
+Note that the pool gets the remainders from two different divisions, but this is done for simplicity and since the calculations are in wei, the value of it is neglectable, and makes the oracle fair with all validator, where each on of the eligible ones get the exact same amount of rewards.
 
 ## Merkle trees and proofs
 
@@ -119,12 +127,14 @@ TODO:
 https://excalidraw.com/#json=B9-GYxQulDA5PA-xanxwP,-D8sGwTKVlykXXLiLZPpeA
 
 * The merkle tree leafs are ordered by its deposit address in ascending order.
-* The merkle leafs are hashed with solidity `sha3` hasing algorithm.
+* The merkle tree is prepended (first element) with a leaf containing `POOL_FEES_ADDRESS` and the accumulated balance. See rewards calculation section.
+* The merkle leafs are hashed with solidity `sha3` hashing algorithm.
 * Deposit addresses in the merkle tree shall be unique.
 * The hashing algorithm for the merkle tree is `keccak256`.
 * The hashing algotithm for the merkle tree shall sort sibling pairs.
+* The deposit addresses in the merkle tree shall be in lower case.
 
-See test vectors for more information.
+See test vectors for more information. TODO:
 
 Every `CHECKPOINT_SIZE_SLOTS` the oracle updates in the smoothing pool smart contract stored in the Ethereum blockchain a new merkle root, that summarizes the rewards that each address can claim. Anyone that controls said address, can claim their rewards by providing a valid merkle proof, prooving that a given leaf is contained within the merkle tree represented by that merkle root.
 
