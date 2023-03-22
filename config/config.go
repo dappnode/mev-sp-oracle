@@ -77,6 +77,10 @@ func NewCliConfig() (*Config, error) {
 		log.Fatal("you must provide a private key to update the contract root")
 	}
 
+	if *dryRun && *deployerPrivateKey != "" {
+		log.Fatal("dry-run mode specified buy also provided a deployer-private-key")
+	}
+
 	// Check deployerPrivateKey is valid
 	pKey, err := crypto.HexToECDSA(*deployerPrivateKey)
 	if err != nil {
