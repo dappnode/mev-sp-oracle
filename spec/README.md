@@ -88,31 +88,26 @@ With the incoming rewards to the pool, the oracle calculates two different types
 
 It's defined as **consolidate balance** when a validator proposes a block whose reward is correctly sent to the smoothing pool (`POOL_CONTRACT_ADDRESS` address). When a validator consolidates its rewards, all its `PendingRewards` are added to its `AccumulatedRewards`, meaning that what was pending is now ready to claim at any time. Note also that after performing this operation the `PendingRewards` are reset. So consolidating can be seeing as a way of converting the `Pending` into `Accumulated`.
 
-All validator rewards are updated on every **finalized** block that is added to the chain, where the reward (see above for different sources of rewards) is shared evenly among all subscribed validators in the pool. `AccumulatedRewards` and `PendingRewards` are updated as follows:
-* New reward is sent to the smoothing pool.
-* If reward is coming from a block prooposal from a subscribed validator to the pool:
-  * Each validator gets its `PendingRewards` increased by `reward/active_subscriptions`.
-  * The proposer of the block gets `AccumulatedRewards+=PendingRewards` and `PendingRewards=0`, meaning that it consolidates its balance, converting all pending rewards into accumulated rewards ready to claim.
-* If a new manual subscription is detected with `COLLATERAL_GWEI`, update `PendingRewards+=COLLATERAL_GWEI`. Since its pending, whenever the validator proposes a block, the collateral will be returned, since it will be added to the accumulated rewards.
-* If reward is coming from a donation, increase all validators `PendingRewards` increased by `reward/active_subscriptions`.
+All validator rewards are updated on every **finalized** block that is added to the chain. It is important to highlight that it is only done on finalized blocks, since this implies that the block is non-reversable and no reorgs are possible at this point (unless something major happens).
 
+When calculating the rewards, the pool operator takes a cut for each reward that is sent to the pool, where `POOL_FEES_ADDRESS` gets `POOL_FEES_PERCENT`. The rest of the rewards are shared evenly among all eligible validators.
+
+Regarding the pool fees, note that the funds are not sent *per se* to the `POOL_FEES_ADDRESS` but they are added as a leaf in the merkle tree (see merkle tree section). In other words, the owner of the pool can claim the fees as if it were a validator, by providing a valid merkle proof and using said address as sender.
+
+For each reward (see types of rewards) that is sent to the pool on a finalized block, it is distributed as follows:
+* Get the amount of eligible validators (validators that are eligible for rewards) `Active` or `YellowCard` state.
+* The pool takes `POOL_FEES_PERCENT` of that reward, increasing its balance `AccumulatedRewards` by that amount + remainder (if any). Note that all the arithmetic is integer based without decimals, hence the remainder.
+* The reward minus the cut (and the remainder) is shared among all eligible validators. Note that if there is also a reminder, it goes to the `POOL_FEES_ADDRESS`, increasing its `AccumulatedRewards`.
+* Each eligible validator gets its `PendingRewards` increased by that amount.
+
+Note that the pool gets the remainders from two different divisions, but this is done for simplicity and since the calculations are in wei, the value of it is neglectable. Doing this makes the oracle fair with all validators, since each one of them gets the exact same amount of rewards. So in practice, `POOL_FEES_ADDRESS` just gets `POOL_FEES_PERCENT`.
 
 TODO: Draw diagram with flow.
 TODO: Include subscriptions and unsubscriptions
 
-When calculating the rewards, the pool operator takes a cut for each reward that is sent to the pool, where `POOL_FEES_ADDRESS` gets `POOL_FEES_PERCENT`. Note that the funds are not sent *per se* to the `POOL_FEES_ADDRESS` but they are added as a leaf in the merkle tree (see next section). In other words, the owner of the pool can claim the fees as if it were a validator, by providing a valid merkle proof and using said address as sender.
-
-For each reward (see types of rewards) that is sent to the pool, its distributed as follows:
-* Get the amount of eligible validators (validators that are eligible for rewards) `Active` or `YellowCard` state.
-* The pool takes `POOL_FEES_PERCENT` of that reward, increasing its balance `AccumulatedRewards` by that amount + remainder (if any). Note that all the arithmetic is integer based without decimals, hence the remainder.
-* The reward minus the cut (and remainder) is shared among all eligible validators. Note that if there is also a reminder, it goes to the `POOL_FEES_PERCENT`, increasing its `AccumulatedRewards`.
-* Each eligible validator gets its `PendingRewards` increased by that amount.
-
-Note that the pool gets the remainders from two different divisions, but this is done for simplicity and since the calculations are in wei, the value of it is neglectable, and makes the oracle fair with all validator, where each on of the eligible ones get the exact same amount of rewards.
-
 ## Merkle trees and proofs
 
-Since storing all rewards calculations on-chain would be almost impossible and very expensive, merkle trees are used to summarize the state of all validators tracked by the oracle in a given value called **merkle root*. All the computation of the rewards is done off-chain by the oracle, and every `CHECKPOINT_SIZE_SLOTS` all rewards all calculated and summarized in a new merkle root that is stored onchain in Ethereum.
+Since storing all rewards calculations on-chain would be almost impossible and very expensive, merkle trees are used to summarize the state of all validators tracked by the oracle in a given value called **merkle root*. All the computation of the rewards is done off-chain by the oracle, and on every `CHECKPOINT_SIZE_SLOTS` all rewards all calculated and summarized in a new merkle root that is stored on-chain in Ethereum.
 
 Each leaf of the tree contains two values, the deposit address and the accumulated balance. Note that in order to be more gas efficient and allow to claim of multiple validators in just one transactions, all validators belonging to the same deposit address are aggregated. Meaning that if deposit address `da1` deposited validators `v1`, `v2` and `v3` and all of them are subscribed to the pool with respective accumulated balances of `a1`, `a2` and `a3`, then this is represented as a single leaf in the tree where `da1` and `v1+v2+v3`.
 
@@ -138,7 +133,7 @@ See test vectors for more information. TODO:
 
 Every `CHECKPOINT_SIZE_SLOTS` the oracle updates in the smoothing pool smart contract stored in the Ethereum blockchain a new merkle root, that summarizes the rewards that each address can claim. Anyone that controls said address, can claim their rewards by providing a valid merkle proof, prooving that a given leaf is contained within the merkle tree represented by that merkle root.
 
-Since all this data is not available in Ethereum, the oracle shall provide this proofs so that they can be used off-chain. Note that this proofs can be generated by anyone compliying with this specs and with the existing available data on-chain. See [merkle proofs](https://ethereum.org/es/developers/tutorials/merkle-proofs-for-offline-data-integrity/)
+Since all this data is not available in Ethereum, the oracle shall provide this proofs so that they can be used off-chain. Note that these proofs can be generated by anyone compliying with this specs and with the existing available data on-chain. See [merkle proofs](https://ethereum.org/es/developers/tutorials/merkle-proofs-for-offline-data-integrity/)
 
 
 ## Smart contract
@@ -153,7 +148,17 @@ https://github.com/dappnode/mev-sp-contracts
 
 ## Oracle api
 
-Optionally, the oracle can have an api to get the state of the validators such as balances, merkle proofs, merkle root, etc.
+Optionally, the oracle can have an api to get the state of the validators such as balances, merkle proofs, merkle root, etc. Some of the recommended endpoints are:
+
+TODO: Add doc on this
+
+curl 157.90.93.245:7300/status (returns status)
+curl 157.90.93.245:7300/depositadddress/459438 (returns deposit address of a given validator index)
+curl 157.90.93.245:7300/proof/0x005CD1608e40d1e775a97d12e4f594029567C071 (returns the merkle proof of said deposit address for latest onchain state)
+curl 157.90.93.245:7300/validatoronchainstate/179434 (return the state of the validator index)
+
+TODO: Get latest onchain merkle root
+TODO:
 
 ## FAQ
 TODO:
