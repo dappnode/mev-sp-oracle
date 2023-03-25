@@ -26,7 +26,9 @@ const (
 	pathStatus                = "/status"
 	pathLatestCheckpoint      = "/latestcheckpoint"
 	pathLatestMerkleProof     = "/proof/{depositaddress}"
+	pathLatestMerkleRoot      = "/merkleroot"
 	pathDepositAddressByIndex = "/depositadddress/{valindex}"
+	pathPoolStatistics        = "/poolstatistics"
 
 	// TODO: better valindex=xxx
 
@@ -71,6 +73,35 @@ type httpOkDepositAddress struct {
 	DepositAddress   string `json:"deposit_address"`
 	ValidatorIndex   uint64 `json:"validator_index"`
 	ValidatorAddress string `json:"validator_address"`
+}
+
+type httpOkMerkleRoot struct {
+	MerkleRoot string `json:"merkle_root"`
+}
+
+type httpOkPoolStatatistics struct {
+	OnchainMerkleRoot  string `json:"onchain_merkle_root"`
+	TotalSubscribed    uint64 `json:"total_subscribed_validators"`
+	TotalActive        uint64 `json:"total_active_validators"`
+	TotalYellowCard    uint64 `json:"total_yellowcard_validators"`
+	TotalRedCard       uint64 `json:"total_redcard_validators"`
+	TotalBanned        uint64 `json:"total_banned_validators"`
+	TotalNotSubscribed uint64 `json:"total_notsubscribed_validators"`
+
+	LatestCheckpointSlot uint64 `json:"latest_checkpoint_slot"`
+	NextCheckpointSlot   uint64 `json:"next_checkpoint_slot"`
+
+	// TODO: Clarify if wei or gwei and add to name
+	TotalAccumulatedRewards *big.Int `json:"total_accumulated_rewards"`
+	// TODO: Clarify if wei or gwei and add to name
+	TotalPendingRewarads *big.Int `json:"total_pending_rewards"`
+
+	// TODO: Split Proposed in Vanila/Mev
+	//TotalVanilaBlocks   uint64
+	//TotalMevBlocks      uint64
+	TotalProposedBlocks uint64 `json:"total_proposed_blocks"`
+	TotalMissedBlocks   uint64 `json:"total_missed_blocks"`
+	TotalWrongFeeBlocks uint64 `json:"total_wrongfee_blocks"`
 }
 
 type httpOkValidatorState struct {
@@ -147,11 +178,13 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc("/", m.handleRoot).Methods(http.MethodGet)
 	r.HandleFunc(pathStatus, m.handleStatus).Methods(http.MethodGet)
 	r.HandleFunc(pathLatestMerkleProof, m.handleLatestMerkleProof)
+	r.HandleFunc(pathLatestMerkleRoot, m.handleLatestMerkleRoot)
 	r.HandleFunc(pathLatestCheckpoint, m.handleLatestCheckpoint)
 	r.HandleFunc(pathDepositAddressByIndex, m.handleDepositAddressByIndex)
 
 	r.HandleFunc(pathValidatorOnchainStateByIndex, m.handleValidatorOnchainStateByIndex)
 	r.HandleFunc(pathValidatorOffchainStateByIndex, m.handleValidatorOffchainStateByIndex)
+	r.HandleFunc(pathPoolStatistics, m.handlePoolStatistics)
 
 	//r.Use(mux.CORSMethodMiddleware(r))
 
@@ -187,7 +220,78 @@ func (m *ApiService) StartHTTPServer() error {
 }
 
 func (m *ApiService) handleRoot(w http.ResponseWriter, req *http.Request) {
-	m.respondOK(w, "")
+	m.respondOK(w, "see api doc for available endpoints")
+}
+
+func (m *ApiService) handlePoolStatistics(w http.ResponseWriter, req *http.Request) {
+	// TODO: Compare they are equal. They will be unless the oracle is restarted and
+	// has to catch up
+	//oracleMerkleRoot := "0x" + m.OracleState.LatestCommitedState.MerkleRoot
+
+	contractMerkleRoot, err := m.Onchain.GetMerkleRoot()
+	if err != nil {
+		m.respondError(w, http.StatusBadRequest, "could not get latest merkle root from chain")
+		return
+	}
+
+	totalSubscribed := uint64(0)
+	totalActive := uint64(0)
+	totalYellowCard := uint64(0)
+	totalRedCard := uint64(0)
+	totalBanned := uint64(0)
+	totalNotSubscribed := uint64(0)
+
+	totalAccumulatedRewards := big.NewInt(0)
+	totalPendingRewards := big.NewInt(0)
+
+	//totalVanilaBlocks := 0
+	//totalMevBlocks := 0
+	totalProposedBlocks := uint64(0)
+	totalMissedBlocks := uint64(0)
+	totalWrongFeeBlocks := uint64(0)
+
+	// Unsure if its better to return the latest commited or the oracle state
+	for _, validator := range m.OracleState.LatestCommitedState.Validators {
+		if validator.ValidatorStatus == oracle.Active {
+			totalActive++
+		} else if validator.ValidatorStatus == oracle.YellowCard {
+			totalYellowCard++
+		} else if validator.ValidatorStatus == oracle.RedCard {
+			totalRedCard++
+		} else if validator.ValidatorStatus == oracle.Banned {
+			totalBanned++
+		} else if validator.ValidatorStatus == oracle.NotSubscribed {
+			totalNotSubscribed++
+		}
+		totalAccumulatedRewards.Add(totalAccumulatedRewards, validator.AccumulatedRewardsWei)
+		totalPendingRewards.Add(totalPendingRewards, validator.PendingRewardsWei)
+
+		totalProposedBlocks += uint64(len(validator.ProposedBlocksSlots))
+		totalMissedBlocks += uint64(len(validator.MissedBlocksSlots))
+		totalWrongFeeBlocks += uint64(len(validator.WrongFeeBlocksSlots))
+	}
+
+	totalSubscribed = totalActive + totalYellowCard + totalRedCard
+
+	m.respondOK(w, httpOkPoolStatatistics{
+		OnchainMerkleRoot:  contractMerkleRoot,
+		TotalSubscribed:    totalSubscribed,
+		TotalActive:        totalActive,
+		TotalYellowCard:    totalYellowCard,
+		TotalRedCard:       totalRedCard,
+		TotalBanned:        totalBanned,
+		TotalNotSubscribed: totalNotSubscribed,
+
+		LatestCheckpointSlot: m.OracleState.LatestSlot,
+		NextCheckpointSlot:   m.OracleState.LatestSlot + m.Onchain.Cfg.CheckPointSizeInSlots,
+
+		TotalAccumulatedRewards: totalAccumulatedRewards,
+		TotalPendingRewarads:    totalPendingRewards,
+
+		TotalProposedBlocks: totalProposedBlocks,
+		TotalMissedBlocks:   totalMissedBlocks,
+		TotalWrongFeeBlocks: totalWrongFeeBlocks,
+	})
 }
 
 func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
@@ -283,6 +387,20 @@ func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Re
 		CheckpointSlot:         m.OracleState.LatestCommitedState.Slot,
 		Proofs:                 proofs,
 		RegisteredValidators:   registeredValidators,
+	})
+}
+
+func (m *ApiService) handleLatestMerkleRoot(w http.ResponseWriter, req *http.Request) {
+	// This is the latest merkle root tracked from the oracle.
+	//oracleMerkleRoot := "0x" + m.OracleState.LatestCommitedState.MerkleRoot
+
+	contractMerkleRoot, err := m.Onchain.GetMerkleRoot()
+	if err != nil {
+		m.respondError(w, http.StatusBadRequest, "could not get latest merkle root from chain")
+		return
+	}
+	m.respondOK(w, httpOkMerkleRoot{
+		MerkleRoot: contractMerkleRoot,
 	})
 }
 
