@@ -4,9 +4,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"mev-sp-oracle/config"
 	"testing"
 
+	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/stretchr/testify/require"
 )
 

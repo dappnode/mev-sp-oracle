@@ -2,10 +2,10 @@ package oracle
 
 import (
 	"math/big"
-	"mev-sp-oracle/config"
 	"os"
 	"testing"
 
+	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/stretchr/testify/require"
 )
 

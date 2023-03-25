@@ -9,14 +9,15 @@ import (
 	"strconv"
 	"time"
 
-	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
-	"mev-sp-oracle/contract"
+	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/contract"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -48,10 +49,6 @@ type Onchain struct {
 	Contract        *contract.Contract
 }
 
-// Fetches external data:
-// - consensus client
-// - execution client
-// - pool contract
 func NewOnchain(cfg config.Config) *Onchain {
 
 	// Dial the execution client
@@ -119,6 +116,40 @@ func NewOnchain(cfg config.Config) *Onchain {
 		Cfg:             &cfg,
 		Contract:        contract,
 	}
+}
+
+func (f *Onchain) AreNodesInSync() bool {
+	var err error
+	var execSync *ethereum.SyncProgress
+	var consSync *api.SyncState
+
+	// TODO: Perhaps in all interactions allow a max number of failures and then error/panic
+	for {
+		execSync, err = f.ExecutionClient.SyncProgress(context.Background())
+		if err != nil {
+			log.Warn("Error fetching execution client sync progress: ", err)
+			time.Sleep(15 * time.Second)
+			continue
+		}
+		break
+	}
+
+	for {
+		consSync, err = f.ConsensusClient.NodeSyncing(context.Background())
+		if err != nil {
+			log.Warn("Error fetching consensus client sync progress: ", err)
+			time.Sleep(15 * time.Second)
+			continue
+		}
+		break
+	}
+
+	// Exeuction client returns nil if not syncing (in sync)
+	// Give couple of slots to consensus client
+	if execSync == nil && (consSync.SyncDistance < 2) {
+		return true
+	}
+	return false
 }
 
 // TODO: rename to getConsensusblock?
@@ -267,6 +298,18 @@ func (o *Onchain) GetMerkleRoot() (string, error) {
 		return "", errors.Wrap(err, "could not get rewards root from pool contract")
 	}
 	return "0x" + hex.EncodeToString(rewardsRoot[:]), nil
+}
+
+func (o *Onchain) GetEthBalance(address string) *big.Int {
+	account := common.HexToAddress(address)
+	balanceWei, err := o.ExecutionClient.BalanceAt(context.Background(), account, nil)
+
+	// Allow some retries before failing
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return balanceWei
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {

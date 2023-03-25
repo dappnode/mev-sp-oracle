@@ -3,8 +3,7 @@ package oracle
 import (
 	"testing"
 
-	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
-
+	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/stretchr/testify/require"
 )
 
