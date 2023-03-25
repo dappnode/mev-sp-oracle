@@ -88,26 +88,25 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		finalizedSlot := finalizedEpoch * SlotsInEpoch
 
 		if finalizedSlot > oracleInstance.State.LatestSlot {
-			err = oracleInstance.AdvanceStateToNextSlot()
+			processedSlot, err := oracleInstance.AdvanceStateToNextSlot()
 			if err != nil {
 				log.Fatal(err)
 			}
 			slotToLatestFinalized := finalizedSlot - oracleInstance.State.LatestSlot
 
 			// Log progress every x slots
-			if finalizedSlot%300 == 0 {
-				log.Info("[", oracleInstance.State.LatestSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
-					slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
-			}
+			//if finalizedSlot%300 == 0 {
+			log.Info("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
+				slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
+			//}
 		} else {
 			log.WithFields(log.Fields{
-				"finalizedSlot":    finalizedSlot,
-				"finalizedEpoch":   finalizedEpoch,
-				"oracleStateSlot":  oracleInstance.State.LatestSlot,
-				"oracleStateEpoch": oracleInstance.State.LatestSlot / SlotsInEpoch,
+				"finalizedSlot":   finalizedSlot,
+				"finalizedEpoch":  finalizedEpoch,
+				"oracleStateSlot": oracleInstance.State.LatestSlot,
 			}).Info("Waiting for new finalized slot")
-
-			time.Sleep(30 * time.Second)
+			time.Sleep(60 * time.Second)
+			continue
 		}
 
 		// How often we store data in the database in slots

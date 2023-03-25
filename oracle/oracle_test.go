@@ -21,8 +21,9 @@ func Test_EndToEnd_VanilaReward(t *testing.T) {
 		DeployedSlot:          5344344,
 	}, onchain)
 	oracle.State.LatestSlot = oracle.cfg.DeployedSlot - 1
-	err := oracle.AdvanceStateToNextSlot()
+	slot, err := oracle.AdvanceStateToNextSlot()
 	require.NoError(t, err)
+	require.Equal(t, oracle.cfg.DeployedSlot, slot)
 	//log.Info("checkpoint", checkpointInfo)
 
 	// TODO: all these test are unfinished!
@@ -62,7 +63,8 @@ func Test_EndToEnd_NoSubscriptions(t *testing.T) {
 		DeployedSlot:          5323601,
 	}, onchain)
 	oracle.State.LatestSlot = 5323600
-	err := oracle.AdvanceStateToNextSlot()
+	slot, err := oracle.AdvanceStateToNextSlot()
+	require.Equal(t, oracle.cfg.DeployedSlot, slot)
 	require.NoError(t, err)
 	//log.Info("checkpoint", checkpointInfo)
 	_ = oracle

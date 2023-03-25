@@ -45,6 +45,12 @@ type BlockState struct {
 	Slot      uint64
 }
 
+type Donation struct {
+	Amount *big.Int
+	Block  uint64
+	TxHash string
+}
+
 type ValidatorInfo struct {
 	ValidatorStatus       int
 	AccumulatedRewardsWei *big.Int // TODO not sure if this is gwei or wei
@@ -77,6 +83,7 @@ type OracleState struct {
 	Network             string
 	PoolAddress         string
 	Validators          map[uint64]*ValidatorInfo
+	Donations           []Donation
 	LatestCommitedState OnchainState
 
 	PoolFeesPercent     int
@@ -148,11 +155,22 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		PoolAddress: cfg.PoolAddress,
 
 		Validators: make(map[uint64]*ValidatorInfo, 0),
+		Donations:  make([]Donation, 0),
 
 		PoolFeesPercent:     cfg.PoolFeesPercent,
 		PoolFeesAddress:     cfg.PoolFeesAddress,
 		PoolAccumulatedFees: big.NewInt(0),
 	}
+}
+
+// TODO: Test
+func (state *OracleState) AddDonation(amountWei *big.Int) (string, bool) {
+	state.Donations = append(state.Donations, Donation{
+		Amount: amountWei,
+		Block:  uint64(0), // TODO
+		TxHash: "TODO",
+	})
+	return "", false
 }
 
 // Returns false if there wasnt enough data to create a merkle tree

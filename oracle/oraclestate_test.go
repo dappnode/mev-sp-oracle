@@ -24,6 +24,11 @@ func Test_AddSubscription(t *testing.T) {
 	require.Equal(t, big.NewInt(100), state.Validators[10].AccumulatedRewardsWei)
 }
 
+func Test_AddDonation(t *testing.T) {
+	// TODO:
+	require.Equal(t, 1, 2)
+}
+
 func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 
 	state := NewOracleState(&config.Config{

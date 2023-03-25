@@ -176,7 +176,16 @@ func (b *VersionedSignedBeaconBlock) GetProposerTip(blockHeader *types.Header, t
 // Detects "Transfer" transactions to the poolAddress and adds them into a single number
 // Note that ERC20 transfers are not supported, not detected by this function.
 // TODO: Note that if the tx is done via a smart contract the donation wont be detected here
-func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) (*big.Int, error) {
+
+// TODO: Very important. Unsure if this can be confused with a subscription where the user
+// adds some collateral. Same for the events in the smart contract, not sure if they can be
+// confused with a subscription.
+
+// Note that this only detects donations that are send as normal transation. A donation
+// sent via a smart contract will not be detected here. See filter events for that.
+
+// TODO: Probably remove this function.
+func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) *big.Int {
 	donatedAmountInBlock := big.NewInt(0)
 	numTxs := 0
 	for _, rawTx := range b.GetBlockTransactions() {
@@ -190,6 +199,7 @@ func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) (*bi
 		if msg.To() == nil {
 			continue
 		}
+		// TODO: If the donations is done via a smart contract it wont be detected like this
 		if strings.ToLower(msg.To().String()) == strings.ToLower(poolAddress) &&
 			(strings.ToLower(msg.From().String()) != strings.ToLower(b.GetFeeRecipient())) {
 
@@ -198,7 +208,7 @@ func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) (*bi
 			numTxs++
 		}
 	}
-	return donatedAmountInBlock, nil
+	return donatedAmountInBlock
 }
 
 // Returns the fee recipient of the block, depending on the fork version

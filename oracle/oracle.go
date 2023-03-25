@@ -95,7 +95,10 @@ func (or *Oracle) GetDepositAddressOfValidator(validatorPubKey string, slot uint
 	return someDepositAddresses[slot%7]
 }
 
-func (or *Oracle) AdvanceStateToNextSlot() error {
+// Advances the oracle to the next state, processing LatestSlot proposals/donations
+// calculating the new state of all validators. It returns the slot that was processed
+// and if there was an error.
+func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 	// TODO: Get block and listen for new subscriptions
 
 	// TODO: Ensure somehow that we dont process a slot twice.
@@ -142,6 +145,20 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 			or.State.ResetPendingRewards(proposerIndex)
 			or.State.AddWrongFeeProposal(proposerIndex, reward, rewardType, slotToProcess)
 		}
+
+		// Process donations to the pool and share them
+		// TODO: Very important change this to or.cfg.PoolAddress when contracts ready
+		/*donationWei := block.DonatedAmountInWei("0x25eb524fabe93979d299158a1c7d1ff6628e0356")
+		if donationWei.Cmp(big.NewInt(0)) > 0 {
+			log.Info("----donation detected: ", donationWei)
+			//or.State.IncreaseAllPendingRewards(donationWei)
+		}*/
+		blockDonations := or.onchain.GetDonationEvents(blockNumber)
+		for blockDonation := range blockDonations {
+			//log.Info("blockDonation:", blockDonation)
+			_ = blockDonation
+			// TODO: Add to donatios
+		}
 	}
 
 	// If the validator was not subscribed and missed proposed the block in this slot
@@ -153,5 +170,5 @@ func (or *Oracle) AdvanceStateToNextSlot() error {
 	}
 
 	or.State.LatestSlot = slotToProcess + 1
-	return nil
+	return slotToProcess, nil
 }
