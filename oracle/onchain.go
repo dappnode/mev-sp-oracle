@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	log "github.com/sirupsen/logrus"
 )
@@ -221,6 +222,7 @@ func (f *Onchain) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellat
 // event, but can return nothing if no event was emitted in that block
 // TODO: This is not useful for merkle root, but use as an inspiration for
 // other events: subscribe, unsubscribe.
+// TODO: Perhaps remove it?
 func (o *Onchain) GetMerkleRootEventByBlock(blockNumber uint64) string {
 	// Not the most effective way, but we just need to advance one by one.
 	startBlock := uint64(blockNumber)
@@ -256,15 +258,15 @@ func (o *Onchain) GetMerkleRootEventByBlock(blockNumber uint64) string {
 	return "0x" + merkleRoot[0]
 }
 
-func (o *Onchain) GetRewardsRoot() {
+func (o *Onchain) GetMerkleRoot() (string, error) {
 
+	// TODO: Dont crash if it fails
 	callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
 	rewardsRoot, err := o.Contract.RewardsRoot(callOpts)
 	if err != nil {
-		log.Fatal("could not get rewards root from pool contract: ", err)
+		return "", errors.Wrap(err, "could not get rewards root from pool contract")
 	}
-
-	log.Info("rewards root", "0x"+hex.EncodeToString(rewardsRoot[:]))
+	return "0x" + hex.EncodeToString(rewardsRoot[:]), nil
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
