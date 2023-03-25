@@ -10,9 +10,7 @@ import (
 	"strconv"
 	"testing"
 
-	// TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
-	"mev-sp-oracle/config"
-
+	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"

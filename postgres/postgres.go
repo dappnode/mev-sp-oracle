@@ -4,17 +4,15 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-
-	//"mev-sp-oracle/oracle"
 	"strings"
-
-	//"mev-sp-oracle/oracle"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
+
+// This file is outdated and some of these functions are not used
 
 type Postgresql struct {
 	Db *pgx.Conn

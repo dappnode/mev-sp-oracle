@@ -39,17 +39,18 @@ func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.In
 				"Slot":         b.GetSlot(),
 				"Block":        b.GetBlockNumber(),
 				"ValIndex":     b.GetProposerIndex(),
-				"FeeRecipient": b.GetFeeRecipient(),
-				"PoolAddress":  poolAddress,
+				"FeeRecipient": b.GetFeeRecipient()[0:4],
 				"To":           msg.To().String(),
-				"MevReward":    msg.Value(),
-				"TxHash":       tx.Hash().String(),
-			}).Info("MEV transaction detected to pool")
+				"Reward":       msg.Value(),
+				"TxHash":       tx.Hash().String()[0:4],
+				"Type":         "MevBlock",
+			}).Info("New Reward")
 			numTxs++
 		}
 	}
 	if numTxs > 1 {
-		log.Fatal("Multiple MEV rewards to the same address found within a block. This should not happen.")
+		// TODO: Set this to Fatal in mainnet.
+		log.Warn("Multiple MEV rewards to the same address found within a block. This should not happen.")
 	}
 	return totalMevReward, numTxs, nil
 }
@@ -83,13 +84,14 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 			log.Fatal(err)
 		}
 		log.WithFields(log.Fields{
-			"Slot":         b.GetSlot(),
-			"Block":        b.GetBlockNumber(),
-			"ValIndex":     b.GetProposerIndex(),
-			"PoolAddress":  poolAddress,
-			"VanilaReward": reward.String(),
+			"Slot":        b.GetSlot(),
+			"Block":       b.GetBlockNumber(),
+			"ValIndex":    b.GetProposerIndex(),
+			"PoolAddress": poolAddress,
+			"Reward":      reward.String(),
+			"Type":        "VanilaBlock",
 			//"FeeRecipient": b.FeeRecipient(), //Vanila fee recipient
-		}).Info("Vanila reward found in block")
+		}).Info("New Reward")
 		txType = VanilaBlock
 		wasRewardSent = true
 	}

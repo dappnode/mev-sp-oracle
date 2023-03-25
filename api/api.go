@@ -11,9 +11,9 @@ import (
 	"regexp"
 	"strconv"
 
-	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
-	"mev-sp-oracle/oracle"
-	"mev-sp-oracle/postgres"
+	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/oracle"
+	"github.com/dappnode/mev-sp-oracle/postgres"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/gorilla/mux"

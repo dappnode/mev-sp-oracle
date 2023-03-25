@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"os"
 
-	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/config"
 
 	log "github.com/sirupsen/logrus"
 	mt "github.com/txaty/go-merkletree"
@@ -347,27 +347,31 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
 		switch event {
 		case ProposalOk:
 			log.WithFields(log.Fields{
-				"Event":       "ProposalOk",
-				"StateChange": "Active -> Active",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":          "ProposalOk",
+				"StateChange":    "Active -> Active",
+				"ValidatorIndex": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case ProposalWrongFee:
 			log.WithFields(log.Fields{
-				"Event":       "ProposalWrongFee",
-				"StateChange": "Active -> Banned",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":          "ProposalWrongFee",
+				"StateChange":    "Active -> Banned",
+				"ValidatorIndex": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
 			log.WithFields(log.Fields{
-				"Event":       "ProposalMissed",
-				"StateChange": "Active -> YellowCard",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":          "ProposalMissed",
+				"StateChange":    "Active -> YellowCard",
+				"ValidatorIndex": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case Unsubscribe:
 			log.WithFields(log.Fields{
-				"Event":       "ProposalMissed",
-				"StateChange": "Active -> NotSubscribed",
-			}).Info("ValidatorIndex: ", valIndex)
+				"Event":          "ProposalMissed",
+				"StateChange":    "Active -> NotSubscribed",
+				"ValidatorIndex": valIndex,
+			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
 	case YellowCard:

@@ -1,5 +1,4 @@
-//module github.com/dappnode/mev-sp-oracle
-module mev-sp-oracle
+module github.com/dappnode/mev-sp-oracle
 
 go 1.19
 

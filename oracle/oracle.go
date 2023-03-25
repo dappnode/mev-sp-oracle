@@ -2,8 +2,9 @@ package oracle
 
 import (
 	"encoding/hex"
-	"mev-sp-oracle/config" // TODO: Change when pushed "github.com/dappnode/mev-sp-oracle/config"
-	"mev-sp-oracle/postgres"
+
+	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/postgres"
 
 	log "github.com/sirupsen/logrus"
 )
