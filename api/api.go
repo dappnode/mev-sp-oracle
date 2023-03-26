@@ -148,6 +148,7 @@ type ApiService struct {
 func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle.Onchain) *ApiService {
 	postgres, err := postgres.New(cfg.PostgresEndpoint)
 	if err != nil {
+		// TODO: Return error instead of fatal
 		log.Fatal(err)
 	}
 
@@ -237,11 +238,11 @@ func (m *ApiService) handlePoolStatistics(w http.ResponseWriter, req *http.Reque
 	// has to catch up
 	//oracleMerkleRoot := "0x" + m.OracleState.LatestCommitedState.MerkleRoot
 
-	contractMerkleRoot, err := m.Onchain.GetMerkleRoot()
-	if err != nil {
+	contractMerkleRoot := m.Onchain.GetContractMerkleRoot()
+	/*if err != nil {
 		m.respondError(w, http.StatusBadRequest, "could not get latest merkle root from chain")
 		return
-	}
+	}*/
 
 	totalSubscribed := uint64(0)
 	totalActive := uint64(0)
@@ -406,11 +407,12 @@ func (m *ApiService) handleLatestMerkleRoot(w http.ResponseWriter, req *http.Req
 	// This is the latest merkle root tracked from the oracle.
 	//oracleMerkleRoot := "0x" + m.OracleState.LatestCommitedState.MerkleRoot
 
-	contractMerkleRoot, err := m.Onchain.GetMerkleRoot()
-	if err != nil {
-		m.respondError(w, http.StatusBadRequest, "could not get latest merkle root from chain")
-		return
-	}
+	contractMerkleRoot := m.Onchain.GetContractMerkleRoot()
+	/*
+		if err != nil {
+			m.respondError(w, http.StatusBadRequest, "could not get latest merkle root from chain")
+			return
+		}*/
 	m.respondOK(w, httpOkMerkleRoot{
 		MerkleRoot: contractMerkleRoot,
 	})

@@ -17,16 +17,26 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/avast/retry-go/v4"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	log "github.com/sirupsen/logrus"
 )
+
+// Default retry options. This specifies what to do when a call to the
+// consensus or execution client fails. Default is to retry 5 times
+// with a 15 seconds delay and the default backoff strategy (see avas/retry-go)
+// Note that in some cases we might want to avoid retrying at all, for example
+// when serving data to an api, we may want to just fail fast and return an error
+var defaultRetryOptions = []retry.Option{
+	retry.Attempts(5),
+	retry.Delay(15 * time.Second),
+}
 
 // This file provides different functions to access the blockchain state from both consensus and
 // execution layer and modifying the its state via smart contract calls.
@@ -249,49 +259,6 @@ func (f *Onchain) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellat
 	return header, receipts, nil
 }
 
-// This function is a proof of concept. It detects the new rewards root
-// event, but can return nothing if no event was emitted in that block
-// TODO: This is not useful for merkle root, but use as an inspiration for
-// other events: subscribe, unsubscribe.
-// TODO: Perhaps remove it?
-func (o *Onchain) GetMerkleRootEventByBlock(blockNumber uint64) string {
-	// Not the most effective way, but we just need to advance one by one.
-	startBlock := uint64(blockNumber)
-	endBlock := uint64(blockNumber)
-
-	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
-
-	itr, err := o.Contract.FilterUpdateRewardsRoot(filterOpts)
-	if err != nil {
-		log.Fatal("could not filter rewards root: ", err)
-	}
-
-	// Loop over all found events
-	merkleRoot := make([]string, 0)
-	for itr.Next() {
-		event := itr.Event
-		log.WithFields(log.Fields{
-			"Address":    event.Raw.Address.Hex(),
-			"MerkleRoot": hex.EncodeToString(event.NewRewardsRoot[:]),
-			"BlocNumber": event.Raw.BlockNumber,
-			"TxHash":     event.Raw.TxHash,
-		}).Info("Detected NewRewardsRoot Event")
-		merkleRoot = append(merkleRoot, hex.EncodeToString(event.NewRewardsRoot[:]))
-	}
-	err = itr.Close()
-	if err != nil {
-		log.Fatal("could not close iterator for new merkle roots", err)
-	}
-
-	if len(merkleRoot) > 1 {
-		log.Fatal("detected more than one different merkle root in the same block")
-	} else if len(merkleRoot) == 0 {
-		return ""
-	}
-
-	return "0x" + merkleRoot[0]
-}
-
 // TODO: Wondering if we can be sure that the smart contract can differentiate
 // between subscriptions and donations.
 func (o *Onchain) GetDonationEvents(blockNumber uint64) []Donation {
@@ -330,15 +297,28 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64) []Donation {
 	return donations
 }
 
-func (o *Onchain) GetMerkleRoot() (string, error) {
+func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) string {
+	retryOptions := make([]retry.Option, 0)
+	var rewardsRootStr string
 
-	// TODO: Dont crash if it fails
-	callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
-	rewardsRoot, err := o.Contract.RewardsRoot(callOpts)
+	// Retries multiple times before errorings
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			rewardsRoot, err := o.Contract.RewardsRoot(callOpts)
+			if err != nil {
+				return err
+			}
+
+			rewardsRootStr = "0x" + hex.EncodeToString(rewardsRoot[:])
+			return nil
+		}, retryOptions...)
+
 	if err != nil {
-		return "", errors.Wrap(err, "could not get rewards root from pool contract")
+		log.Fatal("could not get merkle root from contract: ", err)
 	}
-	return "0x" + hex.EncodeToString(rewardsRoot[:]), nil
+
+	return rewardsRootStr
 }
 
 func (o *Onchain) GetEthBalance(address string) *big.Int {
