@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
@@ -29,6 +30,7 @@ const (
 	pathLatestMerkleRoot      = "/merkleroot"
 	pathDepositAddressByIndex = "/depositadddress/{valindex}"
 	pathPoolStatistics        = "/poolstatistics"
+	pathDonations             = "/donations"
 
 	// TODO: better valindex=xxx
 
@@ -77,6 +79,12 @@ type httpOkDepositAddress struct {
 
 type httpOkMerkleRoot struct {
 	MerkleRoot string `json:"merkle_root"`
+}
+
+type httpOkDonations struct {
+	DonationAmountWei []*big.Int `json:"donation_amount_wei"`
+	DonationBlock     []uint64   `json:"donation_block"`
+	DonationTxHash    []string   `json:"donation_tx_hash"`
 }
 
 type httpOkPoolStatatistics struct {
@@ -185,6 +193,7 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc(pathValidatorOnchainStateByIndex, m.handleValidatorOnchainStateByIndex)
 	r.HandleFunc(pathValidatorOffchainStateByIndex, m.handleValidatorOffchainStateByIndex)
 	r.HandleFunc(pathPoolStatistics, m.handlePoolStatistics)
+	r.HandleFunc(pathDonations, m.handleDonations)
 
 	//r.Use(mux.CORSMethodMiddleware(r))
 
@@ -358,6 +367,9 @@ func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Re
 		return
 	}
 
+	// Use always lowercase
+	depositAddress = strings.ToLower(depositAddress)
+
 	// Get the proofs of this deposit address (to be used onchain to claim rewards)
 	proofs, proofFound := m.OracleState.LatestCommitedState.Proofs[depositAddress]
 	if !proofFound {
@@ -402,6 +414,16 @@ func (m *ApiService) handleLatestMerkleRoot(w http.ResponseWriter, req *http.Req
 	m.respondOK(w, httpOkMerkleRoot{
 		MerkleRoot: contractMerkleRoot,
 	})
+}
+
+func (m *ApiService) handleDonations(w http.ResponseWriter, req *http.Request) {
+	httpOkDonations := httpOkDonations{}
+	for _, donation := range m.OracleState.Donations {
+		httpOkDonations.DonationAmountWei = append(httpOkDonations.DonationAmountWei, donation.AmountWei)
+		httpOkDonations.DonationBlock = append(httpOkDonations.DonationBlock, donation.Block)
+		httpOkDonations.DonationTxHash = append(httpOkDonations.DonationTxHash, donation.TxHash)
+	}
+	m.respondOK(w, httpOkDonations)
 }
 
 func (m *ApiService) handleDepositAddressByIndex(w http.ResponseWriter, req *http.Request) {

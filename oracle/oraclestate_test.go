@@ -26,15 +26,15 @@ func Test_AddSubscription(t *testing.T) {
 
 func Test_AddDonation(t *testing.T) {
 	state := NewOracleState(&config.Config{})
-	state.AddDonation(Donation{Amount: big.NewInt(765432), Block: 10, TxHash: "0x1"})
-	state.AddDonation(Donation{Amount: big.NewInt(30023456), Block: 124, TxHash: "0x2"})
+	state.AddDonation(Donation{AmountWei: big.NewInt(765432), Block: uint64(10), TxHash: "0x1"})
+	state.AddDonation(Donation{AmountWei: big.NewInt(30023456), Block: uint64(124), TxHash: "0x2"})
 
-	require.Equal(t, big.NewInt(765432), state.Donations[0].Amount)
-	require.Equal(t, 10, state.Donations[0].Block)
+	require.Equal(t, big.NewInt(765432), state.Donations[0].AmountWei)
+	require.Equal(t, uint64(10), state.Donations[0].Block)
 	require.Equal(t, "0x1", state.Donations[0].TxHash)
 
-	require.Equal(t, big.NewInt(30023456), state.Donations[1].Amount)
-	require.Equal(t, 124, state.Donations[1].Block)
+	require.Equal(t, big.NewInt(30023456), state.Donations[1].AmountWei)
+	require.Equal(t, uint64(124), state.Donations[1].Block)
 	require.Equal(t, "0x2", state.Donations[1].TxHash)
 }
 
@@ -145,6 +145,18 @@ func Test_IncreasePendingRewards(t *testing.T) {
 	require.Equal(t, big.NewInt(230), state.Validators[12].PendingRewardsWei)
 }
 
+func Test_IncreasePendingEmptyPool(t *testing.T) {
+	// Test a case where a new rewards adds to the pool but no validators are subscribed
+	// This can happen when a donation is recived to the pool but no validators are subscribed
+	state := NewOracleState(&config.Config{})
+
+	// This prevents division by zero
+	state.IncreaseAllPendingRewards(big.NewInt(10000))
+
+	// Pool gets all rewards
+	require.Equal(t, big.NewInt(10000), state.PoolAccumulatedFees)
+}
+
 func Test_ConsolidateBalance_Eligible(t *testing.T) {
 	state := NewOracleState(&config.Config{})
 	state.Validators[10] = &ValidatorInfo{
@@ -218,9 +230,9 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 	state.Donations = make([]Donation, 1)
 
 	state.Donations[0] = Donation{
-		Amount: big.NewInt(1000),
-		Block:  1000,
-		TxHash: "0x",
+		AmountWei: big.NewInt(1000),
+		Block:     1000,
+		TxHash:    "0x",
 	}
 
 	state.Validators[10] = &ValidatorInfo{

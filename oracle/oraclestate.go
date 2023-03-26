@@ -46,9 +46,9 @@ type BlockState struct {
 }
 
 type Donation struct {
-	Amount *big.Int
-	Block  uint64
-	TxHash string
+	AmountWei *big.Int
+	Block     uint64
+	TxHash    string
 }
 
 type ValidatorInfo struct {
@@ -298,11 +298,21 @@ func (state *OracleState) GetEligibleValidators() []uint64 {
 	return eligibleValidators
 }
 
+// Increases the pending rewards of all validators, and gives the pool owner a cut
+// of said rewards. Note that pending rewards cant be claimed until a block is proposed
+// by the validator. But the pool owner can claim the pool cut at any time, so they are
+// added as accumulated rewards.
 func (state *OracleState) IncreaseAllPendingRewards(
 	reward *big.Int) {
 
 	eligibleValidators := state.GetEligibleValidators()
 	numEligibleValidators := big.NewInt(int64(len(eligibleValidators)))
+
+	if len(eligibleValidators) == 0 {
+		log.Warn("Not validators are eligible to receive rewards, pool fees address will receive all")
+		state.PoolAccumulatedFees.Add(state.PoolAccumulatedFees, reward)
+		return
+	}
 
 	// The pool takes PoolFeesPercent cut of the rewards
 	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(state.PoolFeesPercent)))

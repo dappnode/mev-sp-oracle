@@ -151,7 +151,7 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 		blockDonations := or.onchain.GetDonationEvents(blockNumber)
 		for _, donation := range blockDonations {
 			or.State.AddDonation(donation)
-			or.State.IncreaseAllPendingRewards(donation.Amount)
+			or.State.IncreaseAllPendingRewards(donation.AmountWei)
 		}
 	}
 

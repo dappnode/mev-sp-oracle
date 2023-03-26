@@ -312,15 +312,15 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64) []Donation {
 		event := itr.Event
 
 		log.WithFields(log.Fields{
-			"Reward":      event.DonationAmount,
+			"RewardWei":   event.DonationAmount,
 			"BlockNumber": event.Raw.BlockNumber,
 			"Type":        "Donation",
 			"TxHash":      event.Raw.TxHash.Hex()[0:8],
 		}).Info("New Reward")
 		donations = append(donations, Donation{
-			Amount: event.DonationAmount,
-			Block:  blockNumber,
-			TxHash: event.Raw.TxHash.Hex(),
+			AmountWei: event.DonationAmount,
+			Block:     blockNumber,
+			TxHash:    event.Raw.TxHash.Hex(),
 		})
 	}
 	err = itr.Close()
