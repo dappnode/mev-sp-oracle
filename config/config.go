@@ -64,6 +64,10 @@ func NewCliConfig() (*Config, error) {
 		log.Fatal("pool-fees-percent flag is not present")
 	}
 
+	if *poolFeesPercent < 0 || *poolFeesPercent > 100 {
+		log.Fatal("pool-fees-percent must be between 0 and 100")
+	}
+
 	// Mandatory flag
 	if *network != "mainnet" && *network != "goerli" {
 		log.Fatal("wrong network provided, must be mainnet or goerli")
