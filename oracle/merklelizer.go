@@ -112,7 +112,7 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 
 	// Prepend the leaf with the pool fees to the list of leafs. Always the first
 	poolFeesLeaf := RawLeaf{
-		DepositAddress:     strings.ToLower(state.PoolAddress),
+		DepositAddress:     strings.ToLower(state.PoolFeesAddress),
 		AccumulatedBalance: new(big.Int).Set(state.PoolAccumulatedFees),
 	}
 

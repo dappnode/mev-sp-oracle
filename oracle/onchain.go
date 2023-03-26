@@ -262,6 +262,9 @@ func (o *Onchain) GetMerkleRootEventByBlock(blockNumber uint64) string {
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
 
 	itr, err := o.Contract.FilterUpdateRewardsRoot(filterOpts)
+	if err != nil {
+		log.Fatal("could not filter rewards root: ", err)
+	}
 
 	// Loop over all found events
 	merkleRoot := make([]string, 0)
@@ -287,6 +290,44 @@ func (o *Onchain) GetMerkleRootEventByBlock(blockNumber uint64) string {
 	}
 
 	return "0x" + merkleRoot[0]
+}
+
+// TODO: Wondering if we can be sure that the smart contract can differentiate
+// between subscriptions and donations.
+func (o *Onchain) GetDonationEvents(blockNumber uint64) []Donation {
+	// Not the most effective way, but we just need to advance one by one.
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	itr, err := o.Contract.FilterDonation(filterOpts)
+	if err != nil {
+		log.Fatal("coult not filter donations for block: ", blockNumber, " err: ", err)
+	}
+
+	// Loop over all found events
+	donations := make([]Donation, 0)
+	for itr.Next() {
+		event := itr.Event
+
+		log.WithFields(log.Fields{
+			"RewardWei":   event.DonationAmount,
+			"BlockNumber": event.Raw.BlockNumber,
+			"Type":        "Donation",
+			"TxHash":      event.Raw.TxHash.Hex()[0:8],
+		}).Info("New Reward")
+		donations = append(donations, Donation{
+			AmountWei: event.DonationAmount,
+			Block:     blockNumber,
+			TxHash:    event.Raw.TxHash.Hex(),
+		})
+	}
+	err = itr.Close()
+	if err != nil {
+		log.Fatal("could not close iterator for new donation events", err)
+	}
+	return donations
 }
 
 func (o *Onchain) GetMerkleRoot() (string, error) {

@@ -211,15 +211,13 @@ func Test_DonatedAmountInWei_Slot_5320342(t *testing.T) {
 	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
 
 	// one donation is sent to this addres: 0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e
-	donation1, err := myBlock.DonatedAmountInWei("0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e")
-	require.NoError(t, err)
+	donation1 := myBlock.SentEthToAddress("0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e")
 	number, ok := new(big.Int).SetString("20000000000000000000", 10)
 	require.Equal(t, donation1, number)
 	require.Equal(t, ok, true)
 
 	// two tx are done to this adress: 0xef1266370e603ad06cff8304b27f866ca444d434
-	donation2, err := myBlock.DonatedAmountInWei("0xef1266370e603ad06cff8304b27f866ca444d434")
-	require.NoError(t, err)
+	donation2 := myBlock.SentEthToAddress("0xef1266370e603ad06cff8304b27f866ca444d434")
 	require.Equal(t, donation2, big.NewInt(3648455520393139))
 }
 

@@ -13,7 +13,7 @@ import (
 func Test_GenerateTreeFromState(t *testing.T) {
 	merklelizer := NewMerklelizer()
 	state := NewOracleState(&config.Config{
-		PoolAddress: "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 
 	// Note that the leafs contain also PoolAddress at the begining
@@ -52,7 +52,7 @@ func Test_GenerateTreeFromState(t *testing.T) {
 func Test_AggregateValidatorsIndexes_NoAggregation(t *testing.T) {
 	merklelizer := NewMerklelizer()
 	state := NewOracleState(&config.Config{
-		PoolAddress: "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 
 	state.PoolAccumulatedFees = big.NewInt(999999999999999)
@@ -121,7 +121,7 @@ func Test_AggregateValidatorsIndexes_NoAggregation(t *testing.T) {
 func Test_AggregateValidatorsIndexes_NoAggregationOrdered(t *testing.T) {
 	merklelizer := NewMerklelizer()
 	state := NewOracleState(&config.Config{
-		PoolAddress: "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 
 	state.PoolAccumulatedFees = big.NewInt(2345678987654)
@@ -192,7 +192,7 @@ func Test_AggregateValidatorsIndexes_NoAggregationOrdered(t *testing.T) {
 func Test_AggregateValidatorsIndexes_AggregationAll(t *testing.T) {
 	merklelizer := NewMerklelizer()
 	state := NewOracleState(&config.Config{
-		PoolAddress: "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 
 	state.PoolAccumulatedFees = big.NewInt(0)
@@ -242,7 +242,7 @@ func Test_AggregateValidatorsIndexes_AggregationAll(t *testing.T) {
 func Test_AggregateValidatorsIndexes_Aggregation_And_Leftover(t *testing.T) {
 	merklelizer := NewMerklelizer()
 	state := NewOracleState(&config.Config{
-		PoolAddress: "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 
 	state.PoolAccumulatedFees = new(big.Int).SetUint64(1)
@@ -295,7 +295,7 @@ func Test_AggregateValidatorsIndexes_Aggregation_And_Leftover(t *testing.T) {
 func Test_AggregateValidatorsIndexes_Aggregation_NoOrder(t *testing.T) {
 	merklelizer := NewMerklelizer()
 	state := NewOracleState(&config.Config{
-		PoolAddress: "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 
 	state.PoolAccumulatedFees = big.NewInt(234567)

@@ -12,3 +12,5 @@ curl localhost:7300/depositadddress/459438
 curl localhost:7300/proof/0x005CD1608e40d1e775a97d12e4f594029567C071
 
 curl localhost:7300/validatoronchainstate/179434
+
+curl localhost:7300/donations

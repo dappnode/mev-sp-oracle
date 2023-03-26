@@ -120,7 +120,8 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 		wasRewardSent = true
 		txType = MevBlock
 	} else {
-		log.Fatal("more than 1 mev tx in a block is not expected. num: ", numTxs)
+		// TODO: Set to fatal in mainnet
+		log.Warn("more than 1 mev tx in a block is not expected. num: ", numTxs)
 	}
 	return reward, wasRewardSent, txType, nil
 }
@@ -173,16 +174,15 @@ func (b *VersionedSignedBeaconBlock) GetProposerTip(blockHeader *types.Header, t
 	return proposerReward, nil
 }
 
-// Detects "Transfer" transactions to the poolAddress and adds them into a single number
-// Note that ERC20 transfers are not supported, not detected by this function.
-// TODO: Note that if the tx is done via a smart contract the donation wont be detected here
-func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) (*big.Int, error) {
-	donatedAmountInBlock := big.NewInt(0)
+// This function detects an Eth transaction sent to an address. Note that if it sent
+// by interacting with an smart contract, it will not be detected here. Unusued
+func (b *VersionedSignedBeaconBlock) SentEthToAddress(poolAddress string) *big.Int {
+	sentEth := big.NewInt(0)
 	numTxs := 0
 	for _, rawTx := range b.GetBlockTransactions() {
 		_, msg, err := DecodeTx(rawTx)
 		if err != nil {
-			log.Fatal("todo")
+			log.Fatal("could not decode tx: ", err)
 		}
 		// If a transaction was sent to the pool
 		// And the sender is not the fee recipient (exclude MEV transactions)
@@ -190,15 +190,17 @@ func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) (*bi
 		if msg.To() == nil {
 			continue
 		}
+		// This just detect normal eth transactions sent to the pool address, not via
+		// smart conrtacts interactions.
 		if strings.ToLower(msg.To().String()) == strings.ToLower(poolAddress) &&
 			(strings.ToLower(msg.From().String()) != strings.ToLower(b.GetFeeRecipient())) {
 
-			donatedAmountInBlock.Add(donatedAmountInBlock, msg.Value())
-			log.Info("donated. todo: log blog: ", msg.Value())
+			sentEth.Add(sentEth, msg.Value())
+			log.Info("Sent amount: ", msg.Value())
 			numTxs++
 		}
 	}
-	return donatedAmountInBlock, nil
+	return sentEth
 }
 
 // Returns the fee recipient of the block, depending on the fork version
