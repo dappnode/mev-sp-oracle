@@ -25,8 +25,17 @@ func Test_AddSubscription(t *testing.T) {
 }
 
 func Test_AddDonation(t *testing.T) {
-	// TODO:
-	require.Equal(t, 1, 2)
+	state := NewOracleState(&config.Config{})
+	state.AddDonation(Donation{Amount: big.NewInt(765432), Block: 10, TxHash: "0x1"})
+	state.AddDonation(Donation{Amount: big.NewInt(30023456), Block: 124, TxHash: "0x2"})
+
+	require.Equal(t, big.NewInt(765432), state.Donations[0].Amount)
+	require.Equal(t, 10, state.Donations[0].Block)
+	require.Equal(t, "0x1", state.Donations[0].TxHash)
+
+	require.Equal(t, big.NewInt(30023456), state.Donations[1].Amount)
+	require.Equal(t, 124, state.Donations[1].Block)
+	require.Equal(t, "0x2", state.Donations[1].TxHash)
 }
 
 func Test_IncreaseAllPendingRewards_1(t *testing.T) {
@@ -205,6 +214,14 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		PoolAddress: "0x0000000000000000000000000000000000000000",
 		Network:     "mainnet",
 	})
+
+	state.Donations = make([]Donation, 1)
+
+	state.Donations[0] = Donation{
+		Amount: big.NewInt(1000),
+		Block:  1000,
+		TxHash: "0x",
+	}
 
 	state.Validators[10] = &ValidatorInfo{
 		ValidatorStatus:       Active,

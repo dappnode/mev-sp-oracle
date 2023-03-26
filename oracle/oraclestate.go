@@ -163,14 +163,8 @@ func NewOracleState(cfg *config.Config) *OracleState {
 	}
 }
 
-// TODO: Test
-func (state *OracleState) AddDonation(amountWei *big.Int) (string, bool) {
-	state.Donations = append(state.Donations, Donation{
-		Amount: amountWei,
-		Block:  uint64(0), // TODO
-		TxHash: "TODO",
-	})
-	return "", false
+func (state *OracleState) AddDonation(donation Donation) {
+	state.Donations = append(state.Donations, donation)
 }
 
 // Returns false if there wasnt enough data to create a merkle tree

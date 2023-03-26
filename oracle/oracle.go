@@ -146,18 +146,12 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 			or.State.AddWrongFeeProposal(proposerIndex, reward, rewardType, slotToProcess)
 		}
 
-		// Process donations to the pool and share them
-		// TODO: Very important change this to or.cfg.PoolAddress when contracts ready
-		/*donationWei := block.DonatedAmountInWei("0x25eb524fabe93979d299158a1c7d1ff6628e0356")
-		if donationWei.Cmp(big.NewInt(0)) > 0 {
-			log.Info("----donation detected: ", donationWei)
-			//or.State.IncreaseAllPendingRewards(donationWei)
-		}*/
+		// TODO: Confirm that the event only emits donations and is not mixed with other events
+		// Get donations using emitted events. Iterate them and share
 		blockDonations := or.onchain.GetDonationEvents(blockNumber)
-		for blockDonation := range blockDonations {
-			//log.Info("blockDonation:", blockDonation)
-			_ = blockDonation
-			// TODO: Add to donatios
+		for _, donation := range blockDonations {
+			or.State.AddDonation(donation)
+			or.State.IncreaseAllPendingRewards(donation.Amount)
 		}
 	}
 

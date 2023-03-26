@@ -120,7 +120,8 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 		wasRewardSent = true
 		txType = MevBlock
 	} else {
-		log.Fatal("more than 1 mev tx in a block is not expected. num: ", numTxs)
+		// TODO: Set to fatal in mainnet
+		log.Warn("more than 1 mev tx in a block is not expected. num: ", numTxs)
 	}
 	return reward, wasRewardSent, txType, nil
 }
