@@ -174,25 +174,15 @@ func (b *VersionedSignedBeaconBlock) GetProposerTip(blockHeader *types.Header, t
 	return proposerReward, nil
 }
 
-// Detects "Transfer" transactions to the poolAddress and adds them into a single number
-// Note that ERC20 transfers are not supported, not detected by this function.
-// TODO: Note that if the tx is done via a smart contract the donation wont be detected here
-
-// TODO: Very important. Unsure if this can be confused with a subscription where the user
-// adds some collateral. Same for the events in the smart contract, not sure if they can be
-// confused with a subscription.
-
-// Note that this only detects donations that are send as normal transation. A donation
-// sent via a smart contract will not be detected here. See filter events for that.
-
-// TODO: Probably remove this function.
-func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) *big.Int {
-	donatedAmountInBlock := big.NewInt(0)
+// This function detects an Eth transaction sent to an address. Note that if it sent
+// by interacting with an smart contract, it will not be detected here. Unusued
+func (b *VersionedSignedBeaconBlock) SentEthToAddress(poolAddress string) *big.Int {
+	sentEth := big.NewInt(0)
 	numTxs := 0
 	for _, rawTx := range b.GetBlockTransactions() {
 		_, msg, err := DecodeTx(rawTx)
 		if err != nil {
-			log.Fatal("todo")
+			log.Fatal("could not decode tx: ", err)
 		}
 		// If a transaction was sent to the pool
 		// And the sender is not the fee recipient (exclude MEV transactions)
@@ -200,16 +190,17 @@ func (b *VersionedSignedBeaconBlock) DonatedAmountInWei(poolAddress string) *big
 		if msg.To() == nil {
 			continue
 		}
-		// TODO: If the donations is done via a smart contract it wont be detected like this
+		// This just detect normal eth transactions sent to the pool address, not via
+		// smart conrtacts interactions.
 		if strings.ToLower(msg.To().String()) == strings.ToLower(poolAddress) &&
 			(strings.ToLower(msg.From().String()) != strings.ToLower(b.GetFeeRecipient())) {
 
-			donatedAmountInBlock.Add(donatedAmountInBlock, msg.Value())
-			log.Info("donated. todo: log blog: ", msg.Value())
+			sentEth.Add(sentEth, msg.Value())
+			log.Info("Sent amoiunt: ", msg.Value())
 			numTxs++
 		}
 	}
-	return donatedAmountInBlock
+	return sentEth
 }
 
 // Returns the fee recipient of the block, depending on the fork version
