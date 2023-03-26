@@ -34,7 +34,6 @@ func main() {
 		log.Fatal("Could not create new onchain object: ", err)
 	}
 	oracleInstance := oracle.NewOracle(cfg, onchain)
-	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
 
 	balance, err := onchain.GetEthBalance(cfg.PoolAddress)
 	if err != nil {
@@ -63,15 +62,20 @@ func main() {
 		}
 	}
 
+	// Start the API with the state
+	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
+
 	// Check if we are behind the contract
 	if oracleInstance.State.LatestCommitedState.MerkleRoot != contractMerkleRoot {
 		// Only matters in production, do not care in dry run mode
 		if !cfg.DryRun {
 			// The oracle is 1 or more checkpoints behind the merkle root in the contract. This is not likely to happen
 			// in the oracle in production.
-			log.Fatal("Onchain stored state does not match the one in the contract. Oracle is behind "+
-				"one ore more checkpoints behind the contract. Review this manually: ",
-				oracleInstance.State.LatestCommitedState.MerkleRoot, " vs ", contractMerkleRoot)
+
+			// TODO: Temporally disable
+			//log.Fatal("Onchain stored state does not match the one in the contract. Oracle is behind "+
+			//	"one ore more checkpoints behind the contract. Review this manually: ",
+			//	oracleInstance.State.LatestCommitedState.MerkleRoot, " vs ", contractMerkleRoot)
 		}
 	}
 
@@ -126,7 +130,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			slotToLatestFinalized := finalizedSlot - oracleInstance.State.LatestSlot
 
 			// Log progress every x slots
-			//if finalizedSlot%300 == 0 {
+			//if finalizedSlot%100 == 0 {
 			log.Info("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
 				slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
 			//}

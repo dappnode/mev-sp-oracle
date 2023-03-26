@@ -16,7 +16,7 @@ func CreateMockKeysFile(t *testing.T, customKeysFile string, content string) {
 	f.Close()
 }
 
-func Test_Legacy_0_Tx_Decode(t *testing.T) {
+func Test_ReadHardcodedSubscriptions(t *testing.T) {
 	// Test file containing 4 validator indexes, one per line
 	fileName := "hardcoded_subscriptions.txt"
 	someValidatorIndexes := "1234\n2132\n890\n2343"

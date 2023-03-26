@@ -142,7 +142,7 @@ func ReadStateFromFile() (*OracleState, error) {
 	merkleRoot, enoughData := state.GetMerkleRootIfAny()
 
 	if merkleRoot != state.LatestCommitedState.MerkleRoot {
-		return nil, errors.New("Merkle root mismatch: " + merkleRoot + " vs " + state.LatestCommitedState.MerkleRoot)
+		return nil, errors.New("Merkle root mismatch: generated: " + merkleRoot + " vs loaded:" + state.LatestCommitedState.MerkleRoot)
 	}
 
 	log.WithFields(log.Fields{
