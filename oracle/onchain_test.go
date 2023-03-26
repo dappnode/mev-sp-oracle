@@ -52,7 +52,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	slotToFetch := uint64(5214321)
 
 	// Get block
-	signedBeaconBlock, err := onchain.GetBlockAtSlot(slotToFetch)
+	signedBeaconBlock, err := onchain.GetConsensusBlockAtSlot(slotToFetch)
 	require.NoError(t, err)
 
 	// Cast to our custom extended block with extra methods

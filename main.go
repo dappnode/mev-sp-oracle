@@ -36,10 +36,13 @@ func main() {
 	oracleInstance := oracle.NewOracle(cfg, onchain)
 	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
 
-	balnace := onchain.GetEthBalance(cfg.PoolAddress)
+	balance, err := onchain.GetEthBalance(cfg.PoolAddress)
+	if err != nil {
+		log.Fatal("Could not get pool address balance: " + err.Error())
+	}
 	log.WithFields(log.Fields{
 		"address":     cfg.PoolAddress,
-		"balance_wei": balnace,
+		"balance_wei": balance,
 	}).Info("Pool Address Balance")
 
 	// TODO: Try to resume syncing from latest known state from file

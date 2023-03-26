@@ -164,37 +164,37 @@ func (f *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	return false, nil
 }
 
-// TODO: rename to getConsensusblock?
-func (f *Onchain) GetBlockAtSlot(slot uint64) (*spec.VersionedSignedBeaconBlock, error) {
-
-	// TODO: set custom timeouts
+func (f *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*spec.VersionedSignedBeaconBlock, error) {
 	slotStr := strconv.FormatUint(slot, 10)
 	var signedBeaconBlock *spec.VersionedSignedBeaconBlock
 	var err error
 
-	for {
+	err = retry.Do(func() error {
 		signedBeaconBlock, err = f.ConsensusClient.SignedBeaconBlock(context.Background(), slotStr)
 		if err != nil {
-			log.Warn("Error fetching block at slot ", slot, ": ", err, " Retrying in 15 seconds...")
-			time.Sleep(15 * time.Second)
-			continue
+			return errors.New("Error fetching block at slot " + slotStr + ": " + err.Error())
 		}
-		break
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Could not fetch block at slot " + slotStr + ": " + err.Error())
 	}
 	return signedBeaconBlock, err
 }
 
-func (f *Onchain) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
-	// Hardcoded
+func (f *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
+	// Hardcoded value, slots in an epoch
 	slotsInEpoch := uint64(32)
 	epoch := slot / slotsInEpoch
 	slotWithinEpoch := slot % slotsInEpoch
+	slotStr := strconv.FormatUint(slot, 10)
 
 	// If cache hit, return the result
 	if ProposalDutyCache.Epoch == epoch {
-		// Health check that should never happen
+		// Sanity check that should never happen
 		if ProposalDutyCache.Epoch != uint64(ProposalDutyCache.Duties[slotWithinEpoch].Slot/phase0.Slot(slotsInEpoch)) {
-			log.Fatal("Proposal duty epoch does not match when converting slot to epoch")
+			return nil, errors.New("Proposal duty epoch does not match when converting slot to epoch")
 		}
 		return ProposalDutyCache.Duties[slotWithinEpoch], nil
 	}
@@ -204,39 +204,44 @@ func (f *Onchain) GetProposalDuty(slot uint64) (*api.ProposerDuty, error) {
 	var duties []*api.ProposerDuty
 	var err error
 
-	for {
+	err = retry.Do(func() error {
 		duties, err = f.ConsensusClient.ProposerDuties(
-			context.Background(),
-			phase0.Epoch(epoch),
-			indexes)
+			context.Background(), phase0.Epoch(epoch), indexes)
 		if err != nil {
-			log.Warn("Error fetching proposer duties for epoch ", epoch, ": ", err, " Retrying in 15 seconds...")
-			time.Sleep(15 * time.Second)
-			continue
+			return errors.New("Error fetching proposal duties at slot " + slotStr + ": " + err.Error())
 		}
-		break
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Error fetching proposal duties at slot " + slotStr + ": " + err.Error())
 	}
 
-	// Store result in cache
+	// If success, store result in cache
 	ProposalDutyCache = EpochDuties{epoch, duties}
 
 	return duties[slotWithinEpoch], nil
 }
 
 // This function is expensive as gets every tx receipt from the block. Use only if needed
-func (f *Onchain) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellatrix.Transaction) (*types.Header, []*types.Receipt, error) {
+func (f *Onchain) GetExecHeaderAndReceipts(
+	blockNumber *big.Int,
+	rawTxs []bellatrix.Transaction,
+	opts ...retry.Option) (*types.Header, []*types.Receipt, error) {
 
 	var header *types.Header
 	var err error
 
-	for {
+	err = retry.Do(func() error {
 		header, err = f.ExecutionClient.HeaderByNumber(context.Background(), blockNumber)
 		if err != nil {
-			log.Warn("Error fetching header at block ", blockNumber, ": ", err, " Retrying in 15 seconds...")
-			time.Sleep(15 * time.Second)
-			continue
+			return errors.New("Error fetching header for block " + blockNumber.String() + ": " + err.Error())
 		}
-		break
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, nil, errors.New("Could not fetch header for block " + blockNumber.String() + ": " + err.Error())
 	}
 
 	var receipts []*types.Receipt
@@ -247,14 +252,17 @@ func (f *Onchain) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellat
 			log.Fatal(err)
 		}
 		var receipt *types.Receipt
-		for {
+
+		err = retry.Do(func() error {
 			receipt, err = f.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
 			if err != nil {
-				log.Warn("Error fetching receipt for tx ", tx.Hash(), ": ", err, " Retrying in 15 seconds...")
-				time.Sleep(15 * time.Second)
-				continue
+				return errors.New("Error fetching receipt for tx " + tx.Hash().String() + ": " + err.Error())
 			}
-			break
+			return nil
+		}, GetRetryOpts(opts)...)
+
+		if err != nil {
+			return nil, nil, errors.New("Could not fetch receipt for tx " + tx.Hash().String() + ": " + err.Error())
 		}
 		receipts = append(receipts, receipt)
 	}
@@ -263,16 +271,26 @@ func (f *Onchain) GetExecHeaderAndReceipts(blockNumber *big.Int, rawTxs []bellat
 
 // TODO: Wondering if we can be sure that the smart contract can differentiate
 // between subscriptions and donations.
-func (o *Onchain) GetDonationEvents(blockNumber uint64) []Donation {
-	// Not the most effective way, but we just need to advance one by one.
+func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([]Donation, error) {
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
 
+	// Not the most effective way, but we just need to advance one by one.
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
 
-	itr, err := o.Contract.FilterDonation(filterOpts)
+	var err error
+	var itr *contract.ContractDonationIterator
+
+	err = retry.Do(func() error {
+		itr, err = o.Contract.FilterDonation(filterOpts)
+		if err != nil {
+			return errors.New("Error filtering donations for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+		}
+		return nil
+	}, GetRetryOpts(opts)...)
+
 	if err != nil {
-		log.Fatal("coult not filter donations for block: ", blockNumber, " err: ", err)
+		return nil, errors.New("Could not filter donations for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 	}
 
 	// Loop over all found events
@@ -286,6 +304,7 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64) []Donation {
 			"Type":        "Donation",
 			"TxHash":      event.Raw.TxHash.Hex()[0:8],
 		}).Info("New Reward")
+
 		donations = append(donations, Donation{
 			AmountWei: event.DonationAmount,
 			Block:     blockNumber,
@@ -296,7 +315,7 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64) []Donation {
 	if err != nil {
 		log.Fatal("could not close iterator for new donation events", err)
 	}
-	return donations
+	return donations, nil
 }
 
 func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
@@ -321,16 +340,24 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	return rewardsRootStr, nil
 }
 
-func (o *Onchain) GetEthBalance(address string) *big.Int {
+func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int, error) {
 	account := common.HexToAddress(address)
-	balanceWei, err := o.ExecutionClient.BalanceAt(context.Background(), account, nil)
+	var err error
+	var balanceWei *big.Int
 
-	// Allow some retries before failing
+	err = retry.Do(func() error {
+		balanceWei, err = o.ExecutionClient.BalanceAt(context.Background(), account, nil)
+		if err != nil {
+			return errors.New("could not get balance for address " + address + ": " + err.Error())
+		}
+		return nil
+	}, GetRetryOpts(opts)...)
+
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.New("could not get balance for address " + address + ": " + err.Error())
 	}
 
-	return balanceWei
+	return balanceWei, nil
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {

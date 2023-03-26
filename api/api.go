@@ -24,6 +24,7 @@ import (
 
 // These are the retry options when an api call involves external call to the beacon node
 // or execution client. The idea is to try once, and fail fast.
+// Use this for all onchain calls, otherwise defaultRetryOpts will be aplied
 var apiRetryOpts = []retry.Option{
 	retry.Attempts(1),
 }
