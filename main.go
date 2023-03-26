@@ -29,7 +29,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	onchain := oracle.NewOnchain(*cfg)
+	onchain, err := oracle.NewOnchain(*cfg)
+	if err != nil {
+		log.Fatal("could not create new onchain object:", err)
+	}
 	oracleInstance := oracle.NewOracle(cfg, onchain)
 	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
 

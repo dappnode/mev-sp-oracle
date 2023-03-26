@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -33,14 +34,13 @@ import (
 // with a 15 seconds delay and the default backoff strategy (see avas/retry-go)
 // Note that in some cases we might want to avoid retrying at all, for example
 // when serving data to an api, we may want to just fail fast and return an error
-var defaultRetryOptions = []retry.Option{
+var defaultRetryOpts = []retry.Option{
 	retry.Attempts(5),
 	retry.Delay(15 * time.Second),
 }
 
 // This file provides different functions to access the blockchain state from both consensus and
 // execution layer and modifying the its state via smart contract calls.
-
 type EpochDuties struct {
 	Epoch  uint64
 	Duties []*api.ProposerDuty
@@ -59,18 +59,18 @@ type Onchain struct {
 	Contract        *contract.Contract
 }
 
-func NewOnchain(cfg config.Config) *Onchain {
+func NewOnchain(cfg config.Config) (*Onchain, error) {
 
 	// Dial the execution client
 	executionClient, err := ethclient.Dial(cfg.ExecutionEndpoint)
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.New("Error dialing execution client: " + err.Error())
 	}
 
 	// Get chainid to ensure the endpoint is working
 	chainId, err := executionClient.ChainID(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.New("Error fetching chainId from execution client: " + err.Error())
 	}
 	log.Info("Connected succesfully to execution client. ChainId: ", chainId)
 
@@ -81,33 +81,32 @@ func NewOnchain(cfg config.Config) *Onchain {
 		http.WithLogLevel(zerolog.WarnLevel),
 	)
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.New("Error dialing consensus client: " + err.Error())
 	}
 	consensusClient := client.(*http.Service)
 
 	// Get deposit contract to ensure the endpoint is working
 	depositContract, err := consensusClient.DepositContract(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.New("Error fetching deposit contract from consensus client: " + err.Error())
 	}
 	log.Info("Connected succesfully to consensus client. Deposit contract: ", depositContract)
 
 	if depositContract.ChainID != uint64(chainId.Int64()) {
-		log.Fatal("ChainId from consensus and execution client do not match: ",
-			depositContract.ChainID, " vs ", uint64(chainId.Int64()))
+		return nil, fmt.Errorf("ChainId from consensus and execution client do not match: %d vs %d", depositContract.ChainID, uint64(chainId.Int64()))
 	}
 
 	// Print sync status of consensus and execution client
 	execSync, err := executionClient.SyncProgress(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.New("Error fetching execution client sync progress: " + err.Error())
 	}
 
 	log.Info("Execution client sync state (nil is synced): ", execSync)
 
 	consSync, err := consensusClient.NodeSyncing(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.New("Error fetching consensus client sync progress: " + err.Error())
 	}
 
 	log.Info("Consensus client sync state: ", consSync)
@@ -117,7 +116,7 @@ func NewOnchain(cfg config.Config) *Onchain {
 	address := common.HexToAddress("0x25eb524fabe93979d299158a1c7d1ff6628e0356")
 	contract, err := contract.NewContract(address, executionClient)
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.New("Error instantiating contract: " + err.Error())
 	}
 
 	return &Onchain{
@@ -125,7 +124,7 @@ func NewOnchain(cfg config.Config) *Onchain {
 		ExecutionClient: executionClient,
 		Cfg:             &cfg,
 		Contract:        contract,
-	}
+	}, nil
 }
 
 func (f *Onchain) AreNodesInSync() bool {
@@ -297,8 +296,7 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64) []Donation {
 	return donations
 }
 
-func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) string {
-	retryOptions := make([]retry.Option, 0)
+func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	var rewardsRootStr string
 
 	// Retries multiple times before errorings
@@ -309,16 +307,15 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) string {
 			if err != nil {
 				return err
 			}
-
 			rewardsRootStr = "0x" + hex.EncodeToString(rewardsRoot[:])
 			return nil
-		}, retryOptions...)
+		}, GetRetryOpts(opts)...)
 
 	if err != nil {
-		log.Fatal("could not get merkle root from contract: ", err)
+		return "", errors.New("could not get merkle root from contract: " + err.Error())
 	}
 
-	return rewardsRootStr
+	return rewardsRootStr, nil
 }
 
 func (o *Onchain) GetEthBalance(address string) *big.Int {
@@ -446,4 +443,12 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
 	return tx.Hash().Hex()
+}
+
+func GetRetryOpts(opts []retry.Option) []retry.Option {
+	if len(opts) == 0 {
+		return defaultRetryOpts
+	} else {
+		return opts
+	}
 }
