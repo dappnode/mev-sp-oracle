@@ -223,8 +223,9 @@ func Test_StateMachine(t *testing.T) {
 func Test_SaveLoadFromToFile(t *testing.T) {
 
 	state := NewOracleState(&config.Config{
-		PoolAddress: "0x0000000000000000000000000000000000000000",
-		Network:     "mainnet",
+		PoolAddress:     "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
+		Network:         "mainnet",
 	})
 
 	state.Donations = make([]Donation, 1)

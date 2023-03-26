@@ -196,7 +196,7 @@ func (b *VersionedSignedBeaconBlock) SentEthToAddress(poolAddress string) *big.I
 			(strings.ToLower(msg.From().String()) != strings.ToLower(b.GetFeeRecipient())) {
 
 			sentEth.Add(sentEth, msg.Value())
-			log.Info("Sent amoiunt: ", msg.Value())
+			log.Info("Sent amount: ", msg.Value())
 			numTxs++
 		}
 	}
