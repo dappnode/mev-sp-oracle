@@ -347,7 +347,8 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 
 	StateFileName = "test_state.gob"
 	defer os.Remove(StateFileName)
-	state.SaveStateToFile()
+	err := state.SaveStateToFile("")
+	require.NoError(t, err)
 
 	recovered, err := ReadStateFromFile()
 	require.NoError(t, err)

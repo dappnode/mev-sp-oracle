@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dappnode/mev-sp-oracle/config"
@@ -360,20 +361,27 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 	return balanceWei, nil
 }
 
-func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
+func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) (string, error) {
+
+	var merkleRoot string
+	if strings.HasPrefix(newMerkleRoot, "0x") {
+		merkleRoot = newMerkleRoot[2:]
+	} else {
+		merkleRoot = newMerkleRoot
+	}
 
 	// Parse merkle root to byte array
 	newMerkleRootBytes := [32]byte{}
-	unboundedBytes := common.Hex2Bytes(newMerkleRoot)
+	unboundedBytes := common.Hex2Bytes(merkleRoot)
 
 	if len(unboundedBytes) != 32 {
-		log.Fatal("wrong merkle root length: ", newMerkleRoot)
+		log.Fatal("wrong merkle root length: ", merkleRoot)
 	}
-	copy(newMerkleRootBytes[:], common.Hex2Bytes(newMerkleRoot))
+	copy(newMerkleRootBytes[:], common.Hex2Bytes(merkleRoot))
 
 	// Sanity check to ensure the converted tree matches the original
-	if hex.EncodeToString(newMerkleRootBytes[:]) != newMerkleRoot {
-		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
+	if hex.EncodeToString(newMerkleRootBytes[:]) != merkleRoot {
+		log.Fatal("merkle trees dont match, expected: ", merkleRoot)
 	}
 
 	// TODO: Extract some of these things out of the function
@@ -381,37 +389,37 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	// to pay for the tx fees, otherwise it will fail
 	privateKey, err := crypto.HexToECDSA(o.Cfg.DeployerPrivateKey)
 	if err != nil {
-		log.Fatal(err)
+		return "", errors.New("could not load private key: " + err.Error())
 	}
 
 	publicKey := privateKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
-		log.Fatal("error casting public key to ECDSA")
+		return "", errors.New("error casting public key to ECDSA")
 	}
 
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 	fmt.Println(fromAddress.Hex())
 	nonce, err := o.ExecutionClient.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
-		log.Fatal("could not get pending nonce: ", err)
+		return "", errors.New("could not get pending nonce: " + err.Error())
 	}
 
 	// Unused, leaving for reference. We rely on automatic gas estimation, see below (nil values)
 	gasTipCap, err := o.ExecutionClient.SuggestGasTipCap(context.Background())
 	if err != nil {
-		log.Fatal("could not get gas price suggestion: ", err)
+		return "", errors.New("could not get gas price suggestion: " + err.Error())
 	}
 	_ = gasTipCap
 
 	chaindId, err := o.ExecutionClient.NetworkID(context.Background())
 	if err != nil {
-		log.Fatal("could not get chaind: ", err)
+		return "", errors.New("could not get chain id: " + err.Error())
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chaindId)
 	if err != nil {
-		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
+		return "", errors.New("could not create NewKeyedTransactorWithChainID: " + err.Error())
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
@@ -429,24 +437,24 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	auth.NoSend = false
 
 	//address := common.HexToAddress(o.cfg.PoolAddress)
-	// TODO: hardcoding a different address for testing
+	// TODO: hardcoding a different address for testing. Very important to modify this
 	address := common.HexToAddress("0x25eB524fAbe93979D299158a1c7D1FF6628e0356")
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)
 	if err != nil {
-		log.Fatal(err)
+		return "", errors.New("could not create contract instance: " + err.Error())
 	}
 
 	// Create a tx calling the update rewards root function with the new merkle root
 	tx, err := instance.UpdateRewardsRoot(auth, newMerkleRootBytes)
 	if err != nil {
-		log.Fatal(err)
+		return "", errors.New("could not create tx: " + err.Error())
 	}
 
 	log.WithFields(log.Fields{
 		"TxHash":        tx.Hash().Hex(),
 		"NewMerkleRoot": newMerkleRoot,
-	}).Info("Tx sent to Ethereum updating rewards merkle root, wait to be validated")
+	}).Info("Tx sent to Ethereum updating rewards merkle root, waiting to be validated")
 
 	// Leave 5 minutes for the tx to be validated
 	deadline := time.Now().Add(5 * time.Minute)
@@ -456,10 +464,10 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	// It stops waiting when the context is canceled.
 	receipt, err := bind.WaitMined(ctx, o.ExecutionClient, tx)
 	if ctx.Err() != nil {
-		log.Fatal("Timeout expired for waiting for tx to be validated, txHash: ", tx.Hash().Hex(), " err:", err)
+		return "", errors.New("timeout expired for waiting for tx to be validated, txHash: " + tx.Hash().Hex() + " err:" + err.Error())
 	}
 	if receipt.Status != types.ReceiptStatusSuccessful {
-		log.Fatal("Tx failed, err: ", receipt.Status, " hash: ", tx.Hash().Hex())
+		return "", errors.New("tx failed, err: " + err.Error() + " hash: " + tx.Hash().Hex())
 	}
 
 	// Tx was sent and validated correctly, print receipt info
@@ -472,7 +480,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		"BlockNumber":       receipt.BlockNumber,
 	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
-	return tx.Hash().Hex()
+	return tx.Hash().Hex(), nil
 }
 
 func GetRetryOpts(opts []retry.Option) []retry.Option {

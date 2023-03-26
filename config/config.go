@@ -145,7 +145,7 @@ func logConfig(cfg *Config) {
 	if cfg.DryRun {
 		log.Warn("The pool contract will NOT be updated, running in dry-run mode")
 	} else {
-		log.Warn("The pool contract will be updated. Make the account has balance to cover tx fees: ", cfg.UpdaterAddress)
+		log.Warn("The pool contract will be updated. Ensure the account has balance to cover tx fees: ", cfg.UpdaterAddress)
 	}
 }
 

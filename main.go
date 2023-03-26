@@ -45,14 +45,35 @@ func main() {
 		"balance_wei": balance,
 	}).Info("Pool Address Balance")
 
-	// TODO: Try to resume syncing from latest known state from file
-	// TODO: Temporally disabled until further tested
-	//recoveredState, err := or.ReadStateFromFile()
-	//if err == nil {
-	//	oracle.State = recoveredState
-	//} else {
-	//	log.Info("Previous state not found or could not be loaded, syncing from the begining")
-	//}
+	contractMerkleRoot, err := onchain.GetContractMerkleRoot()
+	if err != nil {
+		log.Fatal("Could not get contract merkle root: " + err.Error())
+	}
+
+	recoveredState, err := oracle.ReadStateFromFile()
+	if err != nil {
+		log.Info("Could not recover state from file, starting from slot: ", oracleInstance.State.LatestSlot, " err: ", err)
+	} else {
+		if recoveredState.LatestCommitedState.MerkleRoot != contractMerkleRoot {
+			log.Info("Stored onchain state does not match the one in the contract, starting from slot: ", recoveredState.LatestSlot)
+		} else {
+			// Load the state from the file
+			log.Info("Stored onchain state matches the one in the contract, resuming from known state at slot:", recoveredState.LatestSlot)
+			oracleInstance.State = recoveredState
+		}
+	}
+
+	// Check if we are behind the contract
+	if oracleInstance.State.LatestCommitedState.MerkleRoot != contractMerkleRoot {
+		// Only matters in production, do not care in dry run mode
+		if !cfg.DryRun {
+			// The oracle is 1 or more checkpoints behind the merkle root in the contract. This is not likely to happen
+			// in the oracle in production.
+			log.Fatal("Onchain stored state does not match the one in the contract. Oracle is behind "+
+				"one ore more checkpoints behind the contract. Review this manually: ",
+				oracleInstance.State.LatestCommitedState.MerkleRoot, " vs ", contractMerkleRoot)
+		}
+	}
 
 	go api.StartHTTPServer()
 	go mainLoop(oracleInstance, onchain, cfg)
@@ -135,17 +156,27 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			// mRoot, enoughData := oracle.State.GetMerkleRootIfAny()
 			enoughData := oracleInstance.State.StoreLatestOnchainState()
 
-			oracleInstance.State.SaveStateToFile()
 			oracleInstance.State.LogAccumulatedBalances()
 			oracleInstance.State.LogPendingBalances()
 
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 			} else {
-				//txHash := ""
 				if !cfg.DryRun {
-					txHash := onchain.UpdateContractMerkleRoot(oracleInstance.State.LatestCommitedState.MerkleRoot)
-					_ = txHash
+					txHash, err := onchain.UpdateContractMerkleRoot(oracleInstance.State.LatestCommitedState.MerkleRoot)
+					if err != nil {
+						log.Fatal("Could not update onchain contract merkle root: ", err)
+					}
+					// Persist the state only if the tx was validated successfully
+					err = oracleInstance.State.SaveStateToFile(txHash)
+					if err != nil {
+						log.Fatal("Could not save state to file: ", err)
+					}
+				} else {
+					err = oracleInstance.State.SaveStateToFile("0x")
+					if err != nil {
+						log.Fatal("Could not save state to file: ", err)
+					}
 				}
 			}
 		}

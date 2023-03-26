@@ -3,6 +3,7 @@ package oracle
 import (
 	"encoding/gob"
 	"encoding/hex"
+	"errors"
 	"math/big"
 	"os"
 
@@ -79,28 +80,33 @@ type OnchainState struct {
 }
 
 type OracleState struct {
-	LatestSlot          uint64
-	Network             string
-	PoolAddress         string
-	Validators          map[uint64]*ValidatorInfo
-	Donations           []Donation
-	LatestCommitedState OnchainState
+	LatestSlot  uint64
+	Network     string
+	PoolAddress string
+	Donations   []Donation
 
+	// Related to the pool fees
 	PoolFeesPercent     int
 	PoolFeesAddress     string
 	PoolAccumulatedFees *big.Int
+
+	// Stores the state of the validators, updates on every epoch
+	// Every checkpoint this is used to update the contract root
+	Validators map[uint64]*ValidatorInfo
+
+	// Data avaiability for the merkle root stored onchain
+	// This contains the data that is used to generate the merkle root
+	// stored onchain that Ethereum knows about
+	LatestCommitedState OnchainState
 }
 
-func (p *OracleState) SaveStateToFile() {
+func (p *OracleState) SaveStateToFile(txHash string) error {
 	file, err := os.Create(StateFileName)
 	if err != nil {
-		log.Fatal(err)
+		return errors.New("Could not create state file: " + err.Error())
 	}
 
 	defer file.Close()
-
-	// Dont run this again, take the existing data
-	//mRoot, enoughData := p.GetMerkleRootIfAny()
 
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
@@ -109,10 +115,12 @@ func (p *OracleState) SaveStateToFile() {
 		"TotalValidators": len(p.Validators),
 		"Network":         p.Network,
 		"PoolAddress":     p.PoolAddress,
-		//"MerkleRoot":      mRoot,
-		//"EnoughData":      enoughData,
+		"TxHash:":         txHash,
+		"MerkleRoot":      p.LatestCommitedState.MerkleRoot,
 	}).Info("Saving state to file")
 	encoder.Encode(p)
+
+	return nil
 }
 
 func ReadStateFromFile() (*OracleState, error) {
@@ -130,7 +138,12 @@ func ReadStateFromFile() (*OracleState, error) {
 		log.Fatal(err)
 	}
 
-	mRoot, enoughData := state.GetMerkleRootIfAny()
+	// Compute the merkle root with the data we are loading
+	merkleRoot, enoughData := state.GetMerkleRootIfAny()
+
+	if merkleRoot != state.LatestCommitedState.MerkleRoot {
+		return nil, errors.New("Merkle root mismatch: " + merkleRoot + " vs " + state.LatestCommitedState.MerkleRoot)
+	}
 
 	log.WithFields(log.Fields{
 		"File":            StateFileName,
@@ -138,7 +151,8 @@ func ReadStateFromFile() (*OracleState, error) {
 		"TotalValidators": len(state.Validators),
 		"Network":         state.Network,
 		"PoolAddress":     state.PoolAddress,
-		"MerkleRoot":      mRoot,
+		"MerkleRoot":      merkleRoot,
+		"Donations":       len(state.Donations),
 		"EnoughData":      enoughData,
 	}).Info("Loaded state from file")
 
@@ -147,16 +161,11 @@ func ReadStateFromFile() (*OracleState, error) {
 
 func NewOracleState(cfg *config.Config) *OracleState {
 	return &OracleState{
-		// Start by default at the first slot when the oracle was deployed
-		LatestSlot: cfg.DeployedSlot, // TODO: Not sure if -1
-
-		// Onchain oracle info
-		Network:     cfg.Network,
-		PoolAddress: cfg.PoolAddress,
-
-		Validators: make(map[uint64]*ValidatorInfo, 0),
-		Donations:  make([]Donation, 0),
-
+		LatestSlot:          cfg.DeployedSlot,
+		Network:             cfg.Network,
+		PoolAddress:         cfg.PoolAddress,
+		Validators:          make(map[uint64]*ValidatorInfo, 0),
+		Donations:           make([]Donation, 0),
 		PoolFeesPercent:     cfg.PoolFeesPercent,
 		PoolFeesAddress:     cfg.PoolFeesAddress,
 		PoolAccumulatedFees: big.NewInt(0),
@@ -179,12 +188,11 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	}
 
 	mk := NewMerklelizer()
-	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
 	depositToLeaf, depositToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(state)
 	if !enoughData {
 		return false
 	}
-	merkleRootStr := hex.EncodeToString(tree.Root)
+	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
 	log.Info("Merkle root: ", merkleRootStr)
 
 	// Merkle proofs for each deposit address
@@ -213,7 +221,6 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 
 	state.LatestCommitedState = OnchainState{
 		Validators: validatorsCopy,
-		//TxHash:     txHash, // TODO: Not sure if to store it
 		MerkleRoot: merkleRootStr,
 		Slot:       state.LatestSlot,
 		Proofs:     proofs,
@@ -583,15 +590,12 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { //
 // TODO: Remove this and get the merkle tree from somewhere else. See stored state
 func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 	mk := NewMerklelizer()
-	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
 	_, _, tree, enoughData := mk.GenerateTreeFromState(state)
 	if !enoughData {
 		return "", enoughData
 	}
 	merkleRootStr := hex.EncodeToString(tree.Root)
-	log.Info("Merkle root: ", merkleRootStr)
-
-	return merkleRootStr, true
+	return "0x" + merkleRootStr, true
 }
 
 func RewardTypeToString(rewardType int) string {
