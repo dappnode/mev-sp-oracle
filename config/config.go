@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"crypto/ecdsa"
+	"errors"
 	"flag"
 	"os"
 	"strconv"
@@ -56,53 +57,53 @@ func NewCliConfig() (*Config, error) {
 
 	// Mandatory flag
 	if *poolFeesAddress == "" {
-		log.Fatal("pool-fees-address flag is not present")
+		return nil, errors.New("pool-fees-address flag is not present")
 	}
 
 	// Mandatory flag
 	if *poolFeesPercent == -1 {
-		log.Fatal("pool-fees-percent flag is not present")
+		return nil, errors.New("pool-fees-percent flag is not present")
 	}
 
 	if *poolFeesPercent < 0 || *poolFeesPercent > 100 {
-		log.Fatal("pool-fees-percent must be between 0 and 100")
+		return nil, errors.New("pool-fees-percent must be between 0 and 100")
 	}
 
 	// Mandatory flag
 	if *network != "mainnet" && *network != "goerli" {
-		log.Fatal("wrong network provided, must be mainnet or goerli")
+		return nil, errors.New("wrong network provided, must be mainnet or goerli")
 	}
 
 	if *poolFeesAddress == *poolAddress {
-		log.Fatal("pool-fees-address and pool-address can't be equal")
+		return nil, errors.New("pool-fees-address and pool-address can't be equal")
 	}
 
 	if !*dryRun && *deployerPrivateKey == "" {
-		log.Fatal("you must provide a private key to update the contract root")
+		return nil, errors.New("you must provide a private key to update the contract root")
 	}
 
 	if *dryRun && *deployerPrivateKey != "" {
-		log.Fatal("dry-run mode specified buy also provided a deployer-private-key")
+		return nil, errors.New("dry-run mode specified buy also provided a deployer-private-key")
 	}
 
 	// Check deployerPrivateKey is valid
 	pKey, err := crypto.HexToECDSA(*deployerPrivateKey)
 	if err != nil {
-		log.Fatal("wrong private key, couldn't parse it: ", err)
+		return nil, errors.New("wrong private key, couldn't parse it: " + err.Error())
 	}
 
 	publicKey := pKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
-		log.Fatal("error casting public key to ECDSA")
+		return nil, errors.New("error casting public key to ECDSA: " + err.Error())
 	}
 
 	if !common.IsHexAddress(*poolAddress) {
-		log.Fatal("pool-address: ", *poolAddress, " is not a valid address")
+		return nil, errors.New("pool-address: " + *poolAddress + " is not a valid address")
 	}
 
 	if !common.IsHexAddress(*poolFeesAddress) {
-		log.Fatal("pool-fees-address: ", *poolFeesAddress, " is not a valid address")
+		return nil, errors.New("pool-fees-address: " + *poolFeesAddress + " is not a valid address")
 	}
 
 	conf := &Config{

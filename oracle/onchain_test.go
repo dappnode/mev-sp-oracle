@@ -26,9 +26,10 @@ func Test_FetchFromExecution(t *testing.T) {
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	var onchainTest = NewOnchain(cfgOnchain)
+	onChain, err := NewOnchain(cfgOnchain)
+	require.NoError(t, err)
 	account := common.HexToAddress("0xf573d99385c05c23b24ed33de616ad16a43a0919")
-	balance, err := onchainTest.ExecutionClient.BalanceAt(context.Background(), account, nil)
+	balance, err := onChain.ExecutionClient.BalanceAt(context.Background(), account, nil)
 	require.NoError(t, err)
 	expectedValue, ok := new(big.Int).SetString("25893180161173005034", 10)
 	require.True(t, ok)
@@ -43,14 +44,15 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	var onchain = NewOnchain(cfgOnchain)
+	onchain, err := NewOnchain(cfgOnchain)
+	require.NoError(t, err)
 	folder := "../mock"
 	blockType := "capella"
 	network := "goerli"
 	slotToFetch := uint64(5214321)
 
 	// Get block
-	signedBeaconBlock, err := onchain.GetBlockAtSlot(slotToFetch)
+	signedBeaconBlock, err := onchain.GetConsensusBlockAtSlot(slotToFetch)
 	require.NoError(t, err)
 
 	// Cast to our custom extended block with extra methods

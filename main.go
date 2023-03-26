@@ -29,14 +29,20 @@ func main() {
 		log.Fatal(err)
 	}
 
-	onchain := oracle.NewOnchain(*cfg)
+	onchain, err := oracle.NewOnchain(*cfg)
+	if err != nil {
+		log.Fatal("Could not create new onchain object: ", err)
+	}
 	oracleInstance := oracle.NewOracle(cfg, onchain)
 	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
 
-	balnace := onchain.GetEthBalance(cfg.PoolAddress)
+	balance, err := onchain.GetEthBalance(cfg.PoolAddress)
+	if err != nil {
+		log.Fatal("Could not get pool address balance: " + err.Error())
+	}
 	log.WithFields(log.Fields{
 		"address":     cfg.PoolAddress,
-		"balance_wei": balnace,
+		"balance_wei": balance,
 	}).Info("Pool Address Balance")
 
 	// TODO: Try to resume syncing from latest known state from file
@@ -71,7 +77,11 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 
 	for {
 		// Ensure that the nodes we are using are in sync with the blockchain (consensus + execution)
-		if !onchain.AreNodesInSync() {
+		inSync, err := onchain.AreNodesInSync()
+		if err != nil {
+			log.Fatal("Could not get nodes in sync status:", err)
+		}
+		if !inSync {
 			log.Error("Nodes are not in sync, skipping until in sync")
 			time.Sleep(15 * time.Second)
 			continue

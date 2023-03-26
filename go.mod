@@ -3,6 +3,7 @@ module github.com/dappnode/mev-sp-oracle
 go 1.19
 
 require (
+	github.com/avast/retry-go/v4 v4.3.3
 	github.com/gorilla/mux v1.8.0
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/jackc/pgx/v4 v4.17.2
@@ -10,7 +11,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.26.1
 	github.com/sirupsen/logrus v1.9.0
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.1
 	github.com/txaty/go-merkletree v0.1.15-0.20230105063604-9a402c177611
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
 )

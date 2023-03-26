@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/dappnode/mev-sp-oracle/postgres"
@@ -20,6 +21,13 @@ import (
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
+
+// These are the retry options when an api call involves external call to the beacon node
+// or execution client. The idea is to try once, and fail fast.
+// Use this for all onchain calls, otherwise defaultRetryOpts will be aplied
+var apiRetryOpts = []retry.Option{
+	retry.Attempts(1),
+}
 
 const (
 	// Available endpoints
@@ -148,6 +156,7 @@ type ApiService struct {
 func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle.Onchain) *ApiService {
 	postgres, err := postgres.New(cfg.PostgresEndpoint)
 	if err != nil {
+		// TODO: Return error instead of fatal
 		log.Fatal(err)
 	}
 
@@ -237,7 +246,7 @@ func (m *ApiService) handlePoolStatistics(w http.ResponseWriter, req *http.Reque
 	// has to catch up
 	//oracleMerkleRoot := "0x" + m.OracleState.LatestCommitedState.MerkleRoot
 
-	contractMerkleRoot, err := m.Onchain.GetMerkleRoot()
+	contractMerkleRoot, err := m.Onchain.GetContractMerkleRoot(apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusBadRequest, "could not get latest merkle root from chain")
 		return
@@ -406,7 +415,7 @@ func (m *ApiService) handleLatestMerkleRoot(w http.ResponseWriter, req *http.Req
 	// This is the latest merkle root tracked from the oracle.
 	//oracleMerkleRoot := "0x" + m.OracleState.LatestCommitedState.MerkleRoot
 
-	contractMerkleRoot, err := m.Onchain.GetMerkleRoot()
+	contractMerkleRoot, err := m.Onchain.GetContractMerkleRoot(apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusBadRequest, "could not get latest merkle root from chain")
 		return

@@ -49,7 +49,7 @@ func (or *Oracle) GetBlockIfAny(slot uint64) (uint64, string, bool, *VersionedSi
 	valIndexDuty := uint64(slotDuty.ValidatorIndex)
 	valPublicKey := "0x" + hex.EncodeToString(slotDuty.PubKey[:])
 
-	proposedBlock, err := or.onchain.GetBlockAtSlot(slot)
+	proposedBlock, err := or.onchain.GetConsensusBlockAtSlot(slot)
 	if err != nil {
 		log.Fatal("could not get block at slot:", err)
 	}
@@ -148,7 +148,10 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 
 		// TODO: Confirm that the event only emits donations and is not mixed with other events
 		// Get donations using emitted events. Iterate them and share
-		blockDonations := or.onchain.GetDonationEvents(blockNumber)
+		blockDonations, err := or.onchain.GetDonationEvents(blockNumber)
+		if err != nil {
+			log.Fatal(err)
+		}
 		for _, donation := range blockDonations {
 			or.State.AddDonation(donation)
 			or.State.IncreaseAllPendingRewards(donation.AmountWei)

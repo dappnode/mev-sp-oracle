@@ -4,22 +4,15 @@ import (
 	"os"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
-func CreateMockKeysFile(customKeysFile string, content string) {
+func CreateMockKeysFile(t *testing.T, customKeysFile string, content string) {
 	f, err := os.Create(customKeysFile)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	_, err = f.WriteString(content)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	f.Close()
 }
 
@@ -27,7 +20,7 @@ func Test_Legacy_0_Tx_Decode(t *testing.T) {
 	// Test file containing 4 validator indexes, one per line
 	fileName := "hardcoded_subscriptions.txt"
 	someValidatorIndexes := "1234\n2132\n890\n2343"
-	CreateMockKeysFile(fileName, someValidatorIndexes)
+	CreateMockKeysFile(t, fileName, someValidatorIndexes)
 	defer os.Remove(fileName)
 
 	indexes, err := ReadHardcodedSubscriptions(fileName)
@@ -41,7 +34,7 @@ func Test_Legacy_0_Tx_Decode(t *testing.T) {
 	// Test file containing 4 validator indexes, one per line, with extra line/space
 	fileName2 := "hardcoded_subscriptions.txt"
 	someValidatorIndexes2 := "1\n22\n8\n2\n " // <- extra line/space
-	CreateMockKeysFile(fileName2, someValidatorIndexes2)
+	CreateMockKeysFile(t, fileName2, someValidatorIndexes2)
 	defer os.Remove(fileName2)
 
 	indexes2, err := ReadHardcodedSubscriptions(fileName2)
