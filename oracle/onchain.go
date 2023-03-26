@@ -127,38 +127,41 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 	}, nil
 }
 
-func (f *Onchain) AreNodesInSync() bool {
+func (f *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	var err error
 	var execSync *ethereum.SyncProgress
 	var consSync *api.SyncState
 
-	// TODO: Perhaps in all interactions allow a max number of failures and then error/panic
-	for {
+	err = retry.Do(func() error {
 		execSync, err = f.ExecutionClient.SyncProgress(context.Background())
 		if err != nil {
-			log.Warn("Error fetching execution client sync progress: ", err)
-			time.Sleep(15 * time.Second)
-			continue
+			return errors.New("Error fetching execution client sync progress: " + err.Error())
 		}
-		break
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return false, errors.New("Could not fetch execution client sync progress: " + err.Error())
 	}
 
-	for {
+	err = retry.Do(func() error {
 		consSync, err = f.ConsensusClient.NodeSyncing(context.Background())
 		if err != nil {
-			log.Warn("Error fetching consensus client sync progress: ", err)
-			time.Sleep(15 * time.Second)
-			continue
+			return errors.New("Error fetching execution client sync progress: " + err.Error())
 		}
-		break
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return false, errors.New("Could not fetch consensus client sync progress: " + err.Error())
 	}
 
 	// Exeuction client returns nil if not syncing (in sync)
 	// Give couple of slots to consensus client
 	if execSync == nil && (consSync.SyncDistance < 2) {
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 // TODO: rename to getConsensusblock?
@@ -305,7 +308,7 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
 			rewardsRoot, err := o.Contract.RewardsRoot(callOpts)
 			if err != nil {
-				return err
+				return errors.New("could not get rewards root from contract: " + err.Error())
 			}
 			rewardsRootStr = "0x" + hex.EncodeToString(rewardsRoot[:])
 			return nil

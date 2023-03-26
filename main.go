@@ -31,7 +31,7 @@ func main() {
 
 	onchain, err := oracle.NewOnchain(*cfg)
 	if err != nil {
-		log.Fatal("could not create new onchain object:", err)
+		log.Fatal("Could not create new onchain object: ", err)
 	}
 	oracleInstance := oracle.NewOracle(cfg, onchain)
 	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
@@ -74,7 +74,11 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 
 	for {
 		// Ensure that the nodes we are using are in sync with the blockchain (consensus + execution)
-		if !onchain.AreNodesInSync() {
+		inSync, err := onchain.AreNodesInSync()
+		if err != nil {
+			log.Fatal("Could not get nodes in sync status:", err)
+		}
+		if !inSync {
 			log.Error("Nodes are not in sync, skipping until in sync")
 			time.Sleep(15 * time.Second)
 			continue
