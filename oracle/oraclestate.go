@@ -224,9 +224,6 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 }
 
 func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
-	// TODO
-	// Detect subscriptions with smart contract event. If subscribed but never unsubscribed, then it is subscribed
-
 	for valIndex, validator := range state.Validators {
 		if valIndex == validatorIndex && validator.ValidatorStatus != Banned && validator.ValidatorStatus != NotSubscribed {
 			return true
@@ -260,13 +257,60 @@ func (state *OracleState) AddWrongFeeProposal(validatorIndex uint64, reward *big
 	state.Validators[validatorIndex].WrongFeeBlocksSlots = append(state.Validators[validatorIndex].WrongFeeBlocksSlots, *newBlock)
 }
 
+func (state *OracleState) HandleManualSubscriptions(
+	newSubscription Subscription,
+	depositAddress string,
+	validatorKey string) {
+
+	valIdx := newSubscription.ValidatorIndex
+
+	_, found := state.Validators[valIdx]
+	if found {
+		// Okay, but weird that an already subscribed validator deposited collateral
+		log.WithFields(log.Fields{
+			"BlockNumber":    newSubscription.BlockNumber,
+			"Collateral":     newSubscription.Collateral,
+			"TxHash":         newSubscription.TxHash,
+			"ValidatorIndex": newSubscription.ValidatorIndex,
+		}).Warn("Validator already subscribed was manually subscribed again")
+
+		// Increase pending, adding the collateral to pending
+		state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei.Add(
+			state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei,
+			newSubscription.Collateral)
+	} else {
+		// If the validator is not subscribed, we add it to the state
+		state.Validators[newSubscription.ValidatorIndex] = &ValidatorInfo{
+			ValidatorStatus:       Active, // TODO: Not sure
+			AccumulatedRewardsWei: big.NewInt(0),
+			PendingRewardsWei:     big.NewInt(0),
+			DepositAddress:        depositAddress,
+			ValidatorKey:          validatorKey,
+			ProposedBlocksSlots:   make([]BlockState, 0),
+			MissedBlocksSlots:     make([]BlockState, 0),
+			WrongFeeBlocksSlots:   make([]BlockState, 0),
+		}
+
+		// Increase pending, adding the collateral to pending
+		state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei.Add(
+			state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei,
+			newSubscription.Collateral)
+	}
+}
+
+func (state *OracleState) HandleManualUnsubscription(newUnsubscription Unsubscription) {
+	// TODO: Check
+
+}
+
+// TODO: This is more related to automatic subscriptions. Rename and refactor accordingly
 func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAddress string, validatorKey string) {
 	validator, found := state.Validators[valIndex]
 	if !found {
 		// If not found and not manually subscribed, we trigger the AutoSubscription event
 		// Instantiate the validator
 		validator = &ValidatorInfo{
-			ValidatorStatus:       NotSubscribed,
+			ValidatorStatus:       NotSubscribed, // Not sure
 			AccumulatedRewardsWei: big.NewInt(0),
 			PendingRewardsWei:     big.NewInt(0),
 			DepositAddress:        depositAddress,

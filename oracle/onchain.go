@@ -46,6 +46,20 @@ type EpochDuties struct {
 	Duties []*api.ProposerDuty
 }
 
+type Subscription struct {
+	ValidatorIndex uint64
+	Collateral     *big.Int
+	BlockNumber    uint64
+	TxHash         string
+}
+
+type Unsubscription struct {
+	ValidatorIndex uint64
+	Sender         string
+	BlockNumber    uint64
+	TxHash         string
+}
+
 // Simple cache storing epoch -> proposer duties
 // This is useful to not query the beacon node for each slot
 // since ProposerDuties returns the duties for the whole epoch
@@ -183,6 +197,59 @@ func (f *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 	return signedBeaconBlock, err
 }
 
+// Given a validator key, returns the validator index
+func (f *Onchain) GetValidatorIndexByKey(valKey string, opts ...retry.Option) (uint64, error) {
+	var err error
+	var validators map[phase0.ValidatorIndex]*api.Validator
+
+	err = retry.Do(func() error {
+		validators, err = f.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", []phase0.BLSPubKey{StringToBlsKey(valKey)})
+		if err != nil {
+			return errors.New("Error fetching validator index: " + err.Error())
+		}
+		log.Info(validators)
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return 0, errors.New("Could not fetch validator index: " + err.Error())
+	}
+
+	// A bit convoluted, refactor
+	for _, v := range validators {
+		recValKey := v.Validator.PublicKey.String()
+		if recValKey == valKey {
+			return uint64(v.Index), nil
+		}
+	}
+	return 0, errors.New("Could not fetch validator index:")
+}
+
+// Given a validator index, returns the validator key
+func (f *Onchain) GetValidatorKeyByIndex(valIndex uint64, opts ...retry.Option) (string, error) {
+	var err error
+	var validators map[phase0.ValidatorIndex]*api.Validator
+
+	err = retry.Do(func() error {
+		validators, err = f.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
+		if err != nil {
+			return errors.New("Error fetching validator index: " + err.Error())
+		}
+		log.Info(validators)
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return "", errors.New("Could not fetch validator index: " + err.Error())
+	}
+
+	validator, ok := validators[phase0.ValidatorIndex(valIndex)]
+	if !ok {
+		return "", errors.New("Could not fetch validator index:")
+	}
+	return validator.Validator.PublicKey.String(), nil
+}
+
 func (f *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
 	// Hardcoded value, slots in an epoch
 	slotsInEpoch := uint64(32)
@@ -317,6 +384,90 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([
 		log.Fatal("could not close iterator for new donation events", err)
 	}
 	return donations, nil
+}
+
+func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option) ([]Subscription, error) {
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	// Not the most effective way, but we just need to advance one by one.
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractSuscribeValidatorIterator
+
+	err = retry.Do(func() error {
+		// Note that this event can be both donations and mev rewards
+		itr, err = o.Contract.FilterSuscribeValidator(filterOpts)
+		if err != nil {
+			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+		}
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+	}
+
+	// Loop over all found events
+	blockSubscriptions := make([]Subscription, 0)
+	for itr.Next() {
+		event := itr.Event
+
+		blockSubscriptions = append(blockSubscriptions, Subscription{
+			ValidatorIndex: uint64(event.ValidatorID),
+			Collateral:     event.SuscriptionCollateral,
+			BlockNumber:    blockNumber,
+			TxHash:         event.Raw.TxHash.Hex(),
+		})
+	}
+	err = itr.Close()
+	if err != nil {
+		log.Fatal("could not close iterator for new donation events", err)
+	}
+	return blockSubscriptions, nil
+}
+
+func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Option) ([]Unsubscription, error) {
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	// Not the most effective way, but we just need to advance one by one.
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractUnsuscribeValidatorIterator
+
+	err = retry.Do(func() error {
+		// Note that this event can be both donations and mev rewards
+		itr, err = o.Contract.FilterUnsuscribeValidator(filterOpts)
+		if err != nil {
+			return errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+		}
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+	}
+
+	// Loop over all found events
+	blockUnsubscriptions := make([]Unsubscription, 0)
+	for itr.Next() {
+		event := itr.Event
+
+		blockUnsubscriptions = append(blockUnsubscriptions, Unsubscription{
+			ValidatorIndex: uint64(event.ValidatorID),
+			Sender:         event.Sender.String(),
+			BlockNumber:    blockNumber,
+			TxHash:         event.Raw.TxHash.Hex(),
+		})
+	}
+	err = itr.Close()
+	if err != nil {
+		log.Fatal("could not close iterator for new donation events", err)
+	}
+	return blockUnsubscriptions, nil
 }
 
 func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {

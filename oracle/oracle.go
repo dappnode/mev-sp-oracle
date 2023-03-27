@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"encoding/hex"
+	"errors"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/postgres"
@@ -106,6 +107,7 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 
 	// Get the block if any and who proposed it (or should have proposed it)
 	proposerIndex, proposerKey, proposedOk, block := or.GetBlockIfAny(slotToProcess)
+	depositAddress := or.GetDepositAddressOfValidator(proposerKey, slotToProcess)
 
 	// TODO: Update subscriptions with the info from this block (fee rec) + listening to the smart contract
 	// this also updates the deposit address and all the information of the validator.
@@ -121,12 +123,34 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.onchain)
 		_ = rewardType
 		if err != nil {
-			log.Fatal(err)
+			return uint64(0), errors.New("could not get reward from block: " + err.Error())
+		}
+
+		// Update subscriptions/unsubscriptions based on the events
+		newBlockSubscriptions, err := or.onchain.GetBlockSubscriptions(blockNumber)
+		if err != nil {
+			return uint64(0), errors.New("could not get block subscriptions: " + err.Error())
+		}
+
+		for _, newSub := range newBlockSubscriptions {
+			proposerKey, err := or.onchain.GetValidatorKeyByIndex(newSub.ValidatorIndex)
+			if err != nil {
+				return uint64(0), errors.New("could not get validator key: " + err.Error())
+			}
+			or.State.HandleManualSubscriptions(newSub, depositAddress, proposerKey)
+		}
+
+		newBlockUnsubscriptions, err := or.onchain.GetBlockUnsubscriptions(blockNumber)
+		if err != nil {
+			return uint64(0), errors.New("could not get block unsubscriptions: " + err.Error())
+		}
+		for _, newUnsub := range newBlockUnsubscriptions {
+			// TODO: Add check. Only deposit address is allowed to unsubscribe
+			or.State.HandleManualUnsubscription(newUnsub)
 		}
 
 		// Manual subscription. If feeRec is ok, means the reward was sent to the pool
 		if correctFeeRec {
-			depositAddress := or.GetDepositAddressOfValidator(proposerKey, slotToProcess)
 			or.State.AddSubscriptionIfNotAlready(proposerIndex, depositAddress, proposerKey)
 			or.State.AdvanceStateMachine(proposerIndex, ProposalOk)
 			or.State.IncreaseAllPendingRewards(reward)

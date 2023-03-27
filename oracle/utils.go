@@ -6,8 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/hako/durafmt"
+	log "github.com/sirupsen/logrus"
 )
 
 func ToBytes20(x []byte) [20]byte {
@@ -79,4 +82,20 @@ func SlotsToTime(slots uint64) string {
 	strDuration := durafmt.Parse(timeduration).String()
 
 	return strDuration
+}
+
+func StringToBlsKey(str string) phase0.BLSPubKey {
+	validator := phase0.BLSPubKey{}
+
+	if strings.HasPrefix(str, "0x") {
+		str = str[2:]
+	}
+	unboundedBytes := common.Hex2Bytes(str)
+
+	if len(unboundedBytes) != 48 {
+		log.Fatal("wrong merkle root length: ", str)
+	}
+	copy(validator[:], common.Hex2Bytes(str))
+
+	return validator
 }

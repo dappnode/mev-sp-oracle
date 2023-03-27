@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 )
 
@@ -103,4 +104,12 @@ func Test_SlotsToTime(t *testing.T) {
 	require.Equal(t, "12 seconds", SlotsToTime(1))
 	require.Equal(t, "2 minutes", SlotsToTime(10))
 	require.Equal(t, "1 day 9 hours 20 minutes", SlotsToTime(10000))
+}
+
+func Test_StringToBlsKey(t *testing.T) {
+	rec1 := StringToBlsKey("0x800010c20716ef4264a6d93b3873a008ece58fb9312ac2cc3b0ccc40aedb050f2038281e6a92242a35476af9903c7919")
+	require.Equal(t, rec1, phase0.BLSPubKey{128, 0, 16, 194, 7, 22, 239, 66, 100, 166, 217, 59, 56, 115, 160, 8, 236, 229, 143, 185, 49, 42, 194, 204, 59, 12, 204, 64, 174, 219, 5, 15, 32, 56, 40, 30, 106, 146, 36, 42, 53, 71, 106, 249, 144, 60, 121, 25})
+
+	rec2 := StringToBlsKey("800010c20716ef4264a6d93b3873a008ece58fb9312ac2cc3b0ccc40aedb050f2038281e6a92242a35476af9903c7919")
+	require.Equal(t, rec2, phase0.BLSPubKey{128, 0, 16, 194, 7, 22, 239, 66, 100, 166, 217, 59, 56, 115, 160, 8, 236, 229, 143, 185, 49, 42, 194, 204, 59, 12, 204, 64, 174, 219, 5, 15, 32, 56, 40, 30, 106, 146, 36, 42, 53, 71, 106, 249, 144, 60, 121, 25})
 }
