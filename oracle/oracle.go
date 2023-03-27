@@ -3,6 +3,7 @@ package oracle
 import (
 	"encoding/hex"
 	"errors"
+	"math/big"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/postgres"
@@ -75,6 +76,8 @@ func (or *Oracle) UpdateSubscriptions(block VersionedSignedBeaconBlock) {
 }
 
 // TODO: Remove the slot from the input, makes no sense
+// TODO: Do not go to mainnet with this, only for goerli since some validators
+// dont have a deposit address
 func (or *Oracle) GetDepositAddressOfValidator(validatorPubKey string, slot uint64) string {
 	depositAddress, err := or.Postgres.GetDepositAddressOfValidatorKey(validatorPubKey)
 	if err == nil {
@@ -107,7 +110,7 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 
 	// Get the block if any and who proposed it (or should have proposed it)
 	proposerIndex, proposerKey, proposedOk, block := or.GetBlockIfAny(slotToProcess)
-	depositAddress := or.GetDepositAddressOfValidator(proposerKey, slotToProcess)
+	proposerDepositAddress := or.GetDepositAddressOfValidator(proposerKey, slotToProcess)
 
 	// TODO: Update subscriptions with the info from this block (fee rec) + listening to the smart contract
 	// this also updates the deposit address and all the information of the validator.
@@ -121,7 +124,6 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 
 		// If the block was proposed ok
 		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.onchain)
-		_ = rewardType
 		if err != nil {
 			return uint64(0), errors.New("could not get reward from block: " + err.Error())
 		}
@@ -133,11 +135,13 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 		}
 
 		for _, newSub := range newBlockSubscriptions {
-			proposerKey, err := or.onchain.GetValidatorKeyByIndex(newSub.ValidatorIndex)
+			subKey, err := or.onchain.GetValidatorKeyByIndex(newSub.ValidatorIndex)
 			if err != nil {
 				return uint64(0), errors.New("could not get validator key: " + err.Error())
 			}
-			or.State.HandleManualSubscriptions(newSub, depositAddress, proposerKey)
+			subsDepositAddress := or.GetDepositAddressOfValidator(subKey, slotToProcess)
+			todoCollateral := big.NewInt(0)
+			or.State.HandleManualSubscription(todoCollateral, newSub, subsDepositAddress, proposerKey)
 		}
 
 		newBlockUnsubscriptions, err := or.onchain.GetBlockUnsubscriptions(blockNumber)
@@ -145,21 +149,25 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 			return uint64(0), errors.New("could not get block unsubscriptions: " + err.Error())
 		}
 		for _, newUnsub := range newBlockUnsubscriptions {
-			// TODO: Add check. Only deposit address is allowed to unsubscribe
-			or.State.HandleManualUnsubscription(newUnsub)
+			unsubKey, err := or.onchain.GetValidatorKeyByIndex(newUnsub.ValidatorIndex)
+			if err != nil {
+				return uint64(0), errors.New("could not get validator key: " + err.Error())
+			}
+			subsDepositAddress := or.GetDepositAddressOfValidator(unsubKey, slotToProcess)
+
+			// Only allow unsubscriptions if the send is the same address as deposit
+			if subsDepositAddress == newUnsub.Sender {
+				or.State.HandleManualUnsubscription(newUnsub, subsDepositAddress)
+			}
 		}
 
 		// Manual subscription. If feeRec is ok, means the reward was sent to the pool
 		if correctFeeRec {
-			or.State.AddSubscriptionIfNotAlready(proposerIndex, depositAddress, proposerKey)
+			or.State.AddSubscriptionIfNotAlready(proposerIndex, proposerDepositAddress, proposerKey)
 			or.State.AdvanceStateMachine(proposerIndex, ProposalOk)
 			or.State.IncreaseAllPendingRewards(reward)
 			or.State.ConsolidateBalance(proposerIndex)
 			or.State.AddCorrectProposal(proposerIndex, reward, rewardType, slotToProcess)
-
-			if err != nil {
-				log.Fatal(err)
-			}
 		}
 		// If the validator was subscribed but the fee recipient was wrong
 		// we ban the validator as it is not following the protocol rules
