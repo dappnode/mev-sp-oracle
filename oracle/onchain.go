@@ -269,8 +269,8 @@ func (f *Onchain) GetExecHeaderAndReceipts(
 	return header, receipts, nil
 }
 
-// TODO: Wondering if we can be sure that the smart contract can differentiate
-// between subscriptions and donations.
+// TODO: Rethink this function. Its not just donations but eth rx to the contract
+// in general
 func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([]Donation, error) {
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
@@ -279,10 +279,11 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
 
 	var err error
-	var itr *contract.ContractDonationIterator
+	var itr *contract.ContractEtherReceivedIterator
 
 	err = retry.Do(func() error {
-		itr, err = o.Contract.FilterDonation(filterOpts)
+		// Note that this event can be both donations and mev rewards
+		itr, err = o.Contract.FilterEtherReceived(filterOpts)
 		if err != nil {
 			return errors.New("Error filtering donations for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
