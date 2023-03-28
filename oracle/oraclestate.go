@@ -282,9 +282,11 @@ func (state *OracleState) HandleManualSubscription(
 	} else {
 		// If the validator is not subscribed, we add it to the state
 		// only if the collateral is enough >= minCollateralWei
-		if newSubscription.Collateral.Cmp(minCollateralWei) < 0 {
+		// Note that the validator starts in NotSubscribed, and its state
+		// its advanced below in AdvanceStateMachine
+		if newSubscription.Collateral.Cmp(minCollateralWei) > 0 {
 			state.Validators[newSubscription.ValidatorIndex] = &ValidatorInfo{
-				ValidatorStatus:       Active,
+				ValidatorStatus:       NotSubscribed,
 				AccumulatedRewardsWei: big.NewInt(0),
 				PendingRewardsWei:     big.NewInt(0),
 				DepositAddress:        depositAddress,
@@ -293,15 +295,17 @@ func (state *OracleState) HandleManualSubscription(
 				MissedBlocksSlots:     make([]BlockState, 0),
 				WrongFeeBlocksSlots:   make([]BlockState, 0),
 			}
+
+			// Increase pending, adding the collateral to pending so that whenever
+			// the validator proposes a block, the pending is converted into accumulated
+			// and it gets back its collateral.
+			state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei.Add(
+				state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei,
+				newSubscription.Collateral)
 			// And update it state according to the event
+			log.Info("---", valIdx)
 			state.AdvanceStateMachine(valIdx, ManualSubscription)
 		}
-		// In either case, we add the collateral to pending. If the validator had
-		// enough collateral, it will be added to the rewards. If not its also left
-		// there in case the validator subscribed in the future
-		state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei.Add(
-			state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei,
-			newSubscription.Collateral)
 	}
 }
 

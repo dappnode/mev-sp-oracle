@@ -127,7 +127,7 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 
 	// TODO: Get this from Config.
 	// Instantiate the smoothing pool contract to run get/set operations on it
-	address := common.HexToAddress("0x25eb524fabe93979d299158a1c7d1ff6628e0356")
+	address := common.HexToAddress(cfg.PoolAddress)
 	contract, err := contract.NewContract(address, executionClient)
 	if err != nil {
 		return nil, errors.New("Error instantiating contract: " + err.Error())
@@ -390,6 +390,8 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
 
+	log.Info("checking subs:", startBlock)
+
 	// Not the most effective way, but we just need to advance one by one.
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
 
@@ -399,6 +401,8 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 	err = retry.Do(func() error {
 		// Note that this event can be both donations and mev rewards
 		itr, err = o.Contract.FilterSuscribeValidator(filterOpts)
+		log.Info("err: ", err)
+		log.Info("itr: ", err)
 		if err != nil {
 			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
@@ -420,11 +424,13 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 			BlockNumber:    blockNumber,
 			TxHash:         event.Raw.TxHash.Hex(),
 		})
+		log.Info("got sub: ", event.ValidatorID)
 	}
 	err = itr.Close()
 	if err != nil {
 		log.Fatal("could not close iterator for new donation events", err)
 	}
+	log.Info("got subs: ", len(blockSubscriptions))
 	return blockSubscriptions, nil
 }
 
@@ -582,7 +588,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
 	//address := common.HexToAddress(o.cfg.PoolAddress)
 	// TODO: hardcoding a different address for testing
-	address := common.HexToAddress("0x25eB524fAbe93979D299158a1c7D1FF6628e0356")
+	address := common.HexToAddress(o.Cfg.PoolAddress)
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)
 	if err != nil {

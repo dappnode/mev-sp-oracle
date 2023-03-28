@@ -135,12 +135,13 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 		}
 
 		for _, newSub := range newBlockSubscriptions {
+			log.Info("---New subscription: ", newSub)
 			subKey, err := or.onchain.GetValidatorKeyByIndex(newSub.ValidatorIndex)
 			if err != nil {
 				return uint64(0), errors.New("could not get validator key: " + err.Error())
 			}
 			subsDepositAddress := or.GetDepositAddressOfValidator(subKey, slotToProcess)
-			todoCollateral := big.NewInt(0)
+			todoCollateral := big.NewInt(0) // rename to REQUIRED collateral
 			or.State.HandleManualSubscription(todoCollateral, newSub, subsDepositAddress, proposerKey)
 		}
 
