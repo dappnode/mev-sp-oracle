@@ -72,11 +72,11 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 
 	// Get the block if any and who proposed it (or should have proposed it)
 	proposerIndex, proposerKey, proposedOk, block := or.GetBlockIfAny(slotToProcess)
-	proposerDepositAddress := or.onchain.GetDepositAddressOfValidator(proposerKey, slotToProcess)
 
 	// If the block was proposed (not missed)
 	if proposedOk {
 		blockNumber := block.GetBlockNumber()
+		proposerDepositAddress := or.onchain.GetDepositAddressOfValidator(proposerKey, slotToProcess)
 
 		// or.onchain.GetRewardsRoot()
 
