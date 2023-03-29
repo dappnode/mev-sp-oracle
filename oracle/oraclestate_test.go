@@ -354,4 +354,39 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 	require.Equal(t, state, recovered)
 }
 
+func Test_IsValidatorSubscribed(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.Validators[10] = &ValidatorInfo{
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(100),
+		PendingRewardsWei:     big.NewInt(200),
+	}
+	state.Validators[20] = &ValidatorInfo{
+		ValidatorStatus:       YellowCard,
+		AccumulatedRewardsWei: big.NewInt(300),
+		PendingRewardsWei:     big.NewInt(300),
+	}
+	state.Validators[30] = &ValidatorInfo{
+		ValidatorStatus:       RedCard,
+		AccumulatedRewardsWei: big.NewInt(900),
+		PendingRewardsWei:     big.NewInt(100),
+	}
+	state.Validators[40] = &ValidatorInfo{
+		ValidatorStatus:       NotSubscribed,
+		AccumulatedRewardsWei: big.NewInt(50),
+		PendingRewardsWei:     big.NewInt(10),
+	}
+	state.Validators[40] = &ValidatorInfo{
+		ValidatorStatus:       Banned,
+		AccumulatedRewardsWei: big.NewInt(50),
+		PendingRewardsWei:     big.NewInt(10),
+	}
+	require.Equal(t, true, state.IsValidatorSubscribed(10))
+	require.Equal(t, true, state.IsValidatorSubscribed(20))
+	require.Equal(t, true, state.IsValidatorSubscribed(30))
+	require.Equal(t, false, state.IsValidatorSubscribed(40))
+	require.Equal(t, false, state.IsValidatorSubscribed(50))
+}
+
+// TODO: Add tests for add subscription and remove subscription
 // TODO: Add more tests when spec settled

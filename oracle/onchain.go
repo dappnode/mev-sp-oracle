@@ -228,7 +228,6 @@ func (f *Onchain) GetValidatorKeyByIndex(valIndex uint64, opts ...retry.Option) 
 		if err != nil {
 			return errors.New("Error fetching validator index: " + err.Error())
 		}
-		log.Info(validators)
 		return nil
 	}, GetRetryOpts(opts)...)
 

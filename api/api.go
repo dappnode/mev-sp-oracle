@@ -50,6 +50,7 @@ const (
 	pathValidatorOffchainStateByIndex = "/validatoroffchainstate/{valindex}"
 
 	// TODO: Get all validators for a deposit address
+	// TODO: add endpoint with subscriptions and unsubscriptions events for trazability
 
 	pathValidatorStateByDeposit = ""
 

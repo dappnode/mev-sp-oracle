@@ -381,7 +381,7 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAd
 		// If not found and not manually subscribed, we trigger the AutoSubscription event
 		// Instantiate the validator
 		validator = &ValidatorInfo{
-			ValidatorStatus:       NotSubscribed, // Not sure
+			ValidatorStatus:       NotSubscribed,
 			AccumulatedRewardsWei: big.NewInt(0),
 			PendingRewardsWei:     big.NewInt(0),
 			DepositAddress:        depositAddress,
