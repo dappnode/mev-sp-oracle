@@ -62,105 +62,55 @@ func (or *Oracle) GetBlockIfAny(slot uint64) (uint64, string, bool, *VersionedSi
 	return valIndexDuty, valPublicKey, true, &VersionedSignedBeaconBlock{proposedBlock}
 }
 
-func (or *Oracle) UpdateSubscriptions(block VersionedSignedBeaconBlock) {
-	// TODO: Listen events from the smart contract
-	// Detect manual subscriptions
-	/*
-		proposerIndex := uint64(block.GetProposerIndex())
-
-		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.onchain)
-		if err != nil {
-			log.Fatal(err)
-		}*/
-}
-
-// TODO: Remove the slot from the input, makes no sense
-// TODO: Do not go to mainnet with this, only for goerli since some validators
-// dont have a deposit address
-func (or *Oracle) GetDepositAddressOfValidator(validatorPubKey string, slot uint64) string {
-	depositAddress, err := or.Postgres.GetDepositAddressOfValidatorKey(validatorPubKey)
-	if err == nil {
-		return depositAddress
-	}
-	log.Warn("Deposit key not found for ", validatorPubKey, ". Expected in goerli. Using a default one. err: ", err)
-
-	// TODO: Remove this in production. Used in goerli for testing with differenet addresses
-	someDepositAddresses := []string{
-		"0x001eDa52592fE2f8a28dA25E8033C263744b1b6E",
-		"0x0029a125E6A3f058628Bd619C91f481e4470D673",
-		"0x003718fb88964A1F167eCf205c7f04B25FF46B8E",
-		"0x004b1EaBc3ea60331a01fFfC3D63E5F6B3aB88B3",
-		"0x005CD1608e40d1e775a97d12e4f594029567C071",
-		"0x0069c9017BDd6753467c138449eF98320be1a4E4",
-		"0x007cF0936ACa64Ef22C0019A616801Bec7FCCECF",
-	}
-	//Just pick a "random" one to not always the same
-	return someDepositAddresses[slot%7]
-}
-
 // Advances the oracle to the next state, processing LatestSlot proposals/donations
 // calculating the new state of all validators. It returns the slot that was processed
 // and if there was an error.
 func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
-	// TODO: Get block and listen for new subscriptions
 
 	// TODO: Ensure somehow that we dont process a slot twice.
 	slotToProcess := or.State.LatestSlot
 
 	// Get the block if any and who proposed it (or should have proposed it)
 	proposerIndex, proposerKey, proposedOk, block := or.GetBlockIfAny(slotToProcess)
-	proposerDepositAddress := or.GetDepositAddressOfValidator(proposerKey, slotToProcess)
-
-	// TODO: Update subscriptions with the info from this block (fee rec) + listening to the smart contract
-	// this also updates the deposit address and all the information of the validator.
+	proposerDepositAddress := or.onchain.GetDepositAddressOfValidator(proposerKey, slotToProcess)
 
 	// If the block was proposed (not missed)
 	if proposedOk {
 		blockNumber := block.GetBlockNumber()
-		_ = blockNumber
 
 		// or.onchain.GetRewardsRoot()
 
-		// If the block was proposed ok
+		// Fetch block proposal parameters such as rewards
 		reward, correctFeeRec, rewardType, err := block.GetSentRewardAndType(or.cfg.PoolAddress, *or.onchain)
 		if err != nil {
 			return uint64(0), errors.New("could not get reward from block: " + err.Error())
 		}
 
-		// Update subscriptions/unsubscriptions based on the events
-		newBlockSubscriptions, err := or.onchain.GetBlockSubscriptions(blockNumber)
+		// Fetch subscription data
+		newBlockSubs, err := or.onchain.GetBlockSubscriptions(blockNumber)
 		if err != nil {
 			return uint64(0), errors.New("could not get block subscriptions: " + err.Error())
 		}
 
-		for _, newSub := range newBlockSubscriptions {
-			subKey, err := or.onchain.GetValidatorKeyByIndex(newSub.ValidatorIndex)
-			if err != nil {
-				return uint64(0), errors.New("could not get validator key: " + err.Error())
-			}
-			subsDepositAddress := or.GetDepositAddressOfValidator(subKey, slotToProcess)
-			or.State.HandleManualSubscription(or.cfg.CollateralInWei, newSub, subsDepositAddress, proposerKey)
-		}
-
-		newBlockUnsubscriptions, err := or.onchain.GetBlockUnsubscriptions(blockNumber)
+		// Fetch unsubscription data
+		newBlockUnsub, err := or.onchain.GetBlockUnsubscriptions(blockNumber)
 		if err != nil {
 			return uint64(0), errors.New("could not get block unsubscriptions: " + err.Error())
 		}
-		for _, newUnsub := range newBlockUnsubscriptions {
-			unsubKey, err := or.onchain.GetValidatorKeyByIndex(newUnsub.ValidatorIndex)
-			if err != nil {
-				return uint64(0), errors.New("could not get validator key: " + err.Error())
-			}
-			subsDepositAddress := or.GetDepositAddressOfValidator(unsubKey, slotToProcess)
 
-			// Only allow unsubscriptions if the send is the same address as deposit
-			if subsDepositAddress == newUnsub.Sender {
-				or.State.HandleManualUnsubscription(newUnsub, subsDepositAddress)
-			}
+		// TODO: This is wrong, as this event will also be triggered when a validator proposes a MEV block
+		// Fetch donations in this block
+		blockDonations, err := or.onchain.GetDonationEvents(blockNumber)
+		if err != nil {
+			return uint64(0), errors.New("could not get block donations: " + err.Error())
 		}
+
+		// Handle subscriptions first thing before distributing rewards
+		or.State.HandleManualSubscriptions(or.cfg.CollateralInWei, newBlockSubs)
 
 		// Manual subscription. If feeRec is ok, means the reward was sent to the pool
 		if correctFeeRec {
+			// TODO: Refactor to signal this is AutomaticSubscription
 			or.State.AddSubscriptionIfNotAlready(proposerIndex, proposerDepositAddress, proposerKey)
 			or.State.AdvanceStateMachine(proposerIndex, ProposalOk)
 			or.State.IncreaseAllPendingRewards(reward)
@@ -169,29 +119,29 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 		}
 		// If the validator was subscribed but the fee recipient was wrong
 		// we ban the validator as it is not following the protocol rules
-		if !correctFeeRec && or.State.IsValidatorSubscribed(proposerIndex) {
+		if !correctFeeRec && or.State.IsValidatorSubscribed(proposerIndex) { // TODO: give this a thought for edge cases
 			or.State.AdvanceStateMachine(proposerIndex, ProposalWrongFee)
+			// TODO: Refactor to BanValidator
 			or.State.IncreaseAllPendingRewards(or.State.Validators[proposerIndex].PendingRewardsWei)
 			or.State.ResetPendingRewards(proposerIndex)
 			or.State.AddWrongFeeProposal(proposerIndex, reward, rewardType, slotToProcess)
 		}
 
-		// TODO: Confirm that the event only emits donations and is not mixed with other events
-		// Get donations using emitted events. Iterate them and share
-		blockDonations, err := or.onchain.GetDonationEvents(blockNumber)
-		if err != nil {
-			log.Fatal(err)
-		}
+		// Handle unsubscriptions the last thing after distributing rewards
+		or.State.HandleManualUnsubscriptions(newBlockUnsub)
+
+		// TODO: Add function that process []donations so its simpler
 		for _, donation := range blockDonations {
-			or.State.AddDonation(donation)
+			// TODO: Perhaps merge in the same function?
 			or.State.IncreaseAllPendingRewards(donation.AmountWei)
+			or.State.AddDonation(donation)
 		}
 	}
 
-	// If the validator was not subscribed and missed proposed the block in this slot
+	// If the validator was subscribed and missed proposed the block in this slot
 	if !proposedOk && or.State.IsValidatorSubscribed(proposerIndex) {
 		// If the validator missed a block, just advance the state machine
-		// there are no rewards to share, but validator state slighly changes
+		// there are no rewards to share, but validator state will changes
 		or.State.AdvanceStateMachine(proposerIndex, ProposalMissed)
 		or.State.AddMissedProposal(proposerIndex, slotToProcess)
 	}

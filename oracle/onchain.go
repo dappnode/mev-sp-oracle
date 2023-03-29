@@ -12,6 +12,7 @@ import (
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/dappnode/mev-sp-oracle/postgres"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
@@ -46,20 +47,6 @@ type EpochDuties struct {
 	Duties []*api.ProposerDuty
 }
 
-type Subscription struct {
-	ValidatorIndex uint64
-	Collateral     *big.Int
-	BlockNumber    uint64
-	TxHash         string
-}
-
-type Unsubscription struct {
-	ValidatorIndex uint64
-	Sender         string
-	BlockNumber    uint64
-	TxHash         string
-}
-
 // Simple cache storing epoch -> proposer duties
 // This is useful to not query the beacon node for each slot
 // since ProposerDuties returns the duties for the whole epoch
@@ -71,6 +58,7 @@ type Onchain struct {
 	ExecutionClient *ethclient.Client
 	Cfg             *config.Config
 	Contract        *contract.Contract
+	Postgres        *postgres.Postgresql
 }
 
 func NewOnchain(cfg config.Config) (*Onchain, error) {
@@ -133,11 +121,17 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 		return nil, errors.New("Error instantiating contract: " + err.Error())
 	}
 
+	postgres, err := postgres.New(cfg.PostgresEndpoint)
+	if err != nil {
+		return nil, errors.New("Error instantiating postgres: " + err.Error())
+	}
+
 	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
 		Cfg:             &cfg,
 		Contract:        contract,
+		Postgres:        postgres,
 	}, nil
 }
 
@@ -207,7 +201,6 @@ func (f *Onchain) GetValidatorIndexByKey(valKey string, opts ...retry.Option) (u
 		if err != nil {
 			return errors.New("Error fetching validator index: " + err.Error())
 		}
-		log.Info(validators)
 		return nil
 	}, GetRetryOpts(opts)...)
 
@@ -415,11 +408,20 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 	for itr.Next() {
 		event := itr.Event
 
+		// And add some extra data to the return subscription struct
+		valKey, err := o.GetValidatorKeyByIndex(uint64(event.ValidatorID))
+		if err != nil {
+			return nil, errors.New("could not get validator key: " + err.Error())
+		}
+		depositAddress := o.GetDepositAddressOfValidator(valKey, uint64(event.ValidatorID))
+
 		blockSubscriptions = append(blockSubscriptions, Subscription{
 			ValidatorIndex: uint64(event.ValidatorID),
+			ValidatorKey:   valKey,
 			Collateral:     event.SuscriptionCollateral,
 			BlockNumber:    blockNumber,
 			TxHash:         event.Raw.TxHash.Hex(),
+			DepositAddress: depositAddress,
 		})
 	}
 	err = itr.Close()
@@ -457,11 +459,20 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 	for itr.Next() {
 		event := itr.Event
 
+		// Fetch also extra data
+		valKey, err := o.GetValidatorKeyByIndex(uint64(event.ValidatorID))
+		if err != nil {
+			return nil, errors.New("could not get validator key: " + err.Error())
+		}
+		depositAddress := o.GetDepositAddressOfValidator(valKey, uint64(event.ValidatorID))
+
 		blockUnsubscriptions = append(blockUnsubscriptions, Unsubscription{
 			ValidatorIndex: uint64(event.ValidatorID),
 			Sender:         event.Sender.String(),
 			BlockNumber:    blockNumber,
 			TxHash:         event.Raw.TxHash.Hex(),
+			ValidatorKey:   valKey,
+			DepositAddress: depositAddress,
 		})
 	}
 	err = itr.Close()
@@ -626,6 +637,30 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
 	return tx.Hash().Hex()
+}
+
+// TODO: Remove the slot from the input, makes no sense
+// TODO: Do not go to mainnet with this, only for goerli since some validators
+// dont have a deposit address
+func (o *Onchain) GetDepositAddressOfValidator(validatorPubKey string, slot uint64) string {
+	depositAddress, err := o.Postgres.GetDepositAddressOfValidatorKey(validatorPubKey)
+	if err == nil {
+		return depositAddress
+	}
+	log.Warn("Deposit key not found for ", validatorPubKey, ". Expected in goerli. Using a default one. err: ", err)
+
+	// TODO: Remove this in production. Used in goerli for testing with differenet addresses
+	someDepositAddresses := []string{
+		"0x001eDa52592fE2f8a28dA25E8033C263744b1b6E",
+		"0x0029a125E6A3f058628Bd619C91f481e4470D673",
+		"0x003718fb88964A1F167eCf205c7f04B25FF46B8E",
+		"0x004b1EaBc3ea60331a01fFfC3D63E5F6B3aB88B3",
+		"0x005CD1608e40d1e775a97d12e4f594029567C071",
+		"0x0069c9017BDd6753467c138449eF98320be1a4E4",
+		"0x007cF0936ACa64Ef22C0019A616801Bec7FCCECF",
+	}
+	//Just pick a "random" one to not always the same
+	return someDepositAddresses[slot%7]
 }
 
 func GetRetryOpts(opts []retry.Option) []retry.Option {
