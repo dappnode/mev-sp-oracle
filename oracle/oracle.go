@@ -76,7 +76,6 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 	// If the block was proposed (not missed)
 	if proposedOk {
 		blockNumber := block.GetBlockNumber()
-		proposerDepositAddress := or.onchain.GetDepositAddressOfValidator(proposerKey, slotToProcess)
 
 		// or.onchain.GetRewardsRoot()
 
@@ -111,6 +110,7 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 		// Manual subscription. If feeRec is ok, means the reward was sent to the pool
 		if correctFeeRec {
 			// TODO: Refactor to signal this is AutomaticSubscription
+			proposerDepositAddress := or.onchain.GetDepositAddressOfValidator(proposerKey, slotToProcess)
 			or.State.AddSubscriptionIfNotAlready(proposerIndex, proposerDepositAddress, proposerKey)
 			or.State.AdvanceStateMachine(proposerIndex, ProposalOk)
 			or.State.IncreaseAllPendingRewards(reward)
