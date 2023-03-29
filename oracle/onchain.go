@@ -12,6 +12,7 @@ import (
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/dappnode/mev-sp-oracle/postgres"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
@@ -57,6 +58,7 @@ type Onchain struct {
 	ExecutionClient *ethclient.Client
 	Cfg             *config.Config
 	Contract        *contract.Contract
+	Postgres        *postgres.Postgresql
 }
 
 func NewOnchain(cfg config.Config) (*Onchain, error) {
@@ -113,10 +115,15 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 
 	// TODO: Get this from Config.
 	// Instantiate the smoothing pool contract to run get/set operations on it
-	address := common.HexToAddress("0x25eb524fabe93979d299158a1c7d1ff6628e0356")
+	address := common.HexToAddress(cfg.PoolAddress)
 	contract, err := contract.NewContract(address, executionClient)
 	if err != nil {
 		return nil, errors.New("Error instantiating contract: " + err.Error())
+	}
+
+	postgres, err := postgres.New(cfg.PostgresEndpoint)
+	if err != nil {
+		return nil, errors.New("Error instantiating postgres: " + err.Error())
 	}
 
 	return &Onchain{
@@ -124,6 +131,7 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 		ExecutionClient: executionClient,
 		Cfg:             &cfg,
 		Contract:        contract,
+		Postgres:        postgres,
 	}, nil
 }
 
@@ -181,6 +189,57 @@ func (f *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 		return nil, errors.New("Could not fetch block at slot " + slotStr + ": " + err.Error())
 	}
 	return signedBeaconBlock, err
+}
+
+// Given a validator key, returns the validator index
+func (f *Onchain) GetValidatorIndexByKey(valKey string, opts ...retry.Option) (uint64, error) {
+	var err error
+	var validators map[phase0.ValidatorIndex]*api.Validator
+
+	err = retry.Do(func() error {
+		validators, err = f.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", []phase0.BLSPubKey{StringToBlsKey(valKey)})
+		if err != nil {
+			return errors.New("Error fetching validator index: " + err.Error())
+		}
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return 0, errors.New("Could not fetch validator index: " + err.Error())
+	}
+
+	// A bit convoluted, refactor
+	for _, v := range validators {
+		recValKey := v.Validator.PublicKey.String()
+		if recValKey == valKey {
+			return uint64(v.Index), nil
+		}
+	}
+	return 0, errors.New("Could not fetch validator index:")
+}
+
+// Given a validator index, returns the validator key
+func (f *Onchain) GetValidatorKeyByIndex(valIndex uint64, opts ...retry.Option) (string, error) {
+	var err error
+	var validators map[phase0.ValidatorIndex]*api.Validator
+
+	err = retry.Do(func() error {
+		validators, err = f.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
+		if err != nil {
+			return errors.New("Error fetching validator index: " + err.Error())
+		}
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return "", errors.New("Could not fetch validator index: " + err.Error())
+	}
+
+	validator, ok := validators[phase0.ValidatorIndex(valIndex)]
+	if !ok {
+		return "", errors.New("Could not fetch validator index:")
+	}
+	return validator.Validator.PublicKey.String(), nil
 }
 
 func (f *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
@@ -319,6 +378,109 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([
 	return donations, nil
 }
 
+func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option) ([]Subscription, error) {
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	// TODO: Consider
+	// Not the most effective way, but we just need to advance one by one.
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractSuscribeValidatorIterator
+
+	err = retry.Do(func() error {
+		// Note that this event can be both donations and mev rewards
+		itr, err = o.Contract.FilterSuscribeValidator(filterOpts)
+		if err != nil {
+			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+		}
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+	}
+
+	// Loop over all found events
+	blockSubscriptions := make([]Subscription, 0)
+	for itr.Next() {
+		event := itr.Event
+
+		// And add some extra data to the return subscription struct
+		valKey, err := o.GetValidatorKeyByIndex(uint64(event.ValidatorID))
+		if err != nil {
+			return nil, errors.New("could not get validator key: " + err.Error())
+		}
+		depositAddress := o.GetDepositAddressOfValidator(valKey, uint64(event.ValidatorID))
+
+		blockSubscriptions = append(blockSubscriptions, Subscription{
+			ValidatorIndex: uint64(event.ValidatorID),
+			ValidatorKey:   valKey,
+			Collateral:     event.SuscriptionCollateral,
+			BlockNumber:    blockNumber,
+			TxHash:         event.Raw.TxHash.Hex(),
+			DepositAddress: depositAddress,
+		})
+	}
+	err = itr.Close()
+	if err != nil {
+		log.Fatal("could not close iterator for new donation events", err)
+	}
+	return blockSubscriptions, nil
+}
+
+func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Option) ([]Unsubscription, error) {
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	// Not the most effective way, but we just need to advance one by one.
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractUnsuscribeValidatorIterator
+
+	err = retry.Do(func() error {
+		// Note that this event can be both donations and mev rewards
+		itr, err = o.Contract.FilterUnsuscribeValidator(filterOpts)
+		if err != nil {
+			return errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+		}
+		return nil
+	}, GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+	}
+
+	// Loop over all found events
+	blockUnsubscriptions := make([]Unsubscription, 0)
+	for itr.Next() {
+		event := itr.Event
+
+		// Fetch also extra data
+		valKey, err := o.GetValidatorKeyByIndex(uint64(event.ValidatorID))
+		if err != nil {
+			return nil, errors.New("could not get validator key: " + err.Error())
+		}
+		depositAddress := o.GetDepositAddressOfValidator(valKey, uint64(event.ValidatorID))
+
+		blockUnsubscriptions = append(blockUnsubscriptions, Unsubscription{
+			ValidatorIndex: uint64(event.ValidatorID),
+			Sender:         event.Sender.String(),
+			BlockNumber:    blockNumber,
+			TxHash:         event.Raw.TxHash.Hex(),
+			ValidatorKey:   valKey,
+			DepositAddress: depositAddress,
+		})
+	}
+	err = itr.Close()
+	if err != nil {
+		log.Fatal("could not close iterator for new donation events", err)
+	}
+	return blockUnsubscriptions, nil
+}
+
 func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	var rewardsRootStr string
 
@@ -431,7 +593,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
 	//address := common.HexToAddress(o.cfg.PoolAddress)
 	// TODO: hardcoding a different address for testing
-	address := common.HexToAddress("0x25eB524fAbe93979D299158a1c7D1FF6628e0356")
+	address := common.HexToAddress(o.Cfg.PoolAddress)
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)
 	if err != nil {
@@ -474,6 +636,30 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
 	return tx.Hash().Hex()
+}
+
+// TODO: Remove the slot from the input, makes no sense
+// TODO: Do not go to mainnet with this, only for goerli since some validators
+// dont have a deposit address
+func (o *Onchain) GetDepositAddressOfValidator(validatorPubKey string, slot uint64) string {
+	depositAddress, err := o.Postgres.GetDepositAddressOfValidatorKey(validatorPubKey)
+	if err == nil {
+		return depositAddress
+	}
+	log.Warn("Deposit key not found for ", validatorPubKey, ". Expected in goerli. Using a default one. err: ", err)
+
+	// TODO: Remove this in production. Used in goerli for testing with differenet addresses
+	someDepositAddresses := []string{
+		"0x001eDa52592fE2f8a28dA25E8033C263744b1b6E",
+		"0x0029a125E6A3f058628Bd619C91f481e4470D673",
+		"0x003718fb88964A1F167eCf205c7f04B25FF46B8E",
+		"0x004b1EaBc3ea60331a01fFfC3D63E5F6B3aB88B3",
+		"0x005CD1608e40d1e775a97d12e4f594029567C071",
+		"0x0069c9017BDd6753467c138449eF98320be1a4E4",
+		"0x007cF0936ACa64Ef22C0019A616801Bec7FCCECF",
+	}
+	//Just pick a "random" one to not always the same
+	return someDepositAddresses[slot%7]
 }
 
 func GetRetryOpts(opts []retry.Option) []retry.Option {

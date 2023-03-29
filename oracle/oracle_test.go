@@ -104,31 +104,3 @@ func Test_TODO(t *testing.T) {
 	*/
 	//log.Info("----", oracle.IsRewardOurs(signedBeaconBlock))
 }
-
-func Test_IsValidatorSubscribed(t *testing.T) {
-	t.Skip("Skipping e2e test")
-	var cfg = config.Config{
-		ConsensusEndpoint: "http://127.0.0.1:5051",
-		ExecutionEndpoint: "http://127.0.0.1:8545",
-	}
-	onchain, err := NewOnchain(cfg)
-	require.NoError(t, err)
-	_ = onchain
-	//oracle := NewOracle(&config.Config{}, onchain)
-	//var subscriptions = Subscriptions{
-	// TODO: missing many fields in here
-	//subscriptions: map[uint64]string{
-	//		481020: "0x", // propose mev block at 5323504
-	//			168929: "0x", // proposes vanila block at 5323506
-	//		},
-	//	}
-	//is481020 := oracle.IsValidatorSubscribed(481020, &subscriptions)
-	//is168929 := oracle.IsValidatorSubscribed(168929, &subscriptions)
-	//is100000 := oracle.IsValidatorSubscribed(100000, &subscriptions)
-	//is400000 := oracle.IsValidatorSubscribed(400000, &subscriptions)
-
-	//require.Equal(t, is481020, true)
-	//require.Equal(t, is168929, true)
-	//require.Equal(t, is100000, false)
-	//require.Equal(t, is400000, false)
-}

@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"flag"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ type Config struct {
 	PoolFeesPercent       int
 	PoolFeesAddress       string
 	DryRun                bool
+	CollateralInWei       *big.Int
 }
 
 // By default the release is a custom build. CI takes care of upgrading it with
@@ -54,6 +56,8 @@ var TestRelays = []string{
 	"goerli-relay.securerpc.com",
 }
 
+const MaxUint64 = ^uint64(0)
+
 func NewCliConfig() (*Config, error) {
 	var version = flag.Bool("version", false, "Prints the release version and exits")
 	var consensusEndpoint = flag.String("consensus-endpoint", "", "Ethereum consensus endpoint")
@@ -67,6 +71,7 @@ func NewCliConfig() (*Config, error) {
 	var poolFeesPercent = flag.Int("pool-fees-percent", -1, "Percent of fees pool-fees-percent takes [0-100]")
 	var poolFeesAddress = flag.String("pool-fees-address", "", "Ethereum account with 0x where pool fees go to")
 	var dryRun = flag.Bool("dry-run", false, "If enabled, the pool contract will not be updated")
+	var ethCollateral = flag.Uint64("collateral-in-wei", MaxUint64, "Amount of collateral in ETH wei")
 	flag.Parse()
 
 	if *version {
@@ -108,15 +113,26 @@ func NewCliConfig() (*Config, error) {
 	}
 
 	// Check deployerPrivateKey is valid
-	pKey, err := crypto.HexToECDSA(*deployerPrivateKey)
-	if err != nil {
-		return nil, errors.New("wrong private key, couldn't parse it: " + err.Error())
-	}
+	var pKey *ecdsa.PrivateKey
+	var err error
+	var publicKeyECDSA *ecdsa.PublicKey
+	var updaterAddress string
 
-	publicKey := pKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		return nil, errors.New("error casting public key to ECDSA: " + err.Error())
+	// Only parse it not in dry run mode
+	if !*dryRun {
+		pKey, err = crypto.HexToECDSA(*deployerPrivateKey)
+		if err != nil {
+			return nil, errors.New("wrong private key, couldn't parse it: " + err.Error())
+		}
+		publicKey := pKey.Public()
+		var ok bool
+		publicKeyECDSA, ok = publicKey.(*ecdsa.PublicKey)
+		if !ok {
+			return nil, errors.New("error casting public key to ECDSA: " + err.Error())
+		}
+		updaterAddress = crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
+	} else {
+		updaterAddress = "NA"
 	}
 
 	if !common.IsHexAddress(*poolAddress) {
@@ -127,18 +143,24 @@ func NewCliConfig() (*Config, error) {
 		return nil, errors.New("pool-fees-address: " + *poolFeesAddress + " is not a valid address")
 	}
 
+	if *ethCollateral == MaxUint64 {
+		return nil, errors.New("collateral-in-wei flag is not present")
+	}
+	ethCollateralInWei := big.NewInt(0).SetUint64(*ethCollateral)
+
 	conf := &Config{
 		ConsensusEndpoint:     *consensusEndpoint,
 		ExecutionEndpoint:     *executionEndpoint,
 		Network:               *network,
 		PoolAddress:           *poolAddress,
-		UpdaterAddress:        crypto.PubkeyToAddress(*publicKeyECDSA).Hex(),
+		UpdaterAddress:        updaterAddress,
 		DeployedSlot:          *deployedSlot,
 		CheckPointSizeInSlots: *checkPointSizeInSlots,
 		PostgresEndpoint:      *postgresEndpoint,
 		DeployerPrivateKey:    *deployerPrivateKey,
 		PoolFeesPercent:       *poolFeesPercent,
 		PoolFeesAddress:       *poolFeesAddress,
+		CollateralInWei:       ethCollateralInWei,
 		DryRun:                *dryRun,
 	}
 	logConfig(conf)
@@ -158,6 +180,7 @@ func logConfig(cfg *Config) {
 		"DeployerPrivateKey":    "TODO: use a file with protected password",
 		"PoolFeesPercent":       cfg.PoolFeesPercent,
 		"PoolFeesAddress":       cfg.PoolFeesAddress,
+		"CollateralInWei":       cfg.CollateralInWei,
 		"DryRun":                cfg.DryRun,
 	}).Info("Cli Config:")
 

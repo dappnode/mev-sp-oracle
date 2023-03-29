@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"math/big"
 	"os"
+	"strings"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 
@@ -49,6 +50,24 @@ type Donation struct {
 	AmountWei *big.Int
 	Block     uint64
 	TxHash    string
+}
+
+type Subscription struct {
+	ValidatorIndex uint64
+	ValidatorKey   string
+	Collateral     *big.Int
+	BlockNumber    uint64
+	TxHash         string
+	DepositAddress string
+}
+
+type Unsubscription struct {
+	ValidatorIndex uint64
+	ValidatorKey   string
+	Sender         string
+	BlockNumber    uint64
+	TxHash         string
+	DepositAddress string
 }
 
 type ValidatorInfo struct {
@@ -224,9 +243,6 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 }
 
 func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
-	// TODO
-	// Detect subscriptions with smart contract event. If subscribed but never unsubscribed, then it is subscribed
-
 	for valIndex, validator := range state.Validators {
 		if valIndex == validatorIndex && validator.ValidatorStatus != Banned && validator.ValidatorStatus != NotSubscribed {
 			return true
@@ -260,6 +276,105 @@ func (state *OracleState) AddWrongFeeProposal(validatorIndex uint64, reward *big
 	state.Validators[validatorIndex].WrongFeeBlocksSlots = append(state.Validators[validatorIndex].WrongFeeBlocksSlots, *newBlock)
 }
 
+func (state *OracleState) HandleManualSubscriptions(
+	minCollateralWei *big.Int,
+	subscriptions []Subscription) {
+
+	for _, subscription := range subscriptions {
+		valIdx := subscription.ValidatorIndex
+		_, found := state.Validators[valIdx]
+
+		if found {
+			// Okay, but weird that an already subscribed validator deposited collateral
+			log.WithFields(log.Fields{
+				"BlockNumber":    subscription.BlockNumber,
+				"Collateral":     subscription.Collateral,
+				"TxHash":         subscription.TxHash,
+				"ValidatorIndex": subscription.ValidatorIndex,
+			}).Warn("Validator already subscribed was manually subscribed again")
+
+			// Increase pending, adding the collateral to pending, in an attempt
+			// to return this extra collateral to the user. It can be seen as a
+			// way of donating to a given validator.
+			state.Validators[subscription.ValidatorIndex].PendingRewardsWei.Add(
+				state.Validators[subscription.ValidatorIndex].PendingRewardsWei,
+				subscription.Collateral)
+		} else {
+			// If the validator is not subscribed, we add it to the state
+			// only if the collateral is enough >= minCollateralWei
+			// Note that the validator starts in NotSubscribed, and its state
+			// its advanced below in AdvanceStateMachine
+			if subscription.Collateral.Cmp(minCollateralWei) >= 0 {
+				state.Validators[subscription.ValidatorIndex] = &ValidatorInfo{
+					ValidatorStatus:       NotSubscribed,
+					AccumulatedRewardsWei: big.NewInt(0),
+					PendingRewardsWei:     big.NewInt(0),
+					DepositAddress:        subscription.DepositAddress,
+					ValidatorKey:          subscription.ValidatorKey,
+					ProposedBlocksSlots:   make([]BlockState, 0),
+					MissedBlocksSlots:     make([]BlockState, 0),
+					WrongFeeBlocksSlots:   make([]BlockState, 0),
+				}
+
+				// Increase pending, adding the collateral to pending so that whenever
+				// the validator proposes a block, the pending is converted into accumulated
+				// and it gets back its collateral.
+				// The exact collateral that was added is used, just in case by mistake someone
+				// adds more than the minimum.
+				state.Validators[subscription.ValidatorIndex].PendingRewardsWei.Add(
+					state.Validators[subscription.ValidatorIndex].PendingRewardsWei,
+					subscription.Collateral)
+
+				// And update it state according to the event
+				state.AdvanceStateMachine(valIdx, ManualSubscription)
+			}
+		}
+	}
+}
+
+func (state *OracleState) HandleManualUnsubscriptions(
+	newUnsubscriptions []Unsubscription) {
+
+	for _, newUnsubscription := range newUnsubscriptions {
+		valIdx := newUnsubscription.ValidatorIndex
+		_, found := state.Validators[valIdx]
+
+		// Check the size is the same. To avoid 0x prefixed being mixed with non 0x prefixed
+		if len(newUnsubscription.DepositAddress) != len(newUnsubscription.Sender) {
+			log.Fatal("Deposit address and sender are not the same length: ", newUnsubscription.DepositAddress, " ", newUnsubscription.Sender)
+		}
+
+		// Its very important to check that the unsubscription was made from the deposit address
+		// of the validator, otherwise anyone could call the unsubscription function.
+		if strings.ToLower(newUnsubscription.DepositAddress) != strings.ToLower(newUnsubscription.Sender) {
+			log.WithFields(log.Fields{
+				"BlockNumber":    newUnsubscription.BlockNumber,
+				"Sender":         newUnsubscription.Sender,
+				"TxHash":         newUnsubscription.TxHash[0:12],
+				"ValidatorIndex": newUnsubscription.ValidatorIndex,
+				"ValidatorKey":   newUnsubscription.ValidatorKey[0:8],
+				"DepositAddress": newUnsubscription.DepositAddress,
+			}).Warn("Unsubscription made from a different address than the deposit address")
+			return
+		}
+
+		if found {
+			// If the validator is subscribed, we update it state according to the event
+			state.AdvanceStateMachine(valIdx, Unsubscribe)
+		} else {
+			log.WithFields(log.Fields{
+				"BlockNumber":    newUnsubscription.BlockNumber,
+				"Sender":         newUnsubscription.Sender,
+				"TxHash":         newUnsubscription.TxHash[0:12],
+				"ValidatorIndex": newUnsubscription.ValidatorIndex,
+				"ValidatorKey":   newUnsubscription.ValidatorKey[0:8],
+				"DepositAddress": newUnsubscription.DepositAddress,
+			}).Warn("Found and unsubscription event for a validator that is not subscribed")
+		}
+	}
+}
+
+// TODO: This is more related to automatic subscriptions. Rename and refactor accordingly
 func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAddress string, validatorKey string) {
 	validator, found := state.Validators[valIndex]
 	if !found {
@@ -278,6 +393,7 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAd
 		state.Validators[valIndex] = validator
 
 		// And update it state according to the event
+		// TODO: Perhaps remove this and just use ValidatorStatus: Active
 		state.AdvanceStateMachine(valIndex, AutoSubscription)
 	}
 }
@@ -338,6 +454,13 @@ func (state *OracleState) IncreaseAllPendingRewards(
 
 	// Increase pool rewards (fees)
 	state.PoolAccumulatedFees.Add(state.PoolAccumulatedFees, totalFees)
+
+	log.WithFields(log.Fields{
+		"AmountEligibleValidators": numEligibleValidators,
+		"RewardPerValidatorWei":    perValidatorReward,
+		"PoolFeesWei":              totalFees,
+		"TotalRewardWei":           reward,
+	}).Info("Increasing pending rewards of eligible validators")
 
 	// Increase eligible validators rewards
 	for _, eligibleIndex := range eligibleValidators {
