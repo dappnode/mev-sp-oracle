@@ -284,7 +284,7 @@ func (state *OracleState) HandleManualSubscription(
 		// only if the collateral is enough >= minCollateralWei
 		// Note that the validator starts in NotSubscribed, and its state
 		// its advanced below in AdvanceStateMachine
-		if newSubscription.Collateral.Cmp(minCollateralWei) > 0 {
+		if newSubscription.Collateral.Cmp(minCollateralWei) >= 0 {
 			state.Validators[newSubscription.ValidatorIndex] = &ValidatorInfo{
 				ValidatorStatus:       NotSubscribed,
 				AccumulatedRewardsWei: big.NewInt(0),
@@ -299,11 +299,13 @@ func (state *OracleState) HandleManualSubscription(
 			// Increase pending, adding the collateral to pending so that whenever
 			// the validator proposes a block, the pending is converted into accumulated
 			// and it gets back its collateral.
+			// The exact collateral that was added is used, just in case by mistake someone
+			// adds more than the minimum.
 			state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei.Add(
 				state.Validators[newSubscription.ValidatorIndex].PendingRewardsWei,
 				newSubscription.Collateral)
+
 			// And update it state according to the event
-			log.Info("---", valIdx)
 			state.AdvanceStateMachine(valIdx, ManualSubscription)
 		}
 	}

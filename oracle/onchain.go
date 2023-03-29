@@ -390,8 +390,7 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
 
-	log.Info("checking subs:", startBlock)
-
+	// TODO: Consider
 	// Not the most effective way, but we just need to advance one by one.
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
 
@@ -401,8 +400,6 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 	err = retry.Do(func() error {
 		// Note that this event can be both donations and mev rewards
 		itr, err = o.Contract.FilterSuscribeValidator(filterOpts)
-		log.Info("err: ", err)
-		log.Info("itr: ", err)
 		if err != nil {
 			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
@@ -424,13 +421,11 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 			BlockNumber:    blockNumber,
 			TxHash:         event.Raw.TxHash.Hex(),
 		})
-		log.Info("got sub: ", event.ValidatorID)
 	}
 	err = itr.Close()
 	if err != nil {
 		log.Fatal("could not close iterator for new donation events", err)
 	}
-	log.Info("got subs: ", len(blockSubscriptions))
 	return blockSubscriptions, nil
 }
 

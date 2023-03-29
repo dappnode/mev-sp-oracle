@@ -3,7 +3,6 @@ package oracle
 import (
 	"encoding/hex"
 	"errors"
-	"math/big"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/postgres"
@@ -135,14 +134,12 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 		}
 
 		for _, newSub := range newBlockSubscriptions {
-			log.Info("---New subscription: ", newSub)
 			subKey, err := or.onchain.GetValidatorKeyByIndex(newSub.ValidatorIndex)
 			if err != nil {
 				return uint64(0), errors.New("could not get validator key: " + err.Error())
 			}
 			subsDepositAddress := or.GetDepositAddressOfValidator(subKey, slotToProcess)
-			todoCollateral := big.NewInt(0) // rename to REQUIRED collateral
-			or.State.HandleManualSubscription(todoCollateral, newSub, subsDepositAddress, proposerKey)
+			or.State.HandleManualSubscription(or.cfg.CollateralInWei, newSub, subsDepositAddress, proposerKey)
 		}
 
 		newBlockUnsubscriptions, err := or.onchain.GetBlockUnsubscriptions(blockNumber)
