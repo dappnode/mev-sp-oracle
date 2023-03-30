@@ -44,7 +44,9 @@ const (
 	// TODO: better valindex=xxx
 
 	// TODO: Perhaps rethink this a bit. There are two types of state:
-	// - The state that the oracle knows of
+	// Have two similar endpoints
+	// -/memory/ (what is stored in memory aka, oracle knows)
+	// -/onchain/ (what is submitted to the contract)
 	// - The state that is already submitted onchain
 	pathValidatorOnchainStateByIndex  = "/validatoronchainstate/{valindex}"
 	pathValidatorOffchainStateByIndex = "/validatoroffchainstate/{valindex}"

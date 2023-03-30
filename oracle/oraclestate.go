@@ -182,10 +182,6 @@ func NewOracleState(cfg *config.Config) *OracleState {
 	}
 }
 
-func (state *OracleState) AddDonation(donation Donation) {
-	state.Donations = append(state.Donations, donation)
-}
-
 // Returns false if there wasnt enough data to create a merkle tree
 func (state *OracleState) StoreLatestOnchainState() bool {
 
@@ -249,6 +245,23 @@ func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
 		}
 	}
 	return false
+}
+
+func (state *OracleState) HandleDonations(donations []Donation) {
+	// Ensure the donations are from the same block
+	if len(donations) > 0 {
+		blockReference := donations[0].Block
+		for _, donation := range donations {
+			if donation.Block != blockReference {
+				log.Fatal("Handling donations from different blocks is not possible: ",
+					donation.Block, " vs ", blockReference)
+			}
+		}
+	}
+	for _, donation := range donations {
+		state.IncreaseAllPendingRewards(donation.AmountWei)
+		state.Donations = append(state.Donations, donation)
+	}
 }
 
 func (state *OracleState) AddCorrectProposal(validatorIndex uint64, reward *big.Int, blockType int, slot uint64) {
@@ -414,6 +427,16 @@ func (state *OracleState) GetEligibleValidators() []uint64 {
 	return eligibleValidators
 }
 
+// Banning a validator implies sharing its pending rewards among the rest
+// of the validators and setting its pending to zero.
+func (state *OracleState) BanValidator(valIndex uint64) {
+	// First of all advance the state machine, so the banned validator is not
+	// considered for the pending reward share
+	state.AdvanceStateMachine(valIndex, ProposalWrongFee)
+	state.IncreaseAllPendingRewards(state.Validators[valIndex].PendingRewardsWei)
+	state.ResetPendingRewards(valIndex)
+}
+
 // Increases the pending rewards of all validators, and gives the pool owner a cut
 // of said rewards. Note that pending rewards cant be claimed until a block is proposed
 // by the validator. But the pool owner can claim the pool cut at any time, so they are
@@ -425,7 +448,7 @@ func (state *OracleState) IncreaseAllPendingRewards(
 	numEligibleValidators := big.NewInt(int64(len(eligibleValidators)))
 
 	if len(eligibleValidators) == 0 {
-		log.Warn("Not validators are eligible to receive rewards, pool fees address will receive all")
+		log.Warn("No validators are eligible to receive rewards, pool fees address will receive all")
 		state.PoolAccumulatedFees.Add(state.PoolAccumulatedFees, reward)
 		return
 	}

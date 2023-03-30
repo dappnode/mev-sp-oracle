@@ -26,15 +26,18 @@ func Test_AddSubscription(t *testing.T) {
 
 func Test_AddDonation(t *testing.T) {
 	state := NewOracleState(&config.Config{})
-	state.AddDonation(Donation{AmountWei: big.NewInt(765432), Block: uint64(10), TxHash: "0x1"})
-	state.AddDonation(Donation{AmountWei: big.NewInt(30023456), Block: uint64(124), TxHash: "0x2"})
+	donations := []Donation{
+		Donation{AmountWei: big.NewInt(765432), Block: uint64(100), TxHash: "0x1"},
+		Donation{AmountWei: big.NewInt(30023456), Block: uint64(100), TxHash: "0x2"},
+	}
+	state.HandleDonations(donations)
 
 	require.Equal(t, big.NewInt(765432), state.Donations[0].AmountWei)
-	require.Equal(t, uint64(10), state.Donations[0].Block)
+	require.Equal(t, uint64(100), state.Donations[0].Block)
 	require.Equal(t, "0x1", state.Donations[0].TxHash)
 
 	require.Equal(t, big.NewInt(30023456), state.Donations[1].AmountWei)
-	require.Equal(t, uint64(124), state.Donations[1].Block)
+	require.Equal(t, uint64(100), state.Donations[1].Block)
 	require.Equal(t, "0x2", state.Donations[1].TxHash)
 }
 
@@ -386,6 +389,32 @@ func Test_IsValidatorSubscribed(t *testing.T) {
 	require.Equal(t, true, state.IsValidatorSubscribed(30))
 	require.Equal(t, false, state.IsValidatorSubscribed(40))
 	require.Equal(t, false, state.IsValidatorSubscribed(50))
+}
+
+func Test_BanValidator(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.AddSubscriptionIfNotAlready(1, "0xa", "0xb")
+	state.AddSubscriptionIfNotAlready(2, "0xa", "0xb")
+	state.AddSubscriptionIfNotAlready(3, "0xa", "0xb")
+
+	// New reward arrives
+	state.IncreaseAllPendingRewards(big.NewInt(99))
+
+	// Shared equally among all validators
+	require.Equal(t, big.NewInt(33), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(33), state.Validators[2].PendingRewardsWei)
+	require.Equal(t, big.NewInt(33), state.Validators[3].PendingRewardsWei)
+
+	// Ban validator 3
+	state.BanValidator(3)
+
+	// Its pending balance is shared equally among the rest
+	require.Equal(t, big.NewInt(49), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(49), state.Validators[2].PendingRewardsWei)
+	require.Equal(t, big.NewInt(0), state.Validators[3].PendingRewardsWei)
+
+	// The pool fee address gets the rounding errors (1 wei, neglectable)
+	require.Equal(t, big.NewInt(1), state.PoolAccumulatedFees)
 }
 
 // TODO: Add tests for add subscription and remove subscription

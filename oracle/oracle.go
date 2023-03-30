@@ -119,23 +119,16 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 		}
 		// If the validator was subscribed but the fee recipient was wrong
 		// we ban the validator as it is not following the protocol rules
-		if !correctFeeRec && or.State.IsValidatorSubscribed(proposerIndex) { // TODO: give this a thought for edge cases
-			or.State.AdvanceStateMachine(proposerIndex, ProposalWrongFee)
-			// TODO: Refactor to BanValidator
-			or.State.IncreaseAllPendingRewards(or.State.Validators[proposerIndex].PendingRewardsWei)
-			or.State.ResetPendingRewards(proposerIndex)
+		if !correctFeeRec && or.State.IsValidatorSubscribed(proposerIndex) {
+			or.State.BanValidator(proposerIndex)
 			or.State.AddWrongFeeProposal(proposerIndex, reward, rewardType, slotToProcess)
 		}
 
 		// Handle unsubscriptions the last thing after distributing rewards
 		or.State.HandleManualUnsubscriptions(newBlockUnsub)
 
-		// TODO: Add function that process []donations so its simpler
-		for _, donation := range blockDonations {
-			// TODO: Perhaps merge in the same function?
-			or.State.IncreaseAllPendingRewards(donation.AmountWei)
-			or.State.AddDonation(donation)
-		}
+		// Handle the donations from this block
+		or.State.HandleDonations(blockDonations)
 	}
 
 	// If the validator was subscribed and missed proposed the block in this slot
