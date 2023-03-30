@@ -49,7 +49,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	folder := "../mock"
 	blockType := "capella"
 	network := "goerli"
-	slotToFetch := uint64(5214321)
+	slotToFetch := uint64(5307527)
 
 	// Get block
 	signedBeaconBlock, err := onchain.GetConsensusBlockAtSlot(slotToFetch)

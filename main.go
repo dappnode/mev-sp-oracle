@@ -41,8 +41,8 @@ func main() {
 		log.Fatal("Could not get pool address balance: " + err.Error())
 	}
 	log.WithFields(log.Fields{
-		"address":     cfg.PoolAddress,
-		"balance_wei": balance,
+		"Address":    cfg.PoolAddress,
+		"BalanceWei": balance,
 	}).Info("Pool Address Balance")
 
 	// TODO: Try to resume syncing from latest known state from file
@@ -73,7 +73,7 @@ func main() {
 
 func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config) {
 
-	log.Info("Starting to process from slot: ", oracleInstance.State.LatestSlot)
+	log.Info("Starting to process from slot (see api for progress): ", oracleInstance.State.LatestSlot)
 
 	for {
 		// Ensure that the nodes we are using are in sync with the blockchain (consensus + execution)
@@ -104,18 +104,19 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			}
 			slotToLatestFinalized := finalizedSlot - oracleInstance.State.LatestSlot
 
-			// Log progress every x slots
-			//if finalizedSlot%300 == 0 {
-			log.Info("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
-				slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
-			//}
+			// Log progress every x slots when syncing
+			logEverySlots := uint64(300)
+			if finalizedSlot%logEverySlots == 0 {
+				log.Info("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
+					slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
+			}
 		} else {
 			log.WithFields(log.Fields{
-				"finalizedSlot":   finalizedSlot,
-				"finalizedEpoch":  finalizedEpoch,
-				"oracleStateSlot": oracleInstance.State.LatestSlot,
+				"FinalizedSlot":   finalizedSlot,
+				"FinalizedEpoch":  finalizedEpoch,
+				"OracleStateSlot": oracleInstance.State.LatestSlot,
 			}).Info("Waiting for new finalized slot")
-			time.Sleep(60 * time.Second)
+			time.Sleep(3 * time.Minute)
 			continue
 		}
 
