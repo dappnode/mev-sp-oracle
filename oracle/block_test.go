@@ -142,6 +142,12 @@ func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
 	require.Equal(t, big.NewInt(99952842017043014), mevReward)
 	require.Equal(t, numTxs, 1)
 
+	// Same for mixed case
+	mevReward2, numTxs2, err2 := myBlock.MevRewardInWei("0x388C818CA8B9251b393131C08a736A67ccB19297")
+	require.NoError(t, err2)
+	require.Equal(t, big.NewInt(99952842017043014), mevReward2)
+	require.Equal(t, numTxs2, 1)
+
 	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(95434044627649514), proposerTip)
@@ -174,6 +180,25 @@ func Test_GetMevReward_Goerli_Slot_5214321(t *testing.T) {
 	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(15992505660349526), proposerTip)
+}
+
+func Test_GetMevReward_Goerli_Slot_5307527(t *testing.T) {
+	// This block contains a tx to 0x553bd5a94bcc09ffab6550274d5db140a95ae9bc
+	// but its a normal tx not an MEV one. Detect it doesnt produce a false positive
+	fileName := "capella_slot_5307527_goerli"
+	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
+	extendedBlock := spec.VersionedSignedBeaconBlock{Capella: &block}
+	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+
+	mevReward, numTxs, err := myBlock.MevRewardInWei("0x553bd5a94bcc09ffab6550274d5db140a95ae9bc")
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(0), mevReward)
+	require.Equal(t, numTxs, 0)
+
+	// This block was a MEV block, but we can also test the tip
+	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(105735750887810922), proposerTip)
 }
 
 func Test_MevReward_Slot_5320342(t *testing.T) {
@@ -271,3 +296,5 @@ func LoadBlockHeaderReceiptsCapella(t *testing.T, file string) (capella.SignedBe
 
 	return capellaBlock, headerBlock, txReceipts
 }
+
+// Test GetSentRewardAndType with external api mocked

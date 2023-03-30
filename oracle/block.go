@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"errors"
 	"math/big"
 	"strings"
 
@@ -20,37 +21,65 @@ type VersionedSignedBeaconBlock struct {
 
 func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.Int, int, error) {
 	totalMevReward := big.NewInt(0)
-	// this should be just 1, but just in case
 	numTxs := 0
+
+	// Iterate all txs in the block
 	for _, rawTx := range b.GetBlockTransactions() {
 		tx, msg, err := DecodeTx(rawTx)
 		if err != nil {
-			log.Fatal("todo")
+			return nil, 0, errors.New("could not decode tx: " + err.Error())
 		}
 		// This seems to happen in smart contrat deployments
 		if msg.To() == nil {
 			continue
 		}
-		// Note that its usually the last tx but we check all just in case
-		// TODO: Move logs away from here
+		// Note that the MEV rewards usually goes in the last tx of each block
+		// from the protocol fee recipient to the validator mev fee recipient
+		// we check all just in case.
+
+		// Example: this block https://prater.beaconcha.in/slot/5307417
+		// Contains a mev reward of 0.53166 Ether
+		// With the MEV Reward Recipient (mrr): 0x4D496CcC28058B1D74B7a19541663E21154f9c84
+		// And a protocol fee recipient of (pfr): 0xb64a30399f7F6b0C154c2E7Af0a3ec7B0A5b131a
+		// Note how the last tx of the block contains a tx pfr->mrr of 0.53166 Ether
+
+		// Check sizes are equal (to avoid 0x a non 0x prefix addresses mixups)
+		if len(poolAddress) != len(msg.To().String()) {
+			log.Fatal("Pool address and msg.to() have different length. poolAddress: ",
+				poolAddress, " msg.to(): ", msg.To().String())
+		}
+
+		// Check sizes are equal (to avoid 0x a non 0x prefix addresses mixups)
+		if len(b.GetFeeRecipient()) != len(msg.From().String()) {
+			log.Fatal("Fee recipient and msg.from() have different length. FeeRecipient: ",
+				b.GetFeeRecipient(), " msg.from(): ", msg.From().String())
+		}
+
+		// First of all the tx must go to the pool address
 		if strings.ToLower(poolAddress) == strings.ToLower(msg.To().String()) {
-			totalMevReward.Add(totalMevReward, msg.Value())
-			log.WithFields(log.Fields{
-				"Slot":         b.GetSlot(),
-				"Block":        b.GetBlockNumber(),
-				"ValIndex":     b.GetProposerIndex(),
-				"FeeRecipient": b.GetFeeRecipient()[0:4],
-				"To":           msg.To().String(),
-				"Reward":       msg.Value(),
-				"TxHash":       tx.Hash().String()[0:4],
-				"Type":         "MevBlock",
-			}).Info("New Reward")
-			numTxs++
+			// And for it to be a MEV reward it must be a transfer from the protocol
+			// fee recipient to the validator mev fee recipient
+			if strings.ToLower(b.GetFeeRecipient()) == strings.ToLower(msg.From().String()) {
+				totalMevReward.Add(totalMevReward, msg.Value())
+				log.WithFields(log.Fields{
+					"Slot":         b.GetSlot(),
+					"Block":        b.GetBlockNumber(),
+					"ValIndex":     b.GetProposerIndex(),
+					"FeeRecipient": b.GetFeeRecipient()[0:4],
+					"To":           msg.To().String(),
+					"Reward":       msg.Value(),
+					"TxHash":       tx.Hash().String()[0:4],
+					"Type":         "MevBlock",
+				}).Info("New Reward")
+				numTxs++
+			}
 		}
 	}
+
+	// If there are more than one tx with this characteristic, something is wrong
+	// Check manually
 	if numTxs > 1 {
-		// TODO: Set this to Fatal in mainnet.
-		log.Warn("Multiple MEV rewards to the same address found within a block. This should not happen.")
+		log.Fatal("Multiple MEV rewards to the same address found within a block. This should not happen.")
 	}
 	return totalMevReward, numTxs, nil
 }
@@ -71,7 +100,12 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 	var txType int = -1
 	var wasRewardSent bool = false
 
-	if b.GetFeeRecipient() == poolAddress {
+	if len(b.GetFeeRecipient()) != len(poolAddress) {
+		log.Fatal("Fee recipient and pool address have different lengths. FeeRecipient: ",
+			b.GetFeeRecipient(), "PoolAddress: ", poolAddress)
+	}
+
+	if strings.ToLower(b.GetFeeRecipient()) == strings.ToLower(poolAddress) {
 		// vanila block, we get the tip from the block
 		blockNumber := new(big.Int).SetUint64(b.GetBlockNumber())
 		header, receipts, err := onchain.GetExecHeaderAndReceipts(blockNumber, b.GetBlockTransactions())
@@ -84,13 +118,13 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 			log.Fatal(err)
 		}
 		log.WithFields(log.Fields{
-			"Slot":        b.GetSlot(),
-			"Block":       b.GetBlockNumber(),
-			"ValIndex":    b.GetProposerIndex(),
-			"PoolAddress": poolAddress,
-			"Reward":      reward.String(),
-			"Type":        "VanilaBlock",
-			//"FeeRecipient": b.FeeRecipient(), //Vanila fee recipient
+			"Slot":         b.GetSlot(),
+			"Block":        b.GetBlockNumber(),
+			"ValIndex":     b.GetProposerIndex(),
+			"PoolAddress":  poolAddress,
+			"Reward":       reward.String(),
+			"Type":         "VanilaBlock",
+			"FeeRecipient": b.GetFeeRecipient(),
 		}).Info("New Reward")
 		txType = VanilaBlock
 		wasRewardSent = true
@@ -175,7 +209,8 @@ func (b *VersionedSignedBeaconBlock) GetProposerTip(blockHeader *types.Header, t
 }
 
 // This function detects an Eth transaction sent to an address. Note that if it sent
-// by interacting with an smart contract, it will not be detected here. Unusued
+// by interacting with an smart contract, it will not be detected here.
+// Unusued
 func (b *VersionedSignedBeaconBlock) SentEthToAddress(poolAddress string) *big.Int {
 	sentEth := big.NewInt(0)
 	numTxs := 0
