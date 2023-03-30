@@ -13,9 +13,18 @@ import (
 	mt "github.com/txaty/go-merkletree"
 )
 
+// Description of the state machine:
+// -State: States of the validators, related to wether they earn rewards or not.
+// -Events: Actions that can trigger and state transition from state a to state b.
+// -Handlers: Action that is performed after an event is triggered when landing a new state.
+
+// Default filename to persist the state of the oracle
 var StateFileName = "state.gob"
 
+// TODO: Dont export functions and variables that are not used outside the package
+
 // Types of block rewards
+// TODO: set value=0 as Unknown
 const (
 	VanilaBlock int = 0
 	MevBlock        = 1
@@ -40,10 +49,17 @@ const (
 	Unsubscribe            = 5
 )
 
-type BlockState struct {
-	Reward    *big.Int
-	BlockType int
-	Slot      uint64
+type Block struct {
+	// These fields shall be always present
+	Slot           uint64
+	ValidatorIndex uint64
+	ValidatorKey   string
+
+	// These fields are optional to be used
+	// in succesful proposals to pool
+	Reward         *big.Int
+	RewardType     int
+	DepositAddress string
 }
 
 type Donation struct {
@@ -72,15 +88,15 @@ type Unsubscription struct {
 
 type ValidatorInfo struct {
 	ValidatorStatus       int
-	AccumulatedRewardsWei *big.Int // TODO not sure if this is gwei or wei
-	PendingRewardsWei     *big.Int // TODO not sure if this is gwei or wei
-	CollateralWei         *big.Int // TODO not sure if this is gwei or wei
+	AccumulatedRewardsWei *big.Int
+	PendingRewardsWei     *big.Int
+	CollateralWei         *big.Int
 	DepositAddress        string
-	ValidatorIndex        string // TODO: this should be uint64
+	ValidatorIndex        uint64
 	ValidatorKey          string
-	ProposedBlocksSlots   []BlockState
-	MissedBlocksSlots     []BlockState
-	WrongFeeBlocksSlots   []BlockState
+	ProposedBlocksSlots   []Block
+	MissedBlocksSlots     []Block
+	WrongFeeBlocksSlots   []Block
 
 	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
 }
@@ -247,6 +263,17 @@ func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
 	return false
 }
 
+func (state *OracleState) IsBanned(validatorIndex uint64) bool {
+	validator, found := state.Validators[validatorIndex]
+	if !found {
+		return false
+	}
+	if validator.ValidatorStatus == Banned {
+		return true
+	}
+	return false
+}
+
 func (state *OracleState) HandleDonations(donations []Donation) {
 	// Ensure the donations are from the same block
 	if len(donations) > 0 {
@@ -264,29 +291,12 @@ func (state *OracleState) HandleDonations(donations []Donation) {
 	}
 }
 
-func (state *OracleState) AddCorrectProposal(validatorIndex uint64, reward *big.Int, blockType int, slot uint64) {
-	newBlock := &BlockState{
-		Reward:    reward,
-		BlockType: blockType,
-		Slot:      slot,
-	}
-	state.Validators[validatorIndex].ProposedBlocksSlots = append(state.Validators[validatorIndex].ProposedBlocksSlots, *newBlock)
-}
-
-func (state *OracleState) AddMissedProposal(validatorIndex uint64, slot uint64) {
-	newBlock := &BlockState{
-		Slot: slot,
-	}
-	state.Validators[validatorIndex].MissedBlocksSlots = append(state.Validators[validatorIndex].MissedBlocksSlots, *newBlock)
-}
-
-func (state *OracleState) AddWrongFeeProposal(validatorIndex uint64, reward *big.Int, blockType int, slot uint64) {
-	newBlock := &BlockState{
-		Reward:    reward,
-		BlockType: blockType,
-		Slot:      slot,
-	}
-	state.Validators[validatorIndex].WrongFeeBlocksSlots = append(state.Validators[validatorIndex].WrongFeeBlocksSlots, *newBlock)
+func (state *OracleState) HandleCorrectBlockProposal(block Block) {
+	state.AddSubscriptionIfNotAlready(block.ValidatorIndex, block.DepositAddress, block.ValidatorKey)
+	state.AdvanceStateMachine(block.ValidatorIndex, ProposalOk)
+	state.IncreaseAllPendingRewards(block.Reward)
+	state.ConsolidateBalance(block.ValidatorIndex)
+	state.Validators[block.ValidatorIndex].ProposedBlocksSlots = append(state.Validators[block.ValidatorIndex].ProposedBlocksSlots, block)
 }
 
 func (state *OracleState) HandleManualSubscriptions(
@@ -295,24 +305,52 @@ func (state *OracleState) HandleManualSubscriptions(
 
 	for _, subscription := range subscriptions {
 		valIdx := subscription.ValidatorIndex
-		_, found := state.Validators[valIdx]
+		validator, found := state.Validators[valIdx]
 
-		if found {
+		// If validator was banned, return collateral in form of accumulated and ignore
+		if found && state.IsBanned(validator.ValidatorIndex) {
+			log.WithFields(log.Fields{
+				"BlockNumber":    subscription.BlockNumber,
+				"Collateral":     subscription.Collateral,
+				"TxHash":         subscription.TxHash,
+				"ValidatorIndex": subscription.ValidatorIndex,
+			}).Warn("Banned validator added more collateral, ignoring + returning it")
+
+			state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei.Add(
+				state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei,
+				subscription.Collateral)
+			return
+		}
+
+		// If we found it and its already subscribed, weird. Return the collateral
+		if found && state.IsValidatorSubscribed(validator.ValidatorIndex) {
 			// Okay, but weird that an already subscribed validator deposited collateral
 			log.WithFields(log.Fields{
 				"BlockNumber":    subscription.BlockNumber,
 				"Collateral":     subscription.Collateral,
 				"TxHash":         subscription.TxHash,
 				"ValidatorIndex": subscription.ValidatorIndex,
-			}).Warn("Validator already subscribed was manually subscribed again")
+			}).Warn("Validator already subscribed sent colateral again (could be targeted donation)")
 
-			// Increase pending, adding the collateral to pending, in an attempt
+			// Increase pending, adding the collateral to accumulated, in an attempt
 			// to return this extra collateral to the user. It can be seen as a
 			// way of donating to a given validator.
-			state.Validators[subscription.ValidatorIndex].PendingRewardsWei.Add(
-				state.Validators[subscription.ValidatorIndex].PendingRewardsWei,
+			state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei.Add(
+				state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei,
 				subscription.Collateral)
+
+			// Otherwise if we havent found it or is not subscribed
 		} else {
+			var prevAccumulatedRewardsWei *big.Int = big.NewInt(0)
+			var prevPendingRewardsWei *big.Int = big.NewInt(0)
+
+			// Keep previous rewards in case the validator was already present but not subscribed
+			// This case happens when a validator subscribes with a lower amount of collateral than
+			// needed, and then subscribes again with enough collateral.
+			if found {
+				prevAccumulatedRewardsWei = validator.AccumulatedRewardsWei
+				prevPendingRewardsWei = validator.PendingRewardsWei
+			}
 			// If the validator is not subscribed, we add it to the state
 			// only if the collateral is enough >= minCollateralWei
 			// Note that the validator starts in NotSubscribed, and its state
@@ -320,13 +358,15 @@ func (state *OracleState) HandleManualSubscriptions(
 			if subscription.Collateral.Cmp(minCollateralWei) >= 0 {
 				state.Validators[subscription.ValidatorIndex] = &ValidatorInfo{
 					ValidatorStatus:       NotSubscribed,
-					AccumulatedRewardsWei: big.NewInt(0),
-					PendingRewardsWei:     big.NewInt(0),
+					AccumulatedRewardsWei: prevAccumulatedRewardsWei,
+					PendingRewardsWei:     prevPendingRewardsWei,
+					CollateralWei:         subscription.Collateral,
 					DepositAddress:        subscription.DepositAddress,
+					ValidatorIndex:        subscription.ValidatorIndex,
 					ValidatorKey:          subscription.ValidatorKey,
-					ProposedBlocksSlots:   make([]BlockState, 0),
-					MissedBlocksSlots:     make([]BlockState, 0),
-					WrongFeeBlocksSlots:   make([]BlockState, 0),
+					ProposedBlocksSlots:   make([]Block, 0),
+					MissedBlocksSlots:     make([]Block, 0),
+					WrongFeeBlocksSlots:   make([]Block, 0),
 				}
 
 				// Increase pending, adding the collateral to pending so that whenever
@@ -338,11 +378,63 @@ func (state *OracleState) HandleManualSubscriptions(
 					state.Validators[subscription.ValidatorIndex].PendingRewardsWei,
 					subscription.Collateral)
 
+				log.WithFields(log.Fields{
+					"BlockNumber":    subscription.BlockNumber,
+					"Collateral":     subscription.Collateral,
+					"TxHash":         subscription.TxHash,
+					"ValidatorIndex": subscription.ValidatorIndex,
+				}).Info("Validator subscribed with ok collateral")
+
 				// And update it state according to the event
 				state.AdvanceStateMachine(valIdx, ManualSubscription)
+			} else {
+				// If the collateral is not enough, we just track it but as unsubscribed
+				// and return the collateral to the user
+				log.WithFields(log.Fields{
+					"BlockNumber":    subscription.BlockNumber,
+					"Collateral":     subscription.Collateral,
+					"TxHash":         subscription.TxHash,
+					"ValidatorIndex": subscription.ValidatorIndex,
+				}).Warn("Validator subscribed but collateral is not enough")
+
+				state.Validators[subscription.ValidatorIndex] = &ValidatorInfo{
+					ValidatorStatus:       NotSubscribed, // We track it but as unsuscribed
+					AccumulatedRewardsWei: big.NewInt(0),
+					PendingRewardsWei:     big.NewInt(0),
+					CollateralWei:         big.NewInt(0), // Set to zero since its returned
+					DepositAddress:        subscription.DepositAddress,
+					ValidatorIndex:        subscription.ValidatorIndex,
+					ValidatorKey:          subscription.ValidatorKey,
+					ProposedBlocksSlots:   make([]Block, 0),
+					MissedBlocksSlots:     make([]Block, 0),
+					WrongFeeBlocksSlots:   make([]Block, 0),
+				}
+
+				// Return collateral adding it to accumulated rewards. Can be claimed at any time
+				state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei.Add(
+					state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei,
+					subscription.Collateral)
 			}
 		}
 	}
+}
+
+// Banning a validator implies sharing its pending rewards among the rest
+// of the validators and setting its pending to zero.
+func (state *OracleState) HandleBanValidator(block Block) {
+	// First of all advance the state machine, so the banned validator is not
+	// considered for the pending reward share
+	state.AdvanceStateMachine(block.ValidatorIndex, ProposalWrongFee)
+	state.IncreaseAllPendingRewards(state.Validators[block.ValidatorIndex].PendingRewardsWei)
+	state.ResetPendingRewards(block.ValidatorIndex)
+
+	// Store the proof of the wrong fee block. Reason why it was banned
+	state.Validators[block.ValidatorIndex].WrongFeeBlocksSlots = append(state.Validators[block.ValidatorIndex].WrongFeeBlocksSlots, block)
+}
+
+func (state *OracleState) HandleMissedBlock(block Block) {
+	state.AdvanceStateMachine(block.ValidatorIndex, ProposalMissed)
+	state.Validators[block.ValidatorIndex].MissedBlocksSlots = append(state.Validators[block.ValidatorIndex].MissedBlocksSlots, block)
 }
 
 func (state *OracleState) HandleManualUnsubscriptions(
@@ -399,9 +491,9 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAd
 			PendingRewardsWei:     big.NewInt(0),
 			DepositAddress:        depositAddress,
 			ValidatorKey:          validatorKey,
-			ProposedBlocksSlots:   make([]BlockState, 0),
-			MissedBlocksSlots:     make([]BlockState, 0),
-			WrongFeeBlocksSlots:   make([]BlockState, 0),
+			ProposedBlocksSlots:   make([]Block, 0),
+			MissedBlocksSlots:     make([]Block, 0),
+			WrongFeeBlocksSlots:   make([]Block, 0),
 		}
 		state.Validators[valIndex] = validator
 
@@ -425,16 +517,6 @@ func (state *OracleState) GetEligibleValidators() []uint64 {
 		}
 	}
 	return eligibleValidators
-}
-
-// Banning a validator implies sharing its pending rewards among the rest
-// of the validators and setting its pending to zero.
-func (state *OracleState) BanValidator(valIndex uint64) {
-	// First of all advance the state machine, so the banned validator is not
-	// considered for the pending reward share
-	state.AdvanceStateMachine(valIndex, ProposalWrongFee)
-	state.IncreaseAllPendingRewards(state.Validators[valIndex].PendingRewardsWei)
-	state.ResetPendingRewards(valIndex)
 }
 
 // Increases the pending rewards of all validators, and gives the pool owner a cut

@@ -131,7 +131,7 @@ type httpOkValidatorState struct {
 	PendingRewardsWei     *big.Int `json:"pending_rewards_wei"`
 	CollateralWei         *big.Int `json:"collateral_rewards_wei"` // TODO: unsure if its we or gwei
 	DepositAddress        string   `json:"deposit_address"`
-	ValidatorIndex        string   `json:"validator_index"`
+	ValidatorIndex        uint64   `json:"validator_index"`
 	ValidatorKey          string   `json:"validator_key"`
 	//ProposedBlocksSlots   []BlockState
 	//MissedBlocksSlots     []BlockState

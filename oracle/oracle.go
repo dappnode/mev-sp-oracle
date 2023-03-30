@@ -73,6 +73,12 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 	// Get the block if any and who proposed it (or should have proposed it)
 	proposerIndex, proposerKey, proposedOk, block := or.GetBlockIfAny(slotToProcess)
 
+	customBlock := Block{
+		Slot:           slotToProcess,
+		ValidatorIndex: proposerIndex,
+		ValidatorKey:   proposerKey,
+	}
+
 	// If the block was proposed (not missed)
 	if proposedOk {
 		blockNumber := block.GetBlockNumber()
@@ -109,19 +115,18 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 
 		// Manual subscription. If feeRec is ok, means the reward was sent to the pool
 		if correctFeeRec {
-			// TODO: Refactor to signal this is AutomaticSubscription
 			proposerDepositAddress := or.onchain.GetDepositAddressOfValidator(proposerKey, slotToProcess)
-			or.State.AddSubscriptionIfNotAlready(proposerIndex, proposerDepositAddress, proposerKey)
-			or.State.AdvanceStateMachine(proposerIndex, ProposalOk)
-			or.State.IncreaseAllPendingRewards(reward)
-			or.State.ConsolidateBalance(proposerIndex)
-			or.State.AddCorrectProposal(proposerIndex, reward, rewardType, slotToProcess)
+
+			customBlock.Reward = reward
+			customBlock.RewardType = rewardType
+			customBlock.DepositAddress = proposerDepositAddress
+
+			or.State.HandleCorrectBlockProposal(customBlock)
 		}
 		// If the validator was subscribed but the fee recipient was wrong
 		// we ban the validator as it is not following the protocol rules
 		if !correctFeeRec && or.State.IsValidatorSubscribed(proposerIndex) {
-			or.State.BanValidator(proposerIndex)
-			or.State.AddWrongFeeProposal(proposerIndex, reward, rewardType, slotToProcess)
+			or.State.HandleBanValidator(customBlock)
 		}
 
 		// Handle unsubscriptions the last thing after distributing rewards
@@ -133,10 +138,7 @@ func (or *Oracle) AdvanceStateToNextSlot() (uint64, error) {
 
 	// If the validator was subscribed and missed proposed the block in this slot
 	if !proposedOk && or.State.IsValidatorSubscribed(proposerIndex) {
-		// If the validator missed a block, just advance the state machine
-		// there are no rewards to share, but validator state will changes
-		or.State.AdvanceStateMachine(proposerIndex, ProposalMissed)
-		or.State.AddMissedProposal(proposerIndex, slotToProcess)
+		or.State.HandleMissedBlock(customBlock)
 	}
 
 	or.State.LatestSlot = slotToProcess + 1
