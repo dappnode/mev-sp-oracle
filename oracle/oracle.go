@@ -29,13 +29,13 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	blockUnsubs []Unsubscription,
 	blockDonations []Donation) (uint64, error) {
 
-	// TODO: Ensure block are from the same slot and pool
+	// TODO: Ensure block are from the same slot and pool for all variables and matches LatestSlot
 
 	// Handle subscriptions first thing
 	or.State.HandleManualSubscriptions(or.cfg.CollateralInWei, blockSubs)
 
 	// If the validator was subscribed and missed proposed the block in this slot
-	if blockPool.BlockType != MissedProposal && or.State.IsValidatorSubscribed(blockPool.ValidatorIndex) {
+	if blockPool.BlockType == MissedProposal && or.State.IsValidatorSubscribed(blockPool.ValidatorIndex) {
 		or.State.HandleMissedBlock(blockPool)
 	}
 
