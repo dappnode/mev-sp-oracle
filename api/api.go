@@ -56,7 +56,7 @@ const (
 
 	pathValidatorStateByDeposit = ""
 
-	// TODO: Fees generated (list claimable of fee account)
+	// TODO: Fees generated (list accumulated of fee account)
 
 	// TODO:
 	// proof

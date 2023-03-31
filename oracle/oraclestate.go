@@ -49,11 +49,21 @@ const (
 	Unsubscribe            = 5
 )
 
+// Block type
+const (
+	Unknown           int = 0
+	MissedProposal        = 1
+	WrongFeeRecipient     = 2
+	OkPoolProposal        = 3
+)
+
+// TODO: Rename to pool block
 type Block struct {
 	// These fields shall be always present
 	Slot           uint64
 	ValidatorIndex uint64
 	ValidatorKey   string
+	BlockType      int
 
 	// These fields are optional to be used
 	// in succesful proposals to pool

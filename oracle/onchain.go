@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dappnode/mev-sp-oracle/config"
@@ -523,6 +524,90 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 	return balanceWei, nil
 }
 
+// Given a slot number, this function fetches all the information that the oracle need to process
+// the block (if not missed) that was proposed in this slot.
+func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubscription, []Donation) {
+
+	// Get who should propose the block
+	slotDuty, err := o.GetProposalDuty(slot)
+	if err != nil {
+		log.Fatal("could not get proposal duty: ", err)
+	}
+
+	if uint64(slotDuty.Slot) != slot {
+		log.Fatal("slot duty slot does not match requested slot: ", slotDuty.Slot, " vs ", slot)
+	}
+
+	// The validator that should propose the block
+	valPublicKey := strings.ToLower("0x" + hex.EncodeToString(slotDuty.PubKey[:]))
+
+	proposedBlock, err := o.GetConsensusBlockAtSlot(slot)
+	if err != nil {
+		log.Fatal("could not get block at slot:", err)
+	}
+
+	// Only populated if a valid block was proposed
+	var extendedBlock *VersionedSignedBeaconBlock
+
+	// Init pool block, with relevant information to the pool
+	poolBlock := Block{
+		Slot:           uint64(slotDuty.Slot),
+		ValidatorIndex: uint64(slotDuty.ValidatorIndex),
+		ValidatorKey:   valPublicKey,
+	}
+
+	// Fetch block info
+	if proposedBlock == nil {
+		// A nil block means that the validator did not propose a block (missed proposal)
+		poolBlock.BlockType = MissedProposal
+
+		// Return early, a missed block wont contain any information
+		return poolBlock, []Subscription{}, []Unsubscription{}, []Donation{}
+
+	} else {
+		// Cast the block to our extended version with utils functions
+		extendedBlock = &VersionedSignedBeaconBlock{proposedBlock}
+		// If the proposal was succesfull, we check if this block contained a reward for the pool
+		reward, correctFeeRec, rewardType, err := extendedBlock.GetSentRewardAndType(o.Cfg.PoolAddress, *o)
+		if err != nil {
+			log.Fatal("could not get reward and type: ", err)
+		}
+
+		// We populate the parameters of the pool block
+		poolBlock.Reward = reward
+		poolBlock.RewardType = rewardType
+
+		// And check if it contained a reward for the pool or not
+		if correctFeeRec {
+			poolBlock.BlockType = OkPoolProposal
+			poolBlock.DepositAddress = o.GetDepositAddressOfValidator(valPublicKey, slot)
+		} else {
+			poolBlock.BlockType = WrongFeeRecipient
+		}
+	}
+
+	// Fetch subscription data
+	blockSubs, err := o.GetBlockSubscriptions(extendedBlock.GetBlockNumber())
+	if err != nil {
+		log.Fatal("could not get block subscriptions: ", err)
+	}
+
+	// Fetch unsubscription data
+	blockUnsubs, err := o.GetBlockUnsubscriptions(extendedBlock.GetBlockNumber())
+	if err != nil {
+		log.Fatal("could not get block unsubscriptions: ", err)
+	}
+
+	// TODO: This is wrong, as this event will also be triggered when a validator proposes a MEV block
+	// Fetch donations in this block
+	blockDonations, err := o.GetDonationEvents(extendedBlock.GetBlockNumber())
+	if err != nil {
+		log.Fatal("could not get block donations: ", err)
+	}
+
+	return poolBlock, blockSubs, blockUnsubs, blockDonations
+}
+
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
 	// Parse merkle root to byte array
@@ -649,6 +734,8 @@ func (o *Onchain) GetDepositAddressOfValidator(validatorPubKey string, slot uint
 	log.Warn("Deposit key not found for ", validatorPubKey, ". Expected in goerli. Using a default one. err: ", err)
 
 	// TODO: Remove this in production. Used in goerli for testing with differenet addresses
+	// TODO: Dont go to mainnet with this. If there is a bug in the code, we will be using
+	// and invalid address. In mainnet, fail if we cant find the deposit address.
 	someDepositAddresses := []string{
 		"0x001eDa52592fE2f8a28dA25E8033C263744b1b6E",
 		"0x0029a125E6A3f058628Bd619C91f481e4470D673",
