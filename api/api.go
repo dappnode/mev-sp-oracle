@@ -6,16 +6,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/dappnode/mev-sp-oracle/postgres"
+	"github.com/flashbots/go-boost-utils/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/gorilla/mux"
@@ -80,9 +83,16 @@ type httpOkStatus struct {
 }
 
 type httpOkRelayersState struct {
-	Registered           bool     `json:"registered"`
-	RegisteredRelayers   []string `json:"registered_relayers"`
-	UnRegisteredRelayers []string `json:"unregistered_relayers"`
+	CorrectFeeRecipients bool        `json:"correct_fee_recipients"`
+	CorrectFeeRelays     []httpRelay `json:"correct_fee_relayers"`
+	WrongFeeRelays       []httpRelay `json:"wrong_fee_relayers"`
+	UnregisteredRelays   []httpRelay `json:"unregistered_relayers"`
+}
+
+type httpRelay struct {
+	RelayAddress string `json:"relay_address"`
+	FeeRecipient string `json:"fee_recipient"`
+	Timestamp    string `json:"timestamp"`
 }
 
 type httpOkDepositAddress struct {
@@ -688,16 +698,19 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid validator pubkey format"))
 		return
 	}
-	var registeredRelays []string
-	var unregisteredRelays []string
-	registered := false
+	var correctFeeRelays []httpRelay
+	var wrongFeeRelays []httpRelay
+	var unregisteredRelays []httpRelay
+	registeredCorrectFee := false
 	var relays []string
 
 	if m.Network == "mainnet" {
-		relays = config.MainRelays
-
+		relays = config.MainnetRelays
+	} else if m.Network == "goerli" {
+		relays = config.GoerliRelays
 	} else {
-		relays = config.TestRelays
+		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid network: %s", m.Network))
+		return
 	}
 
 	for _, relay := range relays {
@@ -710,20 +723,47 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			registeredRelays = append(registeredRelays, relay)
+			signedRegistration := &types.SignedValidatorRegistration{}
+
+			bodyBytes, err := io.ReadAll(resp.Body)
+			if err != nil {
+				m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
+				return
+			}
+
+			if err = json.Unmarshal(bodyBytes, signedRegistration); err != nil {
+				m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
+				return
+			}
+
+			relayRegistration := httpRelay{
+				RelayAddress: relay,
+				FeeRecipient: signedRegistration.Message.FeeRecipient.String(),
+				Timestamp:    fmt.Sprintf("%s", time.Unix(int64(signedRegistration.Message.Timestamp), 0)),
+			}
+
+			if strings.ToLower(signedRegistration.Message.FeeRecipient.String()) == strings.ToLower(m.Onchain.Cfg.PoolAddress) {
+				correctFeeRelays = append(correctFeeRelays, relayRegistration)
+			} else {
+				wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
+			}
 		} else {
-			unregisteredRelays = append(unregisteredRelays, relay)
+			unregisteredRelays = append(unregisteredRelays, httpRelay{
+				RelayAddress: relay,
+			})
 		}
 	}
 
-	if len(registeredRelays) != 0 {
-		registered = true
+	// Only if there are some correct registrations and no invalid ones, its ok
+	if len(wrongFeeRelays) == 0 && len(correctFeeRelays) > 0 {
+		registeredCorrectFee = true
 	}
 
 	m.respondOK(w, httpOkRelayersState{
-		Registered:           registered,
-		RegisteredRelayers:   registeredRelays,
-		UnRegisteredRelayers: unregisteredRelays,
+		CorrectFeeRecipients: registeredCorrectFee,
+		CorrectFeeRelays:     correctFeeRelays,
+		WrongFeeRelays:       wrongFeeRelays,
+		UnregisteredRelays:   unregisteredRelays,
 	})
 }
 
