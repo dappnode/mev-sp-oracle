@@ -25,8 +25,8 @@ import (
 // Note that the api has no paging, so it is not suitable for large queries, but
 // it should be able to scale to a few thousand subscribed validators without any problem
 
-// These are the retry options when an api call involves external call to the beacon node
-// or execution client. The idea is to try once, and fail fast.
+// Important: These are the retry options when an api call involves external call to
+// the beacon node or execution client. The idea is to try once, and fail fast.
 // Use this for all onchain calls, otherwise defaultRetryOpts will be aplied
 var apiRetryOpts = []retry.Option{
 	retry.Attempts(1),
@@ -156,7 +156,7 @@ type ApiService struct {
 }
 
 func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle.Onchain) *ApiService {
-	postgres, err := postgres.New(cfg.PostgresEndpoint)
+	postgres, err := postgres.New(cfg.PostgresEndpoint, cfg.NumRetries)
 	if err != nil {
 		// TODO: Return error instead of fatal
 		log.Fatal(err)
@@ -543,17 +543,6 @@ func (m *ApiService) handleDepositAddressByIndex(w http.ResponseWriter, req *htt
 		ValidatorIndex:   valIndex,
 		ValidatorAddress: valPubKeyStr,
 	})
-}
-
-func (m *ApiService) handleLatestCheckpoint(w http.ResponseWriter, req *http.Request) {
-	log.Info("/latestCheckpoint")
-
-	mRoot, slot, err := m.Postgres.GetLatestCheckpoint()
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	m.respondOK(w, httpOkLatestCheckpoint{mRoot, slot})
 }
 
 func (m *ApiService) handleValidatorOnchainStateByIndex(w http.ResponseWriter, req *http.Request) {
