@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v4"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -39,7 +38,7 @@ func New(postgresEndpoint string, numRetries int) (*Postgresql, error) {
 }
 
 // Returns the validator keys for the given deposit addresses
-func (a *Postgresql) GetValidatorKeysFromDepositAddress(fromAddresses []string, opts ...retry.Option) ([][]byte, error) {
+func (a *Postgresql) GetValidatorKeysFromDepositAddress(fromAddresses []string, opts ...retry.Option) ([]string, error) {
 	var err error
 	var rows pgx.Rows
 
@@ -55,7 +54,7 @@ func (a *Postgresql) GetValidatorKeysFromDepositAddress(fromAddresses []string, 
 		return nil
 	}, a.GetRetryOpts(opts)...)
 
-	keys := make([][]byte, 0)
+	keys := make([]string, 0)
 	defer rows.Close()
 	for rows.Next() {
 		values, err := rows.Values()
@@ -64,11 +63,7 @@ func (a *Postgresql) GetValidatorKeysFromDepositAddress(fromAddresses []string, 
 		}
 
 		for _, keyStr := range values {
-			byteKey, err := hexutil.Decode(fmt.Sprintf("0x%s", keyStr.(string)))
-			if err != nil {
-				return nil, err
-			}
-			keys = append(keys, byteKey)
+			keys = append(keys, "0x"+keyStr.(string))
 		}
 	}
 
