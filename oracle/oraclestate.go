@@ -3,6 +3,7 @@ package oracle
 import (
 	"encoding/gob"
 	"encoding/hex"
+	"encoding/json"
 	"math/big"
 	"os"
 	"strings"
@@ -21,92 +22,99 @@ import (
 // Default filename to persist the state of the oracle
 var StateFileName = "state.gob"
 
+type RewardType uint8
+type ValidatorStatus uint8
+type Event uint8
+type BlockType uint8
+
 // TODO: Dont export functions and variables that are not used outside the package
 
 // Types of block rewards
-// TODO: set value=0 as Unknown
 const (
-	VanilaBlock int = 0
-	MevBlock        = 1
+	UnknownRewardType RewardType = 0
+	VanilaBlock       RewardType = 1
+	MevBlock          RewardType = 2
 )
 
 // States of the state machine
 const (
-	Active        int = 0
-	YellowCard        = 1
-	RedCard           = 2
-	NotSubscribed     = 3
-	Banned            = 4
+	UnknownState  ValidatorStatus = 0
+	Active        ValidatorStatus = 1
+	YellowCard    ValidatorStatus = 2
+	RedCard       ValidatorStatus = 3
+	NotSubscribed ValidatorStatus = 4
+	Banned        ValidatorStatus = 5
 )
 
 // Events in the state machine that trigger transitions
 const (
-	ProposalOk         int = 0
-	ProposalMissed         = 1
-	ProposalWrongFee       = 2
-	ManualSubscription     = 3
-	AutoSubscription       = 4
-	Unsubscribe            = 5
+	UnknownEvent       Event = 0
+	ProposalOk         Event = 1
+	ProposalMissed     Event = 2
+	ProposalWrongFee   Event = 3
+	ManualSubscription Event = 4
+	AutoSubscription   Event = 5
+	Unsubscribe        Event = 6
 )
 
 // Block type
 const (
-	Unknown           int = 0
-	MissedProposal        = 1
-	WrongFeeRecipient     = 2
-	OkPoolProposal        = 3
+	UnknownBlockType  BlockType = 0
+	MissedProposal    BlockType = 1
+	WrongFeeRecipient BlockType = 2
+	OkPoolProposal    BlockType = 3
 )
 
-// TODO: Rename to pool block
+// Represents a block with information relevant for the pool
 type Block struct {
-	// These fields shall be always present
-	Slot           uint64
-	ValidatorIndex uint64
-	ValidatorKey   string
-	BlockType      int
-
-	// These fields are optional to be used
-	// in succesful proposals to pool
-	Reward         *big.Int
-	RewardType     int
-	DepositAddress string
+	Slot           uint64     `json:"slot"`
+	ValidatorIndex uint64     `json:"validator_index"`
+	ValidatorKey   string     `json:"validator_key"`
+	BlockType      BlockType  `json:"block_type"`
+	Reward         *big.Int   `json:"reward_wei"`
+	RewardType     RewardType `json:"reward_type"`
+	DepositAddress string     `json:"deposit_address"`
 }
 
+// Represents a donation made to the pool
 type Donation struct {
-	AmountWei *big.Int
-	Block     uint64
-	TxHash    string
+	AmountWei *big.Int `json:"amount_wei"`
+	Block     uint64   `json:"block_number"`
+	TxHash    string   `json:"tx_hash"`
 }
 
+// Subscription of a validator to the pool
 type Subscription struct {
-	ValidatorIndex uint64
-	ValidatorKey   string
-	Collateral     *big.Int
-	BlockNumber    uint64
-	TxHash         string
-	DepositAddress string
+	ValidatorIndex uint64   `json:"validator_index"`
+	ValidatorKey   string   `json:"validator_key"`
+	Collateral     *big.Int `json:"collateral_wei"`
+	BlockNumber    uint64   `json:"block_number"`
+	TxHash         string   `json:"tx_hash"`
+	DepositAddress string   `json:"deposit_address"`
 }
 
+// Unsubscription of a validator from the pool
 type Unsubscription struct {
-	ValidatorIndex uint64
-	ValidatorKey   string
-	Sender         string
-	BlockNumber    uint64
-	TxHash         string
-	DepositAddress string
+	ValidatorIndex uint64 `json:"validator_index"`
+	ValidatorKey   string `json:"validator_key"`
+	Sender         string `json:"sender"`
+	BlockNumber    uint64 `json:"block_number"`
+	TxHash         string `json:"tx_hash"`
+	DepositAddress string `json:"deposit_address"`
 }
 
+// Represents all the information that is stored of a validator
 type ValidatorInfo struct {
-	ValidatorStatus       int
-	AccumulatedRewardsWei *big.Int
-	PendingRewardsWei     *big.Int
-	CollateralWei         *big.Int
-	DepositAddress        string
-	ValidatorIndex        uint64
-	ValidatorKey          string
-	ProposedBlocksSlots   []Block
-	MissedBlocksSlots     []Block
-	WrongFeeBlocksSlots   []Block
+	ValidatorStatus         ValidatorStatus `json:"status"`
+	AccumulatedRewardsWei   *big.Int        `json:"accumulated_rewards_wei"`
+	PendingRewardsWei       *big.Int        `json:"pending_rewards_wei"`
+	CollateralWei           *big.Int        `json:"collateral_wei"`
+	DepositAddress          string          `json:"deposit_address"`
+	ValidatorIndex          uint64          `json:"validator_index"`
+	ValidatorKey            string          `json:"validator_key"`
+	ValidatorProposedBlocks []Block         `json:"proposed_block"`
+	ValidatorMissedBlocks   []Block         `json:"missed_blocks"`
+	ValidatorWrongFeeBlocks []Block         `json:"wrong_fee_blocks"`
 
 	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
 }
@@ -128,12 +136,18 @@ type OracleState struct {
 	Network             string
 	PoolAddress         string
 	Validators          map[uint64]*ValidatorInfo
-	Donations           []Donation
 	LatestCommitedState OnchainState
 
 	PoolFeesPercent     int
 	PoolFeesAddress     string
 	PoolAccumulatedFees *big.Int
+
+	Subscriptions   []Subscription   // TODO: Populate (unsure if needed)
+	Unsubscriptions []Unsubscription // TODO: Populate (unsure if needed)
+	Donations       []Donation
+	ProposedBlocks  []Block
+	MissedBlocks    []Block
+	WrongFeeBlocks  []Block
 }
 
 func (p *OracleState) SaveStateToFile() {
@@ -161,7 +175,17 @@ func (p *OracleState) SaveStateToFile() {
 }
 
 func ReadStateFromFile() (*OracleState, error) {
-	state := OracleState{}
+	// Init all fields in case any was stored empty in the file
+	state := OracleState{
+		Validators:          make(map[uint64]*ValidatorInfo, 0),
+		PoolAccumulatedFees: big.NewInt(0),
+		Subscriptions:       make([]Subscription, 0),
+		Unsubscriptions:     make([]Unsubscription, 0),
+		Donations:           make([]Donation, 0),
+		ProposedBlocks:      make([]Block, 0),
+		MissedBlocks:        make([]Block, 0),
+		WrongFeeBlocks:      make([]Block, 0),
+	}
 
 	file, err := os.Open(StateFileName)
 
@@ -200,11 +224,17 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		PoolAddress: cfg.PoolAddress,
 
 		Validators: make(map[uint64]*ValidatorInfo, 0),
-		Donations:  make([]Donation, 0),
 
 		PoolFeesPercent:     cfg.PoolFeesPercent,
 		PoolFeesAddress:     cfg.PoolFeesAddress,
 		PoolAccumulatedFees: big.NewInt(0),
+
+		Subscriptions:   make([]Subscription, 0),   // TODO: Populate
+		Unsubscriptions: make([]Unsubscription, 0), // TODO: Populate
+		Donations:       make([]Donation, 0),
+		ProposedBlocks:  make([]Block, 0),
+		MissedBlocks:    make([]Block, 0),
+		WrongFeeBlocks:  make([]Block, 0),
 	}
 }
 
@@ -306,7 +336,8 @@ func (state *OracleState) HandleCorrectBlockProposal(block Block) {
 	state.AdvanceStateMachine(block.ValidatorIndex, ProposalOk)
 	state.IncreaseAllPendingRewards(block.Reward)
 	state.ConsolidateBalance(block.ValidatorIndex)
-	state.Validators[block.ValidatorIndex].ProposedBlocksSlots = append(state.Validators[block.ValidatorIndex].ProposedBlocksSlots, block)
+	state.Validators[block.ValidatorIndex].ValidatorProposedBlocks = append(state.Validators[block.ValidatorIndex].ValidatorProposedBlocks, block)
+	state.ProposedBlocks = append(state.ProposedBlocks, block)
 }
 
 func (state *OracleState) HandleManualSubscriptions(
@@ -367,16 +398,16 @@ func (state *OracleState) HandleManualSubscriptions(
 			// its advanced below in AdvanceStateMachine
 			if subscription.Collateral.Cmp(minCollateralWei) >= 0 {
 				state.Validators[subscription.ValidatorIndex] = &ValidatorInfo{
-					ValidatorStatus:       NotSubscribed,
-					AccumulatedRewardsWei: prevAccumulatedRewardsWei,
-					PendingRewardsWei:     prevPendingRewardsWei,
-					CollateralWei:         subscription.Collateral,
-					DepositAddress:        subscription.DepositAddress,
-					ValidatorIndex:        subscription.ValidatorIndex,
-					ValidatorKey:          subscription.ValidatorKey,
-					ProposedBlocksSlots:   make([]Block, 0),
-					MissedBlocksSlots:     make([]Block, 0),
-					WrongFeeBlocksSlots:   make([]Block, 0),
+					ValidatorStatus:         NotSubscribed,
+					AccumulatedRewardsWei:   prevAccumulatedRewardsWei,
+					PendingRewardsWei:       prevPendingRewardsWei,
+					CollateralWei:           subscription.Collateral,
+					DepositAddress:          subscription.DepositAddress,
+					ValidatorIndex:          subscription.ValidatorIndex,
+					ValidatorKey:            subscription.ValidatorKey,
+					ValidatorProposedBlocks: make([]Block, 0),
+					ValidatorMissedBlocks:   make([]Block, 0),
+					ValidatorWrongFeeBlocks: make([]Block, 0),
 				}
 
 				// Increase pending, adding the collateral to pending so that whenever
@@ -408,16 +439,16 @@ func (state *OracleState) HandleManualSubscriptions(
 				}).Warn("Validator subscribed but collateral is not enough")
 
 				state.Validators[subscription.ValidatorIndex] = &ValidatorInfo{
-					ValidatorStatus:       NotSubscribed, // We track it but as unsuscribed
-					AccumulatedRewardsWei: big.NewInt(0),
-					PendingRewardsWei:     big.NewInt(0),
-					CollateralWei:         big.NewInt(0), // Set to zero since its returned
-					DepositAddress:        subscription.DepositAddress,
-					ValidatorIndex:        subscription.ValidatorIndex,
-					ValidatorKey:          subscription.ValidatorKey,
-					ProposedBlocksSlots:   make([]Block, 0),
-					MissedBlocksSlots:     make([]Block, 0),
-					WrongFeeBlocksSlots:   make([]Block, 0),
+					ValidatorStatus:         NotSubscribed, // We track it but as unsuscribed
+					AccumulatedRewardsWei:   big.NewInt(0),
+					PendingRewardsWei:       big.NewInt(0),
+					CollateralWei:           big.NewInt(0), // Set to zero since its returned
+					DepositAddress:          subscription.DepositAddress,
+					ValidatorIndex:          subscription.ValidatorIndex,
+					ValidatorKey:            subscription.ValidatorKey,
+					ValidatorProposedBlocks: make([]Block, 0),
+					ValidatorMissedBlocks:   make([]Block, 0),
+					ValidatorWrongFeeBlocks: make([]Block, 0),
 				}
 
 				// Return collateral adding it to accumulated rewards. Can be claimed at any time
@@ -439,12 +470,14 @@ func (state *OracleState) HandleBanValidator(block Block) {
 	state.ResetPendingRewards(block.ValidatorIndex)
 
 	// Store the proof of the wrong fee block. Reason why it was banned
-	state.Validators[block.ValidatorIndex].WrongFeeBlocksSlots = append(state.Validators[block.ValidatorIndex].WrongFeeBlocksSlots, block)
+	state.Validators[block.ValidatorIndex].ValidatorWrongFeeBlocks = append(state.Validators[block.ValidatorIndex].ValidatorWrongFeeBlocks, block)
+	state.WrongFeeBlocks = append(state.WrongFeeBlocks, block)
 }
 
 func (state *OracleState) HandleMissedBlock(block Block) {
 	state.AdvanceStateMachine(block.ValidatorIndex, ProposalMissed)
-	state.Validators[block.ValidatorIndex].MissedBlocksSlots = append(state.Validators[block.ValidatorIndex].MissedBlocksSlots, block)
+	state.Validators[block.ValidatorIndex].ValidatorMissedBlocks = append(state.Validators[block.ValidatorIndex].ValidatorMissedBlocks, block)
+	state.MissedBlocks = append(state.MissedBlocks, block)
 }
 
 func (state *OracleState) HandleManualUnsubscriptions(
@@ -496,14 +529,14 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAd
 		// If not found and not manually subscribed, we trigger the AutoSubscription event
 		// Instantiate the validator
 		validator = &ValidatorInfo{
-			ValidatorStatus:       NotSubscribed,
-			AccumulatedRewardsWei: big.NewInt(0),
-			PendingRewardsWei:     big.NewInt(0),
-			DepositAddress:        depositAddress,
-			ValidatorKey:          validatorKey,
-			ProposedBlocksSlots:   make([]Block, 0),
-			MissedBlocksSlots:     make([]Block, 0),
-			WrongFeeBlocksSlots:   make([]Block, 0),
+			ValidatorStatus:         NotSubscribed,
+			AccumulatedRewardsWei:   big.NewInt(0),
+			PendingRewardsWei:       big.NewInt(0),
+			DepositAddress:          depositAddress,
+			ValidatorKey:            validatorKey,
+			ValidatorProposedBlocks: make([]Block, 0),
+			ValidatorMissedBlocks:   make([]Block, 0),
+			ValidatorWrongFeeBlocks: make([]Block, 0),
 		}
 		state.Validators[valIndex] = validator
 
@@ -599,7 +632,7 @@ func (state *OracleState) LogBalances() {
 
 // See the spec for state diagram with states and transitions. This tracks all the different
 // states and state transitions that a given validator can have from the oracle point of view
-func (state *OracleState) AdvanceStateMachine(valIndex uint64, event int) {
+func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 	switch state.Validators[valIndex].ValidatorStatus {
 	case Active:
 		switch event {
@@ -763,9 +796,9 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { //
 			validator.PendingRewardsWei.Uint64(), // TODO: can we overflow a uint64?
 			validator.AccumulatedRewardsWei.Uint64(),
 			uint64(0), // TODO: remove unbann balance
-			len(validator.ProposedBlocksSlots),
-			len(validator.MissedBlocksSlots),
-			len(validator.WrongFeeBlocksSlots),
+			len(validator.ValidatorProposedBlocks),
+			len(validator.ValidatorMissedBlocks),
+			len(validator.ValidatorWrongFeeBlocks),
 			state.LatestSlot,
 			ByteArrayToStringArray(proof.Siblings),
 			"0x"+hex.EncodeToString(tree.Root))
@@ -830,7 +863,7 @@ func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 	return merkleRootStr, true
 }
 
-func RewardTypeToString(rewardType int) string {
+func RewardTypeToString(rewardType RewardType) string {
 	if rewardType == VanilaBlock {
 		return "vanila"
 	} else if rewardType == MevBlock {
@@ -840,7 +873,7 @@ func RewardTypeToString(rewardType int) string {
 	return ""
 }
 
-func ValidatorStateToString(valState int) string {
+func ValidatorStateToString(valState ValidatorStatus) string {
 	if valState == Active {
 		return "active"
 	} else if valState == YellowCard {
@@ -854,4 +887,47 @@ func ValidatorStateToString(valState int) string {
 	}
 	log.Fatal("unknown validator state")
 	return ""
+}
+
+func EventToString(event Event) string {
+	if event == ProposalOk {
+		return "proposalok"
+	} else if event == ProposalMissed {
+		return "proposalmissed"
+	} else if event == ProposalWrongFee {
+		return "proposalwrongfee"
+	} else if event == ManualSubscription {
+		return "manualsubscription"
+	} else if event == AutoSubscription {
+		return "autosubscription"
+	} else if event == Unsubscribe {
+		return "unsubscribe"
+	}
+	log.Fatal("unknown event")
+	return ""
+}
+
+func BlockTypeToString(blockType BlockType) string {
+	if blockType == MissedProposal {
+		return "missedproposal"
+	} else if blockType == WrongFeeRecipient {
+		return "wrongfeerecipient"
+	} else if blockType == OkPoolProposal {
+		return "okpoolproposal"
+	}
+	log.Fatal("unknown block type")
+	return ""
+}
+
+func (s RewardType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(RewardTypeToString(s))
+}
+func (s ValidatorStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ValidatorStateToString(s))
+}
+func (s Event) MarshalJSON() ([]byte, error) {
+	return json.Marshal(EventToString(s))
+}
+func (s BlockType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(BlockTypeToString(s))
 }

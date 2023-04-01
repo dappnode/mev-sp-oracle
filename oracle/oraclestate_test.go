@@ -183,9 +183,9 @@ func Test_StateMachine(t *testing.T) {
 	valIndex2 := uint64(2000)
 
 	type stateTest struct {
-		From  int
-		Event int
-		End   int
+		From  ValidatorStatus
+		Event Event
+		End   ValidatorStatus
 	}
 
 	stateMachineTestVector := []stateTest{
@@ -224,7 +224,23 @@ func Test_StateMachine(t *testing.T) {
 		require.Equal(t, testState.End, state.Validators[valIndex2].ValidatorStatus)
 	}
 }
-func Test_SaveLoadFromToFile(t *testing.T) {
+
+func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
+	state := NewOracleState(&config.Config{
+		PoolAddress:     "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
+		Network:         "mainnet",
+	})
+
+	StateFileName = "test_state.gob"
+	defer os.Remove(StateFileName)
+	state.SaveStateToFile()
+
+	recovered, err := ReadStateFromFile()
+	require.NoError(t, err)
+	require.Equal(t, state, recovered)
+}
+func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 
 	state := NewOracleState(&config.Config{
 		PoolAddress:     "0x0000000000000000000000000000000000000000",
@@ -248,7 +264,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		DepositAddress:        "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        10,
 		ValidatorKey:          "0xc", // TODO: Fix this, should be uint64
-		ProposedBlocksSlots: []Block{
+		ValidatorProposedBlocks: []Block{
 			Block{
 				Reward:     big.NewInt(1000),
 				RewardType: VanilaBlock,
@@ -262,7 +278,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 				RewardType: MevBlock,
 				Slot:       6000,
 			}},
-		MissedBlocksSlots: []Block{Block{
+		ValidatorMissedBlocks: []Block{Block{
 			Reward:     big.NewInt(1000),
 			RewardType: VanilaBlock,
 			Slot:       500,
@@ -271,7 +287,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 			RewardType: VanilaBlock,
 			Slot:       12000,
 		}},
-		WrongFeeBlocksSlots: []Block{Block{
+		ValidatorWrongFeeBlocks: []Block{Block{
 			Reward:     big.NewInt(1000),
 			RewardType: VanilaBlock,
 			Slot:       500,
@@ -290,7 +306,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		DepositAddress:        "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        20,
 		ValidatorKey:          "0xc",
-		ProposedBlocksSlots: []Block{
+		ValidatorProposedBlocks: []Block{
 			Block{
 				Reward:     big.NewInt(1000),
 				RewardType: VanilaBlock,
@@ -304,7 +320,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 				RewardType: MevBlock,
 				Slot:       6000,
 			}},
-		MissedBlocksSlots: []Block{Block{
+		ValidatorMissedBlocks: []Block{Block{
 			Reward:     big.NewInt(33000),
 			RewardType: VanilaBlock,
 			Slot:       800,
@@ -313,7 +329,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 			RewardType: VanilaBlock,
 			Slot:       15000,
 		}},
-		WrongFeeBlocksSlots: []Block{Block{
+		ValidatorWrongFeeBlocks: []Block{Block{
 			Reward:     big.NewInt(14000),
 			RewardType: VanilaBlock,
 			Slot:       700,
@@ -333,12 +349,12 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		ValidatorIndex:        30,
 		ValidatorKey:          "0xc",
 		// Empty Proposed blocks
-		MissedBlocksSlots: []Block{Block{
+		ValidatorMissedBlocks: []Block{Block{
 			Reward:     big.NewInt(303000),
 			RewardType: VanilaBlock,
 			Slot:       12200,
 		}},
-		WrongFeeBlocksSlots: []Block{Block{
+		ValidatorWrongFeeBlocks: []Block{Block{
 			Reward:     big.NewInt(15000),
 			RewardType: VanilaBlock,
 			Slot:       800,
