@@ -144,6 +144,7 @@ func (f *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	err = retry.Do(func() error {
 		execSync, err = f.ExecutionClient.SyncProgress(context.Background())
 		if err != nil {
+			log.Warn("Failed attempt to fetch execution client sync progress: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching execution client sync progress: " + err.Error())
 		}
 		return nil
@@ -156,6 +157,7 @@ func (f *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	err = retry.Do(func() error {
 		consSync, err = f.ConsensusClient.NodeSyncing(context.Background())
 		if err != nil {
+			log.Warn("Failed attempt to fetch consensus client sync progress: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching execution client sync progress: " + err.Error())
 		}
 		return nil
@@ -181,6 +183,7 @@ func (f *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 	err = retry.Do(func() error {
 		signedBeaconBlock, err = f.ConsensusClient.SignedBeaconBlock(context.Background(), slotStr)
 		if err != nil {
+			log.Warn("Failed attempt to fetch block at slot ", slotStr, ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching block at slot " + slotStr + ": " + err.Error())
 		}
 		return nil
@@ -200,6 +203,7 @@ func (f *Onchain) GetValidatorIndexByKey(valKey string, opts ...retry.Option) (u
 	err = retry.Do(func() error {
 		validators, err = f.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", []phase0.BLSPubKey{StringToBlsKey(valKey)})
 		if err != nil {
+			log.Warn("Failed attempt to fetch validator index: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching validator index: " + err.Error())
 		}
 		return nil
@@ -227,6 +231,7 @@ func (f *Onchain) GetValidatorKeyByIndex(valIndex uint64, opts ...retry.Option) 
 	err = retry.Do(func() error {
 		validators, err = f.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
 		if err != nil {
+			log.Warn("Failed attempt to fetch validator key: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching validator index: " + err.Error())
 		}
 		return nil
@@ -268,6 +273,7 @@ func (f *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.Propo
 		duties, err = f.ConsensusClient.ProposerDuties(
 			context.Background(), phase0.Epoch(epoch), indexes)
 		if err != nil {
+			log.Warn("Failed attempt to fetch proposal duties at slot ", slotStr, ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching proposal duties at slot " + slotStr + ": " + err.Error())
 		}
 		return nil
@@ -295,6 +301,7 @@ func (f *Onchain) GetExecHeaderAndReceipts(
 	err = retry.Do(func() error {
 		header, err = f.ExecutionClient.HeaderByNumber(context.Background(), blockNumber)
 		if err != nil {
+			log.Warn("Failed attempt to fetch header for block ", blockNumber.String(), ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching header for block " + blockNumber.String() + ": " + err.Error())
 		}
 		return nil
@@ -316,6 +323,7 @@ func (f *Onchain) GetExecHeaderAndReceipts(
 		err = retry.Do(func() error {
 			receipt, err = f.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
 			if err != nil {
+				log.Warn("Failed attempt to fetch receipt for tx ", tx.Hash().String(), ": ", err.Error(), " Retrying...")
 				return errors.New("Error fetching receipt for tx " + tx.Hash().String() + ": " + err.Error())
 			}
 			return nil
@@ -345,6 +353,7 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([
 		// Note that this event can be both donations and mev rewards
 		itr, err = o.Contract.FilterEtherReceived(filterOpts)
 		if err != nil {
+			log.Warn("Failed attempt to filter donations for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
 			return errors.New("Error filtering donations for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
 		return nil
@@ -394,6 +403,7 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 		// Note that this event can be both donations and mev rewards
 		itr, err = o.Contract.FilterSuscribeValidator(filterOpts)
 		if err != nil {
+			log.Warn("Failed attempt to filter subscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
 			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
 		return nil
@@ -445,6 +455,7 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 		// Note that this event can be both donations and mev rewards
 		itr, err = o.Contract.FilterUnsuscribeValidator(filterOpts)
 		if err != nil {
+			log.Warn("Failed attempt to filter unsubscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
 			return errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
 		return nil
@@ -491,6 +502,7 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
 			rewardsRoot, err := o.Contract.RewardsRoot(callOpts)
 			if err != nil {
+				log.Warn("Failed attempt to get merkle root from contract: ", err.Error(), " Retrying...")
 				return errors.New("could not get rewards root from contract: " + err.Error())
 			}
 			rewardsRootStr = "0x" + hex.EncodeToString(rewardsRoot[:])
@@ -512,6 +524,7 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 	err = retry.Do(func() error {
 		balanceWei, err = o.ExecutionClient.BalanceAt(context.Background(), account, nil)
 		if err != nil {
+			log.Warn("Failed attempt to get balance for address ", address, ": ", err.Error(), " Retrying...")
 			return errors.New("could not get balance for address " + address + ": " + err.Error())
 		}
 		return nil
