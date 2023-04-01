@@ -15,17 +15,17 @@ curl 157.90.93.245:7300/status
 
 Returns if a given validator public key is registered in a set of relays. Use to know if a validator
 ```
-curl localhost:7300/registeredrelays/0xb1ce83f50ba296bdfedba0e4a42a65f8cee1bdeb2ba78aaa61b452141684930406412bbef6c0f65b4121f8fc82dbb6ba
+curl 157.90.93.245:7300/registeredrelays/0xb1ce83f50ba296bdfedba0e4a42a65f8cee1bdeb2ba78aaa61b452141684930406412bbef6c0f65b4121f8fc82dbb6ba
 ```
 
 Returns the deposit address and validator public key of a validator index.
 ```
-curl localhost:7300/depositaddress/400000
+curl 157.90.93.245:7300/depositaddress/400000
 ```
 
 Returns all the validator keys that were deposited with the provided deposit address.
 ```
-curl localhost:7300/validatorkeys/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
+curl 157.90.93.245:7300/validatorkeys/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
 ```
 
 ## Memory endpoints
@@ -35,45 +35,45 @@ Memory endpoints return the latest known state by the oracle.
 
 Returns all the validators that are tracked by the smoothing pool in any state.
 ```
-curl localhost:7300/memory/validators
+curl 157.90.93.245:7300/memory/validators
 ```
 
 Return information of a given validator index registered in the pool.
 
 ```
-curl localhost:7300/memory/validator/408120
+curl 157.90.93.245:7300/memory/validator/408120
 ```
 
 Returns information on the fees that the pool takes, such as percent, address and fees so far.
 
 ```
-curl localhost:7300/memory/feesinfo
+curl 157.90.93.245:7300/memory/feesinfo
 ```
 
 Return all proposed blocks to the pool
 
 ```
-curl localhost:7300/memory/proposedblocks
+curl 157.90.93.245:7300/memory/proposedblocks
 ```
 
 Return all the missed blocks in the smoothing pool.
 ```
-curl localhost:7300/memory/missedblocks
+curl 157.90.93.245:7300/memory/missedblocks
 ```
 
 Return all blocks that were wrong (wrong fee recipient of subscribed validators)
 ```
-curl localhost:7300/memory/wrongfeeblocks
+curl 157.90.93.245:7300/memory/wrongfeeblocks
 ```
 
 Return a list of all donations to the pool
 ```
-curl localhost:7300/memory/donations
+curl 157.90.93.245:7300/memory/donations
 ```
 
 General statistics of the pool such as rewards received, amount of block, average reward, etc.
 ```
-curl localhost:7300/memory/statistics
+curl 157.90.93.245:7300/memory/statistics
 ```
 
 ## Onchain endpoints
@@ -83,11 +83,11 @@ Onchain endpoints return information from the point of view of the latest stored
 Returns the merkle proofs that the pool owner can use to claim its fees.
 
 ```
-curl localhost:7300/onchain/proof/fees
+curl 157.90.93.245:7300/onchain/proof/fees
 ```
 
 Returns the merkle proofs of the given deposit address, that can be used on chain to claim the rewards.
 
 ```
-curl localhost:7300/onchain/proof/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
+curl 157.90.93.245:7300/onchain/proof/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
 ```
