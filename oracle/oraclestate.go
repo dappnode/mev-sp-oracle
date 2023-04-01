@@ -105,16 +105,16 @@ type Unsubscription struct {
 
 // Represents all the information that is stored of a validator
 type ValidatorInfo struct {
-	ValidatorStatus       ValidatorStatus `json:"status"`
-	AccumulatedRewardsWei *big.Int        `json:"accumulated_rewards_wei"`
-	PendingRewardsWei     *big.Int        `json:"pending_rewards_wei"`
-	CollateralWei         *big.Int        `json:"collateral_wei"`
-	DepositAddress        string          `json:"deposit_address"`
-	ValidatorIndex        uint64          `json:"validator_index"`
-	ValidatorKey          string          `json:"validator_key"`
-	ProposedBlocksSlots   []Block         `json:"proposed_block"`
-	MissedBlocksSlots     []Block         `json:"missed_blocks"`
-	WrongFeeBlocksSlots   []Block         `json:"wrong_fee_blocks"`
+	ValidatorStatus         ValidatorStatus `json:"status"`
+	AccumulatedRewardsWei   *big.Int        `json:"accumulated_rewards_wei"`
+	PendingRewardsWei       *big.Int        `json:"pending_rewards_wei"`
+	CollateralWei           *big.Int        `json:"collateral_wei"`
+	DepositAddress          string          `json:"deposit_address"`
+	ValidatorIndex          uint64          `json:"validator_index"`
+	ValidatorKey            string          `json:"validator_key"`
+	ValidatorProposedBlocks []Block         `json:"proposed_block"`
+	ValidatorMissedBlocks   []Block         `json:"missed_blocks"`
+	ValidatorWrongFeeBlocks []Block         `json:"wrong_fee_blocks"`
 
 	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
 }
@@ -326,7 +326,7 @@ func (state *OracleState) HandleCorrectBlockProposal(block Block) {
 	state.AdvanceStateMachine(block.ValidatorIndex, ProposalOk)
 	state.IncreaseAllPendingRewards(block.Reward)
 	state.ConsolidateBalance(block.ValidatorIndex)
-	state.Validators[block.ValidatorIndex].ProposedBlocksSlots = append(state.Validators[block.ValidatorIndex].ProposedBlocksSlots, block)
+	state.Validators[block.ValidatorIndex].ValidatorProposedBlocks = append(state.Validators[block.ValidatorIndex].ValidatorProposedBlocks, block)
 	state.ProposedBlocks = append(state.ProposedBlocks, block)
 }
 
@@ -388,16 +388,16 @@ func (state *OracleState) HandleManualSubscriptions(
 			// its advanced below in AdvanceStateMachine
 			if subscription.Collateral.Cmp(minCollateralWei) >= 0 {
 				state.Validators[subscription.ValidatorIndex] = &ValidatorInfo{
-					ValidatorStatus:       NotSubscribed,
-					AccumulatedRewardsWei: prevAccumulatedRewardsWei,
-					PendingRewardsWei:     prevPendingRewardsWei,
-					CollateralWei:         subscription.Collateral,
-					DepositAddress:        subscription.DepositAddress,
-					ValidatorIndex:        subscription.ValidatorIndex,
-					ValidatorKey:          subscription.ValidatorKey,
-					ProposedBlocksSlots:   make([]Block, 0),
-					MissedBlocksSlots:     make([]Block, 0),
-					WrongFeeBlocksSlots:   make([]Block, 0),
+					ValidatorStatus:         NotSubscribed,
+					AccumulatedRewardsWei:   prevAccumulatedRewardsWei,
+					PendingRewardsWei:       prevPendingRewardsWei,
+					CollateralWei:           subscription.Collateral,
+					DepositAddress:          subscription.DepositAddress,
+					ValidatorIndex:          subscription.ValidatorIndex,
+					ValidatorKey:            subscription.ValidatorKey,
+					ValidatorProposedBlocks: make([]Block, 0),
+					ValidatorMissedBlocks:   make([]Block, 0),
+					ValidatorWrongFeeBlocks: make([]Block, 0),
 				}
 
 				// Increase pending, adding the collateral to pending so that whenever
@@ -429,16 +429,16 @@ func (state *OracleState) HandleManualSubscriptions(
 				}).Warn("Validator subscribed but collateral is not enough")
 
 				state.Validators[subscription.ValidatorIndex] = &ValidatorInfo{
-					ValidatorStatus:       NotSubscribed, // We track it but as unsuscribed
-					AccumulatedRewardsWei: big.NewInt(0),
-					PendingRewardsWei:     big.NewInt(0),
-					CollateralWei:         big.NewInt(0), // Set to zero since its returned
-					DepositAddress:        subscription.DepositAddress,
-					ValidatorIndex:        subscription.ValidatorIndex,
-					ValidatorKey:          subscription.ValidatorKey,
-					ProposedBlocksSlots:   make([]Block, 0),
-					MissedBlocksSlots:     make([]Block, 0),
-					WrongFeeBlocksSlots:   make([]Block, 0),
+					ValidatorStatus:         NotSubscribed, // We track it but as unsuscribed
+					AccumulatedRewardsWei:   big.NewInt(0),
+					PendingRewardsWei:       big.NewInt(0),
+					CollateralWei:           big.NewInt(0), // Set to zero since its returned
+					DepositAddress:          subscription.DepositAddress,
+					ValidatorIndex:          subscription.ValidatorIndex,
+					ValidatorKey:            subscription.ValidatorKey,
+					ValidatorProposedBlocks: make([]Block, 0),
+					ValidatorMissedBlocks:   make([]Block, 0),
+					ValidatorWrongFeeBlocks: make([]Block, 0),
 				}
 
 				// Return collateral adding it to accumulated rewards. Can be claimed at any time
@@ -460,13 +460,13 @@ func (state *OracleState) HandleBanValidator(block Block) {
 	state.ResetPendingRewards(block.ValidatorIndex)
 
 	// Store the proof of the wrong fee block. Reason why it was banned
-	state.Validators[block.ValidatorIndex].WrongFeeBlocksSlots = append(state.Validators[block.ValidatorIndex].WrongFeeBlocksSlots, block)
+	state.Validators[block.ValidatorIndex].ValidatorWrongFeeBlocks = append(state.Validators[block.ValidatorIndex].ValidatorWrongFeeBlocks, block)
 	state.WrongFeeBlocks = append(state.WrongFeeBlocks, block)
 }
 
 func (state *OracleState) HandleMissedBlock(block Block) {
 	state.AdvanceStateMachine(block.ValidatorIndex, ProposalMissed)
-	state.Validators[block.ValidatorIndex].MissedBlocksSlots = append(state.Validators[block.ValidatorIndex].MissedBlocksSlots, block)
+	state.Validators[block.ValidatorIndex].ValidatorMissedBlocks = append(state.Validators[block.ValidatorIndex].ValidatorMissedBlocks, block)
 	state.MissedBlocks = append(state.MissedBlocks, block)
 }
 
@@ -519,14 +519,14 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAd
 		// If not found and not manually subscribed, we trigger the AutoSubscription event
 		// Instantiate the validator
 		validator = &ValidatorInfo{
-			ValidatorStatus:       NotSubscribed,
-			AccumulatedRewardsWei: big.NewInt(0),
-			PendingRewardsWei:     big.NewInt(0),
-			DepositAddress:        depositAddress,
-			ValidatorKey:          validatorKey,
-			ProposedBlocksSlots:   make([]Block, 0),
-			MissedBlocksSlots:     make([]Block, 0),
-			WrongFeeBlocksSlots:   make([]Block, 0),
+			ValidatorStatus:         NotSubscribed,
+			AccumulatedRewardsWei:   big.NewInt(0),
+			PendingRewardsWei:       big.NewInt(0),
+			DepositAddress:          depositAddress,
+			ValidatorKey:            validatorKey,
+			ValidatorProposedBlocks: make([]Block, 0),
+			ValidatorMissedBlocks:   make([]Block, 0),
+			ValidatorWrongFeeBlocks: make([]Block, 0),
 		}
 		state.Validators[valIndex] = validator
 
@@ -786,9 +786,9 @@ func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { //
 			validator.PendingRewardsWei.Uint64(), // TODO: can we overflow a uint64?
 			validator.AccumulatedRewardsWei.Uint64(),
 			uint64(0), // TODO: remove unbann balance
-			len(validator.ProposedBlocksSlots),
-			len(validator.MissedBlocksSlots),
-			len(validator.WrongFeeBlocksSlots),
+			len(validator.ValidatorProposedBlocks),
+			len(validator.ValidatorMissedBlocks),
+			len(validator.ValidatorWrongFeeBlocks),
 			state.LatestSlot,
 			ByteArrayToStringArray(proof.Siblings),
 			"0x"+hex.EncodeToString(tree.Root))

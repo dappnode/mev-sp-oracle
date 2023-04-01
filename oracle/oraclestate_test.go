@@ -248,7 +248,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		DepositAddress:        "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        10,
 		ValidatorKey:          "0xc", // TODO: Fix this, should be uint64
-		ProposedBlocksSlots: []Block{
+		ValidatorProposedBlocks: []Block{
 			Block{
 				Reward:     big.NewInt(1000),
 				RewardType: VanilaBlock,
@@ -262,7 +262,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 				RewardType: MevBlock,
 				Slot:       6000,
 			}},
-		MissedBlocksSlots: []Block{Block{
+		ValidatorMissedBlocks: []Block{Block{
 			Reward:     big.NewInt(1000),
 			RewardType: VanilaBlock,
 			Slot:       500,
@@ -271,7 +271,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 			RewardType: VanilaBlock,
 			Slot:       12000,
 		}},
-		WrongFeeBlocksSlots: []Block{Block{
+		ValidatorWrongFeeBlocks: []Block{Block{
 			Reward:     big.NewInt(1000),
 			RewardType: VanilaBlock,
 			Slot:       500,
@@ -290,7 +290,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		DepositAddress:        "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        20,
 		ValidatorKey:          "0xc",
-		ProposedBlocksSlots: []Block{
+		ValidatorProposedBlocks: []Block{
 			Block{
 				Reward:     big.NewInt(1000),
 				RewardType: VanilaBlock,
@@ -304,7 +304,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 				RewardType: MevBlock,
 				Slot:       6000,
 			}},
-		MissedBlocksSlots: []Block{Block{
+		ValidatorMissedBlocks: []Block{Block{
 			Reward:     big.NewInt(33000),
 			RewardType: VanilaBlock,
 			Slot:       800,
@@ -313,7 +313,7 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 			RewardType: VanilaBlock,
 			Slot:       15000,
 		}},
-		WrongFeeBlocksSlots: []Block{Block{
+		ValidatorWrongFeeBlocks: []Block{Block{
 			Reward:     big.NewInt(14000),
 			RewardType: VanilaBlock,
 			Slot:       700,
@@ -333,12 +333,12 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		ValidatorIndex:        30,
 		ValidatorKey:          "0xc",
 		// Empty Proposed blocks
-		MissedBlocksSlots: []Block{Block{
+		ValidatorMissedBlocks: []Block{Block{
 			Reward:     big.NewInt(303000),
 			RewardType: VanilaBlock,
 			Slot:       12200,
 		}},
-		WrongFeeBlocksSlots: []Block{Block{
+		ValidatorWrongFeeBlocks: []Block{Block{
 			Reward:     big.NewInt(15000),
 			RewardType: VanilaBlock,
 			Slot:       800,

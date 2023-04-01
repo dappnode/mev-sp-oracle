@@ -130,9 +130,9 @@ type httpOkValidatorState struct {
 	DepositAddress        string   `json:"deposit_address"`
 	ValidatorIndex        uint64   `json:"validator_index"`
 	ValidatorKey          string   `json:"validator_key"`
-	//ProposedBlocksSlots   []BlockState
-	//MissedBlocksSlots     []BlockState
-	//WrongFeeBlocksSlots   []BlockState
+	//ValidatorProposedBlocks   []BlockState
+	//ValidatorMissedBlocks     []BlockState
+	//ValidatorWrongFeeBlocks   []BlockState
 
 	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
 }
