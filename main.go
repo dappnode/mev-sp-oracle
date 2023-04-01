@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not create new onchain object: ", err)
 	}
-	oracleInstance := oracle.NewOracle(cfg, onchain)
+	oracleInstance := oracle.NewOracle(cfg)
 	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
 
 	balance, err := onchain.GetEthBalance(cfg.PoolAddress)
@@ -98,24 +98,32 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		finalizedSlot := finalizedEpoch * SlotsInEpoch
 
 		if finalizedSlot > oracleInstance.State.LatestSlot {
-			processedSlot, err := oracleInstance.AdvanceStateToNextSlot()
+
+			// Get all the information of the block that was proposed in this slot
+			poolBlock, blockSubs, blockUnsubs, blockDonations := onchain.GetAllBlockInfo(oracleInstance.State.LatestSlot)
+			processedSlot, err := oracleInstance.AdvanceStateToNextSlot(poolBlock, blockSubs, blockUnsubs, blockDonations)
 			if err != nil {
 				log.Fatal(err)
 			}
 			slotToLatestFinalized := finalizedSlot - oracleInstance.State.LatestSlot
 
+			_ = processedSlot
+			_ = slotToLatestFinalized
+
+			// Do not log progress every slot, it is too much. See api for progress
 			// Log progress every x slots when syncing
-			logEverySlots := uint64(300)
+			/*logEverySlots := uint64(300)
 			if finalizedSlot%logEverySlots == 0 {
 				log.Info("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
 					slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
-			}
+			}*/
 		} else {
-			log.WithFields(log.Fields{
+			/*log.WithFields(log.Fields{
 				"FinalizedSlot":   finalizedSlot,
 				"FinalizedEpoch":  finalizedEpoch,
 				"OracleStateSlot": oracleInstance.State.LatestSlot,
-			}).Info("Waiting for new finalized slot")
+			}).Info("Waiting for new finalized slot")*/
+			// No new finalized slot, wait a bit
 			time.Sleep(3 * time.Minute)
 			continue
 		}
@@ -137,8 +145,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			enoughData := oracleInstance.State.StoreLatestOnchainState()
 
 			oracleInstance.State.SaveStateToFile()
-			oracleInstance.State.LogAccumulatedBalances()
-			oracleInstance.State.LogPendingBalances()
+			oracleInstance.State.LogBalances()
 
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")

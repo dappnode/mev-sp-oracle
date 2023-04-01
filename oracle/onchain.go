@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dappnode/mev-sp-oracle/config"
@@ -143,6 +144,7 @@ func (f *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	err = retry.Do(func() error {
 		execSync, err = f.ExecutionClient.SyncProgress(context.Background())
 		if err != nil {
+			log.Warn("Failed attempt to fetch execution client sync progress: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching execution client sync progress: " + err.Error())
 		}
 		return nil
@@ -155,6 +157,7 @@ func (f *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	err = retry.Do(func() error {
 		consSync, err = f.ConsensusClient.NodeSyncing(context.Background())
 		if err != nil {
+			log.Warn("Failed attempt to fetch consensus client sync progress: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching execution client sync progress: " + err.Error())
 		}
 		return nil
@@ -180,6 +183,7 @@ func (f *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 	err = retry.Do(func() error {
 		signedBeaconBlock, err = f.ConsensusClient.SignedBeaconBlock(context.Background(), slotStr)
 		if err != nil {
+			log.Warn("Failed attempt to fetch block at slot ", slotStr, ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching block at slot " + slotStr + ": " + err.Error())
 		}
 		return nil
@@ -199,6 +203,7 @@ func (f *Onchain) GetValidatorIndexByKey(valKey string, opts ...retry.Option) (u
 	err = retry.Do(func() error {
 		validators, err = f.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", []phase0.BLSPubKey{StringToBlsKey(valKey)})
 		if err != nil {
+			log.Warn("Failed attempt to fetch validator index: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching validator index: " + err.Error())
 		}
 		return nil
@@ -226,6 +231,7 @@ func (f *Onchain) GetValidatorKeyByIndex(valIndex uint64, opts ...retry.Option) 
 	err = retry.Do(func() error {
 		validators, err = f.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
 		if err != nil {
+			log.Warn("Failed attempt to fetch validator key: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching validator index: " + err.Error())
 		}
 		return nil
@@ -267,6 +273,7 @@ func (f *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.Propo
 		duties, err = f.ConsensusClient.ProposerDuties(
 			context.Background(), phase0.Epoch(epoch), indexes)
 		if err != nil {
+			log.Warn("Failed attempt to fetch proposal duties at slot ", slotStr, ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching proposal duties at slot " + slotStr + ": " + err.Error())
 		}
 		return nil
@@ -294,6 +301,7 @@ func (f *Onchain) GetExecHeaderAndReceipts(
 	err = retry.Do(func() error {
 		header, err = f.ExecutionClient.HeaderByNumber(context.Background(), blockNumber)
 		if err != nil {
+			log.Warn("Failed attempt to fetch header for block ", blockNumber.String(), ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching header for block " + blockNumber.String() + ": " + err.Error())
 		}
 		return nil
@@ -315,6 +323,7 @@ func (f *Onchain) GetExecHeaderAndReceipts(
 		err = retry.Do(func() error {
 			receipt, err = f.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
 			if err != nil {
+				log.Warn("Failed attempt to fetch receipt for tx ", tx.Hash().String(), ": ", err.Error(), " Retrying...")
 				return errors.New("Error fetching receipt for tx " + tx.Hash().String() + ": " + err.Error())
 			}
 			return nil
@@ -344,6 +353,7 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([
 		// Note that this event can be both donations and mev rewards
 		itr, err = o.Contract.FilterEtherReceived(filterOpts)
 		if err != nil {
+			log.Warn("Failed attempt to filter donations for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
 			return errors.New("Error filtering donations for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
 		return nil
@@ -393,6 +403,7 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 		// Note that this event can be both donations and mev rewards
 		itr, err = o.Contract.FilterSuscribeValidator(filterOpts)
 		if err != nil {
+			log.Warn("Failed attempt to filter subscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
 			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
 		return nil
@@ -444,6 +455,7 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 		// Note that this event can be both donations and mev rewards
 		itr, err = o.Contract.FilterUnsuscribeValidator(filterOpts)
 		if err != nil {
+			log.Warn("Failed attempt to filter unsubscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
 			return errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
 		return nil
@@ -490,6 +502,7 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
 			rewardsRoot, err := o.Contract.RewardsRoot(callOpts)
 			if err != nil {
+				log.Warn("Failed attempt to get merkle root from contract: ", err.Error(), " Retrying...")
 				return errors.New("could not get rewards root from contract: " + err.Error())
 			}
 			rewardsRootStr = "0x" + hex.EncodeToString(rewardsRoot[:])
@@ -511,6 +524,7 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 	err = retry.Do(func() error {
 		balanceWei, err = o.ExecutionClient.BalanceAt(context.Background(), account, nil)
 		if err != nil {
+			log.Warn("Failed attempt to get balance for address ", address, ": ", err.Error(), " Retrying...")
 			return errors.New("could not get balance for address " + address + ": " + err.Error())
 		}
 		return nil
@@ -521,6 +535,90 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 	}
 
 	return balanceWei, nil
+}
+
+// Given a slot number, this function fetches all the information that the oracle need to process
+// the block (if not missed) that was proposed in this slot.
+func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubscription, []Donation) {
+
+	// Get who should propose the block
+	slotDuty, err := o.GetProposalDuty(slot)
+	if err != nil {
+		log.Fatal("could not get proposal duty: ", err)
+	}
+
+	if uint64(slotDuty.Slot) != slot {
+		log.Fatal("slot duty slot does not match requested slot: ", slotDuty.Slot, " vs ", slot)
+	}
+
+	// The validator that should propose the block
+	valPublicKey := strings.ToLower("0x" + hex.EncodeToString(slotDuty.PubKey[:]))
+
+	proposedBlock, err := o.GetConsensusBlockAtSlot(slot)
+	if err != nil {
+		log.Fatal("could not get block at slot:", err)
+	}
+
+	// Only populated if a valid block was proposed
+	var extendedBlock *VersionedSignedBeaconBlock
+
+	// Init pool block, with relevant information to the pool
+	poolBlock := Block{
+		Slot:           uint64(slotDuty.Slot),
+		ValidatorIndex: uint64(slotDuty.ValidatorIndex),
+		ValidatorKey:   valPublicKey,
+	}
+
+	// Fetch block info
+	if proposedBlock == nil {
+		// A nil block means that the validator did not propose a block (missed proposal)
+		poolBlock.BlockType = MissedProposal
+
+		// Return early, a missed block wont contain any information
+		return poolBlock, []Subscription{}, []Unsubscription{}, []Donation{}
+
+	} else {
+		// Cast the block to our extended version with utils functions
+		extendedBlock = &VersionedSignedBeaconBlock{proposedBlock}
+		// If the proposal was succesfull, we check if this block contained a reward for the pool
+		reward, correctFeeRec, rewardType, err := extendedBlock.GetSentRewardAndType(o.Cfg.PoolAddress, *o)
+		if err != nil {
+			log.Fatal("could not get reward and type: ", err)
+		}
+
+		// We populate the parameters of the pool block
+		poolBlock.Reward = reward
+		poolBlock.RewardType = rewardType
+
+		// And check if it contained a reward for the pool or not
+		if correctFeeRec {
+			poolBlock.BlockType = OkPoolProposal
+			poolBlock.DepositAddress = o.GetDepositAddressOfValidator(valPublicKey, slot)
+		} else {
+			poolBlock.BlockType = WrongFeeRecipient
+		}
+	}
+
+	// Fetch subscription data
+	blockSubs, err := o.GetBlockSubscriptions(extendedBlock.GetBlockNumber())
+	if err != nil {
+		log.Fatal("could not get block subscriptions: ", err)
+	}
+
+	// Fetch unsubscription data
+	blockUnsubs, err := o.GetBlockUnsubscriptions(extendedBlock.GetBlockNumber())
+	if err != nil {
+		log.Fatal("could not get block unsubscriptions: ", err)
+	}
+
+	// TODO: This is wrong, as this event will also be triggered when a validator proposes a MEV block
+	// Fetch donations in this block
+	blockDonations, err := o.GetDonationEvents(extendedBlock.GetBlockNumber())
+	if err != nil {
+		log.Fatal("could not get block donations: ", err)
+	}
+
+	return poolBlock, blockSubs, blockUnsubs, blockDonations
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
@@ -649,6 +747,8 @@ func (o *Onchain) GetDepositAddressOfValidator(validatorPubKey string, slot uint
 	log.Warn("Deposit key not found for ", validatorPubKey, ". Expected in goerli. Using a default one. err: ", err)
 
 	// TODO: Remove this in production. Used in goerli for testing with differenet addresses
+	// TODO: Dont go to mainnet with this. If there is a bug in the code, we will be using
+	// and invalid address. In mainnet, fail if we cant find the deposit address.
 	someDepositAddresses := []string{
 		"0x001eDa52592fE2f8a28dA25E8033C263744b1b6E",
 		"0x0029a125E6A3f058628Bd619C91f481e4470D673",

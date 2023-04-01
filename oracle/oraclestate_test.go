@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"fmt"
 	"math/big"
 	"os"
 	"testing"
@@ -26,15 +27,18 @@ func Test_AddSubscription(t *testing.T) {
 
 func Test_AddDonation(t *testing.T) {
 	state := NewOracleState(&config.Config{})
-	state.AddDonation(Donation{AmountWei: big.NewInt(765432), Block: uint64(10), TxHash: "0x1"})
-	state.AddDonation(Donation{AmountWei: big.NewInt(30023456), Block: uint64(124), TxHash: "0x2"})
+	donations := []Donation{
+		Donation{AmountWei: big.NewInt(765432), Block: uint64(100), TxHash: "0x1"},
+		Donation{AmountWei: big.NewInt(30023456), Block: uint64(100), TxHash: "0x2"},
+	}
+	state.HandleDonations(donations)
 
 	require.Equal(t, big.NewInt(765432), state.Donations[0].AmountWei)
-	require.Equal(t, uint64(10), state.Donations[0].Block)
+	require.Equal(t, uint64(100), state.Donations[0].Block)
 	require.Equal(t, "0x1", state.Donations[0].TxHash)
 
 	require.Equal(t, big.NewInt(30023456), state.Donations[1].AmountWei)
-	require.Equal(t, uint64(124), state.Donations[1].Block)
+	require.Equal(t, uint64(100), state.Donations[1].Block)
 	require.Equal(t, "0x2", state.Donations[1].TxHash)
 }
 
@@ -242,39 +246,39 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		PendingRewardsWei:     big.NewInt(1000),
 		CollateralWei:         big.NewInt(1000),
 		DepositAddress:        "0xa000000000000000000000000000000000000000",
-		ValidatorIndex:        "0xb000000000000000000000000000000000000000",
+		ValidatorIndex:        10,
 		ValidatorKey:          "0xc", // TODO: Fix this, should be uint64
-		ProposedBlocksSlots: []BlockState{
-			BlockState{
-				Reward:    big.NewInt(1000),
-				BlockType: VanilaBlock,
-				Slot:      1000,
-			}, BlockState{
-				Reward:    big.NewInt(12000),
-				BlockType: VanilaBlock,
-				Slot:      3000,
-			}, BlockState{
-				Reward:    big.NewInt(7000),
-				BlockType: MevBlock,
-				Slot:      6000,
+		ProposedBlocksSlots: []Block{
+			Block{
+				Reward:     big.NewInt(1000),
+				RewardType: VanilaBlock,
+				Slot:       1000,
+			}, Block{
+				Reward:     big.NewInt(12000),
+				RewardType: VanilaBlock,
+				Slot:       3000,
+			}, Block{
+				Reward:     big.NewInt(7000),
+				RewardType: MevBlock,
+				Slot:       6000,
 			}},
-		MissedBlocksSlots: []BlockState{BlockState{
-			Reward:    big.NewInt(1000),
-			BlockType: VanilaBlock,
-			Slot:      500,
-		}, BlockState{
-			Reward:    big.NewInt(1000),
-			BlockType: VanilaBlock,
-			Slot:      12000,
+		MissedBlocksSlots: []Block{Block{
+			Reward:     big.NewInt(1000),
+			RewardType: VanilaBlock,
+			Slot:       500,
+		}, Block{
+			Reward:     big.NewInt(1000),
+			RewardType: VanilaBlock,
+			Slot:       12000,
 		}},
-		WrongFeeBlocksSlots: []BlockState{BlockState{
-			Reward:    big.NewInt(1000),
-			BlockType: VanilaBlock,
-			Slot:      500,
-		}, BlockState{
-			Reward:    big.NewInt(1000),
-			BlockType: VanilaBlock,
-			Slot:      12000,
+		WrongFeeBlocksSlots: []Block{Block{
+			Reward:     big.NewInt(1000),
+			RewardType: VanilaBlock,
+			Slot:       500,
+		}, Block{
+			Reward:     big.NewInt(1000),
+			RewardType: VanilaBlock,
+			Slot:       12000,
 		}},
 	}
 
@@ -284,39 +288,39 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		PendingRewardsWei:     big.NewInt(100),
 		CollateralWei:         big.NewInt(1000000),
 		DepositAddress:        "0xa000000000000000000000000000000000000000",
-		ValidatorIndex:        "0xb000000000000000000000000000000000000000",
+		ValidatorIndex:        20,
 		ValidatorKey:          "0xc",
-		ProposedBlocksSlots: []BlockState{
-			BlockState{
-				Reward:    big.NewInt(1000),
-				BlockType: VanilaBlock,
-				Slot:      1000,
-			}, BlockState{
-				Reward:    big.NewInt(12000),
-				BlockType: VanilaBlock,
-				Slot:      3000,
-			}, BlockState{
-				Reward:    big.NewInt(7000),
-				BlockType: MevBlock,
-				Slot:      6000,
+		ProposedBlocksSlots: []Block{
+			Block{
+				Reward:     big.NewInt(1000),
+				RewardType: VanilaBlock,
+				Slot:       1000,
+			}, Block{
+				Reward:     big.NewInt(12000),
+				RewardType: VanilaBlock,
+				Slot:       3000,
+			}, Block{
+				Reward:     big.NewInt(7000),
+				RewardType: MevBlock,
+				Slot:       6000,
 			}},
-		MissedBlocksSlots: []BlockState{BlockState{
-			Reward:    big.NewInt(33000),
-			BlockType: VanilaBlock,
-			Slot:      800,
-		}, BlockState{
-			Reward:    big.NewInt(11000),
-			BlockType: VanilaBlock,
-			Slot:      15000,
+		MissedBlocksSlots: []Block{Block{
+			Reward:     big.NewInt(33000),
+			RewardType: VanilaBlock,
+			Slot:       800,
+		}, Block{
+			Reward:     big.NewInt(11000),
+			RewardType: VanilaBlock,
+			Slot:       15000,
 		}},
-		WrongFeeBlocksSlots: []BlockState{BlockState{
-			Reward:    big.NewInt(14000),
-			BlockType: VanilaBlock,
-			Slot:      700,
-		}, BlockState{
-			Reward:    big.NewInt(18000),
-			BlockType: VanilaBlock,
-			Slot:      19000,
+		WrongFeeBlocksSlots: []Block{Block{
+			Reward:     big.NewInt(14000),
+			RewardType: VanilaBlock,
+			Slot:       700,
+		}, Block{
+			Reward:     big.NewInt(18000),
+			RewardType: VanilaBlock,
+			Slot:       19000,
 		}},
 	}
 
@@ -326,22 +330,22 @@ func Test_SaveLoadFromToFile(t *testing.T) {
 		PendingRewardsWei:     big.NewInt(000),
 		CollateralWei:         big.NewInt(4000000),
 		DepositAddress:        "0xa000000000000000000000000000000000000000",
-		ValidatorIndex:        "0xb000000000000000000000000000000000000000",
+		ValidatorIndex:        30,
 		ValidatorKey:          "0xc",
 		// Empty Proposed blocks
-		MissedBlocksSlots: []BlockState{BlockState{
-			Reward:    big.NewInt(303000),
-			BlockType: VanilaBlock,
-			Slot:      12200,
+		MissedBlocksSlots: []Block{Block{
+			Reward:     big.NewInt(303000),
+			RewardType: VanilaBlock,
+			Slot:       12200,
 		}},
-		WrongFeeBlocksSlots: []BlockState{BlockState{
-			Reward:    big.NewInt(15000),
-			BlockType: VanilaBlock,
-			Slot:      800,
-		}, BlockState{
-			Reward:    big.NewInt(189000),
-			BlockType: VanilaBlock,
-			Slot:      232000,
+		WrongFeeBlocksSlots: []Block{Block{
+			Reward:     big.NewInt(15000),
+			RewardType: VanilaBlock,
+			Slot:       800,
+		}, Block{
+			Reward:     big.NewInt(189000),
+			RewardType: VanilaBlock,
+			Slot:       232000,
 		}},
 	}
 
@@ -386,6 +390,300 @@ func Test_IsValidatorSubscribed(t *testing.T) {
 	require.Equal(t, true, state.IsValidatorSubscribed(30))
 	require.Equal(t, false, state.IsValidatorSubscribed(40))
 	require.Equal(t, false, state.IsValidatorSubscribed(50))
+}
+
+func Test_BanValidator(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.AddSubscriptionIfNotAlready(1, "0xa", "0xb")
+	state.AddSubscriptionIfNotAlready(2, "0xa", "0xb")
+	state.AddSubscriptionIfNotAlready(3, "0xa", "0xb")
+
+	// New reward arrives
+	state.IncreaseAllPendingRewards(big.NewInt(99))
+
+	// Shared equally among all validators
+	require.Equal(t, big.NewInt(33), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(33), state.Validators[2].PendingRewardsWei)
+	require.Equal(t, big.NewInt(33), state.Validators[3].PendingRewardsWei)
+
+	// Ban validator 3
+	state.HandleBanValidator(Block{ValidatorIndex: 3})
+
+	// Its pending balance is shared equally among the rest
+	require.Equal(t, big.NewInt(49), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(49), state.Validators[2].PendingRewardsWei)
+	require.Equal(t, big.NewInt(0), state.Validators[3].PendingRewardsWei)
+
+	// The pool fee address gets the rounding errors (1 wei, neglectable)
+	require.Equal(t, big.NewInt(1), state.PoolAccumulatedFees)
+}
+
+func Test_IsBanned(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.Validators[1] = &ValidatorInfo{
+		ValidatorStatus: Active,
+	}
+	state.Validators[2] = &ValidatorInfo{
+		ValidatorStatus: YellowCard,
+	}
+	state.Validators[3] = &ValidatorInfo{
+		ValidatorStatus: RedCard,
+	}
+	state.Validators[4] = &ValidatorInfo{
+		ValidatorStatus: NotSubscribed,
+	}
+	state.Validators[5] = &ValidatorInfo{
+		ValidatorStatus: Banned,
+	}
+
+	require.Equal(t, false, state.IsBanned(1))
+	require.Equal(t, false, state.IsBanned(2))
+	require.Equal(t, false, state.IsBanned(3))
+	require.Equal(t, false, state.IsBanned(4))
+	require.Equal(t, true, state.IsBanned(5))
+}
+
+// TODO: Add a Test_Handle_Subscriptions_1 happy path to cover the normal flow
+
+// Follows an non happy path with a lot of edge cases and possible misconfigurations
+func Test_Handle_Subscriptions_1(t *testing.T) {
+	cfg := &config.Config{
+		PoolFeesAddress: "0xa",
+		PoolFeesPercent: 0,
+		CollateralInWei: big.NewInt(1000000),
+	}
+	state := NewOracleState(cfg)
+
+	// Two subscriptions ok. Third not enough collateral
+	subs := []Subscription{
+		{
+			ValidatorIndex: 1,
+			ValidatorKey:   "0xaa",
+			Collateral:     big.NewInt(1000000), // Enough
+			BlockNumber:    0,
+			TxHash:         "0xab",
+			DepositAddress: "0xac",
+		},
+		{
+			ValidatorIndex: 2,
+			ValidatorKey:   "0xba",
+			Collateral:     big.NewInt(1000000), // Enough
+			BlockNumber:    0,
+			TxHash:         "0xbb",
+			DepositAddress: "0xbc",
+		},
+		{
+			ValidatorIndex: 3,
+			ValidatorKey:   "0xba",
+			Collateral:     big.NewInt(50), // Not enough
+			BlockNumber:    0,
+			TxHash:         "0xbb",
+			DepositAddress: "0xbc",
+		},
+	}
+	state.HandleManualSubscriptions(cfg.CollateralInWei, subs)
+
+	require.Equal(t, 3, len(state.Validators))
+	require.Equal(t, Active, state.Validators[1].ValidatorStatus)
+	require.Equal(t, Active, state.Validators[2].ValidatorStatus)
+	// We keep track of [3] since we returned the rewards, but NotSubscribed
+	require.Equal(t, NotSubscribed, state.Validators[3].ValidatorStatus)
+
+	require.Equal(t, big.NewInt(0), state.Validators[1].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(0), state.Validators[2].AccumulatedRewardsWei)
+	// Rewards were return
+	require.Equal(t, big.NewInt(50), state.Validators[3].AccumulatedRewardsWei)
+
+	// Valid subscriptions have the pending correctly updated
+	require.Equal(t, big.NewInt(1000000), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(1000000), state.Validators[2].PendingRewardsWei)
+	require.Equal(t, big.NewInt(0), state.Validators[3].PendingRewardsWei)
+
+	// Collateral is updated properly
+	require.Equal(t, big.NewInt(1000000), state.Validators[1].CollateralWei)
+	require.Equal(t, big.NewInt(1000000), state.Validators[2].CollateralWei)
+	// We dont even consider collateral for [3] since it was returned
+	require.Equal(t, big.NewInt(0), state.Validators[3].CollateralWei)
+
+	// Already subscribed validators
+	subs2 := []Subscription{
+		{
+			ValidatorIndex: 1,
+			ValidatorKey:   "0xaa",
+			Collateral:     big.NewInt(5000000), // Too much + already subscribed
+			BlockNumber:    5,
+			TxHash:         "0xab",
+			DepositAddress: "0xac",
+		},
+		{
+			ValidatorIndex: 2,
+			ValidatorKey:   "0xba",
+			Collateral:     big.NewInt(5000000), // Too much + already subscribed
+			BlockNumber:    5,
+			TxHash:         "0xbb",
+			DepositAddress: "0xbc",
+		},
+	}
+
+	state.HandleManualSubscriptions(cfg.CollateralInWei, subs2)
+
+	// Still active, nothing changes
+	require.Equal(t, Active, state.Validators[1].ValidatorStatus)
+	require.Equal(t, Active, state.Validators[2].ValidatorStatus)
+
+	// We return this extra collateral
+	require.Equal(t, big.NewInt(5000000), state.Validators[1].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(5000000), state.Validators[2].AccumulatedRewardsWei)
+
+	// Pending still the same
+	require.Equal(t, big.NewInt(1000000), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(1000000), state.Validators[2].PendingRewardsWei)
+
+	// Collateral does not change
+	require.Equal(t, big.NewInt(1000000), state.Validators[1].CollateralWei)
+	require.Equal(t, big.NewInt(1000000), state.Validators[2].CollateralWei)
+
+	// Validator 3 tries to subscribe again, now with actually more collateral
+	// than needed
+	subs3 := []Subscription{
+		{
+			ValidatorIndex: 3, // Already tracked, wrongly deposited collateral before
+			ValidatorKey:   "0xca",
+			Collateral:     big.NewInt(1000070), // More than enough
+			BlockNumber:    0,
+			TxHash:         "0xcb",
+			DepositAddress: "0xcc",
+		},
+	}
+	state.HandleManualSubscriptions(cfg.CollateralInWei, subs3)
+
+	// Boilerplate asserts to ensure nothing changed
+
+	// Still active, nothing changes
+	require.Equal(t, Active, state.Validators[1].ValidatorStatus)
+	require.Equal(t, Active, state.Validators[2].ValidatorStatus)
+
+	// We return this extra collateral
+	require.Equal(t, big.NewInt(5000000), state.Validators[1].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(5000000), state.Validators[2].AccumulatedRewardsWei)
+
+	// Pending still the same
+	require.Equal(t, big.NewInt(1000000), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(1000000), state.Validators[2].PendingRewardsWei)
+
+	// Collateral does not change
+	require.Equal(t, big.NewInt(1000000), state.Validators[1].CollateralWei)
+	require.Equal(t, big.NewInt(1000000), state.Validators[2].CollateralWei)
+
+	// Validator [3] asserts
+	require.Equal(t, Active, state.Validators[3].ValidatorStatus)
+	require.Equal(t, big.NewInt(50), state.Validators[3].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(1000070), state.Validators[3].PendingRewardsWei)
+	require.Equal(t, big.NewInt(1000070), state.Validators[3].CollateralWei)
+
+	// Ban validator 3
+	state.HandleBanValidator(Block{
+		Slot:           uint64(100),
+		ValidatorIndex: uint64(3),
+		ValidatorKey:   "0xca",
+	})
+
+	require.Equal(t, Banned, state.Validators[3].ValidatorStatus)
+	// Pending rewards are reset to zero
+	require.Equal(t, big.NewInt(0), state.Validators[3].PendingRewardsWei)
+	// Accumulated do not change
+	require.Equal(t, big.NewInt(50), state.Validators[3].AccumulatedRewardsWei)
+
+	// Banned validator tries to add more collateral
+	subs4 := []Subscription{
+		{
+			ValidatorIndex: 3, // Already tracked, wrongly deposited collateral before
+			ValidatorKey:   "0xca",
+			Collateral:     big.NewInt(2500000), // More than enough
+			BlockNumber:    0,
+			TxHash:         "0xcb",
+			DepositAddress: "0xcc",
+		},
+	}
+	state.HandleManualSubscriptions(cfg.CollateralInWei, subs4)
+
+	// Its ignored
+	require.Equal(t, Banned, state.Validators[3].ValidatorStatus)
+	require.Equal(t, big.NewInt(0), state.Validators[3].PendingRewardsWei)
+	// Collateral is returned
+	require.Equal(t, big.NewInt(50+2500000), state.Validators[3].AccumulatedRewardsWei)
+	// Same as before
+	require.Equal(t, big.NewInt(1000070), state.Validators[3].CollateralWei)
+}
+
+func Test_Handle_TODO(t *testing.T) {
+	cfg := &config.Config{
+		PoolFeesAddress: "0xa",
+		PoolFeesPercent: 0,
+		CollateralInWei: big.NewInt(1000000),
+	}
+	state := NewOracleState(cfg)
+
+	// Two subscriptions ok. Third not enough collateral
+	subs := []Subscription{
+		{
+			ValidatorIndex: 10,
+			ValidatorKey:   "0xaa",
+			Collateral:     big.NewInt(1000000), // Enough
+			BlockNumber:    0,
+			TxHash:         "0xab",
+			DepositAddress: "0xac",
+		},
+		{
+			ValidatorIndex: 20,
+			ValidatorKey:   "0xba",
+			Collateral:     big.NewInt(1000000), // Enough
+			BlockNumber:    0,
+			TxHash:         "0xbb",
+			DepositAddress: "0xbc",
+		},
+		{
+			ValidatorIndex: 30,
+			ValidatorKey:   "0xba",
+			Collateral:     big.NewInt(50), // Not enough
+			BlockNumber:    0,
+			TxHash:         "0xbb",
+			DepositAddress: "0xbc",
+		},
+	}
+	state.HandleManualSubscriptions(cfg.CollateralInWei, subs)
+
+	// Block from a subscribed validator (manual)
+	block1 := Block{
+		Slot:           0,
+		ValidatorIndex: 10,
+		ValidatorKey:   "0x",
+		Reward:         big.NewInt(50000000),
+		RewardType:     VanilaBlock,
+		DepositAddress: "0ac",
+	}
+	state.HandleCorrectBlockProposal(block1)
+
+	// Block from a non-subscribed validator (auto)
+	block2 := Block{
+		Slot:           0,
+		ValidatorIndex: 40,
+		ValidatorKey:   "0x",
+		Reward:         big.NewInt(3333333),
+		RewardType:     VanilaBlock,
+		DepositAddress: "0ac",
+	}
+	state.HandleCorrectBlockProposal(block2)
+
+	fmt.Println(state.Validators[10])
+	fmt.Println(state.Validators[20])
+	fmt.Println(state.Validators[30])
+
+	// Test also
+	//or.State.HandleBanValidator(customBlock)
+	//or.State.HandleManualUnsubscriptions(newBlockUnsub)
+	//or.State.HandleDonations(blockDonations)
+	//or.State.HandleMissedBlock(customBlock)
 }
 
 // TODO: Add tests for add subscription and remove subscription
