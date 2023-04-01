@@ -224,7 +224,23 @@ func Test_StateMachine(t *testing.T) {
 		require.Equal(t, testState.End, state.Validators[valIndex2].ValidatorStatus)
 	}
 }
-func Test_SaveLoadFromToFile(t *testing.T) {
+
+func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
+	state := NewOracleState(&config.Config{
+		PoolAddress:     "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
+		Network:         "mainnet",
+	})
+
+	StateFileName = "test_state.gob"
+	defer os.Remove(StateFileName)
+	state.SaveStateToFile()
+
+	recovered, err := ReadStateFromFile()
+	require.NoError(t, err)
+	require.Equal(t, state, recovered)
+}
+func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 
 	state := NewOracleState(&config.Config{
 		PoolAddress:     "0x0000000000000000000000000000000000000000",

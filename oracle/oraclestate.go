@@ -175,7 +175,17 @@ func (p *OracleState) SaveStateToFile() {
 }
 
 func ReadStateFromFile() (*OracleState, error) {
-	state := OracleState{}
+	// Init all fields in case any was stored empty in the file
+	state := OracleState{
+		Validators:          make(map[uint64]*ValidatorInfo, 0),
+		PoolAccumulatedFees: big.NewInt(0),
+		Subscriptions:       make([]Subscription, 0),
+		Unsubscriptions:     make([]Unsubscription, 0),
+		Donations:           make([]Donation, 0),
+		ProposedBlocks:      make([]Block, 0),
+		MissedBlocks:        make([]Block, 0),
+		WrongFeeBlocks:      make([]Block, 0),
+	}
 
 	file, err := os.Open(StateFileName)
 
