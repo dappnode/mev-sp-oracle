@@ -44,6 +44,12 @@ Return information of a given validator index registered in the pool.
 curl 157.90.93.245:7300/memory/validator/408120
 ```
 
+Return information of all subscribed validators from a deposit address
+
+```
+curl 157.90.93.245:7300/memory/validators/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
+```
+
 Returns information on the fees that the pool takes, such as percent, address and fees so far.
 
 ```
