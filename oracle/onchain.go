@@ -755,10 +755,12 @@ func (o *Onchain) GetDepositAddressOfValidator(validatorPubKey string, slot uint
 
 func (o *Onchain) GetRetryOpts(opts []retry.Option) []retry.Option {
 	// Default retry options. This specifies what to do when a call to the
-	// consensus or execution client fails. Default is to retry 5 times
+	// consensus or execution client fails. Default is to retry x times (see config)
 	// with a 15 seconds delay and the default backoff strategy (see avas/retry-go)
 	// Note that in some cases we might want to avoid retrying at all, for example
 	// when serving data to an api, we may want to just fail fast and return an error
+	// If this function is called with retry options, we use those instead as a way
+	// to override the default retry options
 	if len(opts) == 0 {
 		return []retry.Option{
 			retry.Attempts(uint(o.Cfg.NumRetries)),
