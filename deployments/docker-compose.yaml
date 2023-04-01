@@ -20,7 +20,7 @@ x-logging: &logging
 
 services:
   oracle:
-    image: "dappnode/mev-sp-oracle:f4c3ac2"
+    image: "dappnode/mev-sp-oracle:9d5e65b"
     restart: "no"
     <<: *logging
     depends_on:
@@ -31,14 +31,16 @@ services:
       - --checkpoint-size=${CHECKPOINT_SIZE}
       - --consensus-endpoint=http://teku:5051
       - --deployed-slot=${DEPLOYED_SLOT}
-      - --deployer-private-key=${DEPLOYER_PRIVATE_KEY}
-      #- --dry-run
+      #- --deployer-private-key=${DEPLOYER_PRIVATE_KEY}
+      - --dry-run
       - --execution-endpoint=http://geth:8545
       - --network=${NETWORK}
       - --pool-address=${POOL_ADDRESS}
       - --pool-fees-address=${POOL_FEES_ADDRESS}
       - --pool-fees-percent=${POOL_FEES_PERCENT}
       - --postgres-endpoint=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432
+      - --collateral-in-wei=${COLLATERAL_IN_WEI}
+      #- --num-retries=5 #default infinite
     ports:
       - 7300:7300
 
