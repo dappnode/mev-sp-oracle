@@ -145,8 +145,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			enoughData := oracleInstance.State.StoreLatestOnchainState()
 
 			oracleInstance.State.SaveStateToFile()
-			oracleInstance.State.LogAccumulatedBalances()
-			oracleInstance.State.LogPendingBalances()
+			oracleInstance.State.LogBalances()
 
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")

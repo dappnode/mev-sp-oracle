@@ -1,6 +1,9 @@
 package oracle
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/dappnode/mev-sp-oracle/config"
 )
 
@@ -29,7 +32,10 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	blockUnsubs []Unsubscription,
 	blockDonations []Donation) (uint64, error) {
 
-	// TODO: Ensure block are from the same slot and pool for all variables and matches LatestSlot
+	err := or.validateParameters(blockPool, blockSubs, blockUnsubs, blockDonations)
+	if err != nil {
+		return 0, err
+	}
 
 	// Handle subscriptions first thing
 	or.State.HandleManualSubscriptions(or.cfg.CollateralInWei, blockSubs)
@@ -62,4 +68,19 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	processedSlot := or.State.LatestSlot
 	or.State.LatestSlot = or.State.LatestSlot + 1
 	return processedSlot, nil
+}
+
+func (or *Oracle) validateParameters(
+	blockPool Block,
+	blockSubs []Subscription,
+	blockUnsubs []Unsubscription,
+	blockDonations []Donation) error {
+
+	if blockPool.Slot != or.State.LatestSlot {
+		return errors.New(fmt.Sprint("Slot of blockPool is not the same as the latest slot of the oracle. BlockPool: ",
+			blockPool.Slot, " Oracle: ", or.State.LatestSlot))
+	}
+
+	// TODO: Add more validators to block subs unsubs, donations, etc
+	return nil
 }

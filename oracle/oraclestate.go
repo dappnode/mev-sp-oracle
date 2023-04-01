@@ -587,15 +587,13 @@ func (state *OracleState) ResetPendingRewards(valIndex uint64) {
 	state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
 }
 
-func (state *OracleState) LogPendingBalances() {
+func (state *OracleState) LogBalances() {
 	for valIndex, validator := range state.Validators {
-		log.Info("SlotState: ", state.LatestSlot, " Pending: ", valIndex, ": ", validator.PendingRewardsWei)
-	}
-}
-
-func (state *OracleState) LogAccumulatedBalances() {
-	for valIndex, validator := range state.Validators {
-		log.Info("SlotState: ", state.LatestSlot, " Claimable: ", valIndex, ": ", validator.AccumulatedRewardsWei)
+		log.Info(
+			"SlotState: ", state.LatestSlot,
+			" ValIndex: ", valIndex,
+			" Pending: ", validator.PendingRewardsWei,
+			" Accumulated: ", validator.AccumulatedRewardsWei)
 	}
 }
 
