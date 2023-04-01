@@ -33,7 +33,7 @@ type Config struct {
 // go build -v -ldflags="-X 'github.com/xxx/yyy/config.ReleaseVersion=x.y.z'"
 var ReleaseVersion = "custom-build"
 
-var MainRelays = []string{
+var MainnetRelays = []string{
 	"boost-relay.flashbots.net",
 	"bloxroute.max-profit.blxrbdn.com",
 	"bloxroute.ethical.blxrbdn.com",
@@ -46,7 +46,7 @@ var MainRelays = []string{
 	"agnostic-relay.net",
 	"aestus.live",
 }
-var TestRelays = []string{
+var GoerliRelays = []string{
 	"builder-relay-goerli.flashbots.net",
 	"bloxroute.max-profit.builder.goerli.blxrbdn.com",
 	"builder-relay-goerli.blocknative.com/",
