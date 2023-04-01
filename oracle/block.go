@@ -92,12 +92,12 @@ func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.In
 // need to reconstruct the tip from the txs.
 func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 	poolAddress string,
-	onchain Onchain) (*big.Int, bool, int, error) {
+	onchain Onchain) (*big.Int, bool, RewardType, error) {
 
 	var reward *big.Int = big.NewInt(0)
 	err := *new(error)
 	var numTxs int = 0
-	var txType int = -1
+	var txType RewardType = UnknownRewardType
 	var wasRewardSent bool = false
 
 	if len(b.GetFeeRecipient()) != len(poolAddress) {

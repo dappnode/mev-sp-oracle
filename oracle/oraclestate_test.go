@@ -183,9 +183,9 @@ func Test_StateMachine(t *testing.T) {
 	valIndex2 := uint64(2000)
 
 	type stateTest struct {
-		From  int
-		Event int
-		End   int
+		From  ValidatorStatus
+		Event Event
+		End   ValidatorStatus
 	}
 
 	stateMachineTestVector := []stateTest{
