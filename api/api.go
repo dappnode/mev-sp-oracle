@@ -32,11 +32,14 @@ var apiRetryOpts = []retry.Option{
 	retry.Attempts(1),
 }
 
+const defaultMerkleRoot = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
 const (
 	// Available endpoints
 	pathStatus                = "/status"
 	pathValidatorRelayers     = "/registeredrelays/{valpubkey}"
 	pathDepositAddressByIndex = "/depositaddress/{valindex}"
+	pathValidatorsByDeposit   = "/validatorkeys/{depositaddress}"
 
 	// Memory endpoints: what the oracle knows
 	pathMemoryValidators          = "/memory/validators"
@@ -55,10 +58,10 @@ const (
 	pathOnchainValidators          = "/onchain/validators"                  // TODO
 	pathOnchainValidatorByIndex    = "/onchain/validator/{valindex}"        // TODO
 	pathOnchainValidatorsByDeposit = "/onchain/validators/{depositaddress}" // TODO
-	pathOnchainFeesInfo            = "/onchain/proof/fees"                  // TODO
-	pathOnchainMerkleRoot          = "/onchain/merkleroot"                  // TODO
-	pathOnchainMerkleProof         = "/onchain/proof/{depositaddress}"      // TODO
-	pathOnchainLatestCheckpoint    = "/onchain/latestcheckpoint"            // TODO
+	pathOnchainFeesInfo            = "/onchain/proof/fees"
+	pathOnchainMerkleRoot          = "/onchain/merkleroot" // TODO:
+	pathOnchainMerkleProof         = "/onchain/proof/{depositaddress}"
+	pathOnchainLatestCheckpoint    = "/onchain/latestcheckpoint" // TODO: needed?
 )
 
 type httpErrorResp struct {
@@ -197,10 +200,13 @@ func (m *ApiService) getRouter() http.Handler {
 	// Map endpoints and their handlers
 	r.HandleFunc("/", m.handleRoot).Methods(http.MethodGet)
 
+	// General endpoints
 	r.HandleFunc(pathStatus, m.handleStatus).Methods(http.MethodGet)
 	r.HandleFunc(pathValidatorRelayers, m.handleValidatorRelayers).Methods(http.MethodGet)
 	r.HandleFunc(pathDepositAddressByIndex, m.handleDepositAddressByIndex).Methods(http.MethodGet)
+	r.HandleFunc(pathValidatorsByDeposit, m.handleValidatorKeysByDeposit).Methods(http.MethodGet)
 
+	// Memory endpoints
 	r.HandleFunc(pathMemoryValidators, m.handleMemoryValidators).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryValidatorByIndex, m.handleMemoryValidatorInfo).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryValidatorsByDeposit, m.handleMemoryValidatorsByDeposit).Methods(http.MethodGet)
@@ -211,17 +217,14 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc(pathMemoryWrongFeeBlocks, m.handleMemoryWrongFeeBlocks).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryDonations, m.handleMemoryDonations).Methods(http.MethodGet)
 
-	//r.HandleFunc(pathLatestMerkleProof, m.handleLatestMerkleProof)
-	//r.HandleFunc(pathLatestMerkleRoot, m.handleLatestMerkleRoot)
-	//r.HandleFunc(pathLatestCheckpoint, m.handleLatestCheckpoint)
+	// Onchain endpoints
+	r.HandleFunc(pathOnchainFeesInfo, m.handleOnchainFeesInfo).Methods(http.MethodGet)
+	r.HandleFunc(pathOnchainMerkleProof, m.handleOnchainMerkleProof).Methods(http.MethodGet)
 
-	//r.HandleFunc(pathValidatorOnchainStateByIndex, m.handleValidatorOnchainStateByIndex)
-	//r.HandleFunc(pathValidatorOffchainStateByIndex, m.handleValidatorOffchainStateByIndex)
-	//r.HandleFunc(pathDonations, m.handleDonations)
+	//r.HandleFunc(pathLatestCheckpoint, m.handleLatestCheckpoint)
 
 	//r.Use(mux.CORSMethodMiddleware(r))
 
-	// TODO: Add logging
 	return r
 }
 
@@ -462,7 +465,63 @@ func (m *ApiService) handleMemoryDonations(w http.ResponseWriter, req *http.Requ
 	m.respondOK(w, m.OracleState.Donations)
 }
 
-func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Request) {
+func (m *ApiService) handleOnchainFeesInfo(w http.ResponseWriter, req *http.Request) {
+
+	// Get the merkle root stored onchain
+	// TODO: Temporally disabled until we enable submitting state to chain
+	/*contractRoot, err := m.Onchain.GetContractMerkleRoot(apiRetryOpts...)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get contract merkle root: "+err.Error())
+		return
+	}
+
+	if contractRoot == defaultMerkleRoot {
+		m.respondError(w, http.StatusInternalServerError, "contract merkle root is default, no state was commited yet")
+		return
+	}
+
+	if strings.ToLower(contractRoot) != strings.ToLower(m.OracleState.LatestCommitedState.MerkleRoot) {
+		m.respondError(w, http.StatusInternalServerError, fmt.Sprint("contract merkle root is not in sync with oracle state: ",
+			contractRoot, " vs ", m.OracleState.LatestCommitedState.MerkleRoot))
+		return
+	}*/
+
+	if len(m.OracleState.LatestCommitedState.Proofs) == 0 {
+		m.respondError(w, http.StatusInternalServerError, "no proofs found: not in sync or nothing commited yet")
+		return
+	}
+
+	// TODO: Use always lowercase. This is a bit of a workaround
+	poolFeesAddress := strings.ToLower(m.OracleState.PoolFeesAddress)
+
+	proofs, okProof := m.OracleState.LatestCommitedState.Proofs[poolFeesAddress]
+	if !okProof {
+		m.respondError(w, http.StatusInternalServerError, "no proof found for pool fees address, perhaps not commited yet")
+		return
+	}
+
+	leaf, okLeaf := m.OracleState.LatestCommitedState.Leafs[poolFeesAddress]
+	if !okLeaf {
+		m.respondError(w, http.StatusInternalServerError, "no leaf found for pool fees address, perhaps not commited yet")
+		return
+	}
+
+	type httpOkProofsFee struct {
+		LeafDepositAddress     string   `json:"leaf_deposit_address"`
+		LeafAccumulatedBalance *big.Int `json:"leaf_accumulated_balance"`
+		MerkleRoot             string   `json:"merkleroot"`
+		Proofs                 []string `json:"merkle_proofs"`
+	}
+
+	m.respondOK(w, httpOkProofsFee{
+		LeafDepositAddress:     leaf.DepositAddress,
+		LeafAccumulatedBalance: leaf.AccumulatedBalance,
+		MerkleRoot:             m.OracleState.LatestCommitedState.MerkleRoot,
+		Proofs:                 proofs,
+	})
+}
+
+func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	depositAddress := vars["depositaddress"]
 
@@ -473,6 +532,26 @@ func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Re
 
 	// Use always lowercase
 	depositAddress = strings.ToLower(depositAddress)
+
+	// Get the merkle root stored onchain
+	// TODO: Temporally disabled until we enable submitting state to chain
+
+	/*contractRoot, err := m.Onchain.GetContractMerkleRoot(apiRetryOpts...)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get contract merkle root: "+err.Error())
+		return
+	}
+
+	if contractRoot == defaultMerkleRoot {
+		m.respondError(w, http.StatusInternalServerError, "contract merkle root is default, no state was commited yet")
+		return
+	}
+
+	if strings.ToLower(contractRoot) != strings.ToLower(m.OracleState.LatestCommitedState.MerkleRoot) {
+		m.respondError(w, http.StatusInternalServerError, fmt.Sprint("contract merkle root is not in sync with oracle state: ",
+			contractRoot, " vs ", m.OracleState.LatestCommitedState.MerkleRoot))
+		return
+	}*/
 
 	// Get the proofs of this deposit address (to be used onchain to claim rewards)
 	proofs, proofFound := m.OracleState.LatestCommitedState.Proofs[depositAddress]
@@ -491,7 +570,7 @@ func (m *ApiService) handleLatestMerkleProof(w http.ResponseWriter, req *http.Re
 	// Get validators that are registered to this deposit address in the pool
 	registeredValidators := make([]uint64, 0)
 	for valIndex, validator := range m.OracleState.LatestCommitedState.Validators {
-		if validator.DepositAddress == depositAddress {
+		if strings.ToLower(validator.DepositAddress) == strings.ToLower(depositAddress) {
 			registeredValidators = append(registeredValidators, valIndex)
 		}
 	}
@@ -532,7 +611,7 @@ func (m *ApiService) handleDepositAddressByIndex(w http.ResponseWriter, req *htt
 	valPubKeyByte := valInfo[phase0.ValidatorIndex(valIndex)].Validator.PublicKey
 	valPubKeyStr := "0x" + hex.EncodeToString(valPubKeyByte[:])
 
-	depositAddress, err := m.Postgres.GetDepositAddressOfValidatorKey(valPubKeyStr)
+	depositAddress, err := m.Postgres.GetDepositAddressOfValidatorKey(valPubKeyStr, apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get deposit address for valindex: "+err.Error())
 		return
@@ -542,6 +621,37 @@ func (m *ApiService) handleDepositAddressByIndex(w http.ResponseWriter, req *htt
 		DepositAddress:   depositAddress,
 		ValidatorIndex:   valIndex,
 		ValidatorAddress: valPubKeyStr,
+	})
+}
+
+func (m *ApiService) handleValidatorKeysByDeposit(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	depositAddress := vars["depositaddress"]
+
+	if !IsValidAddress(depositAddress) {
+		m.respondError(w, http.StatusBadRequest, "invalid depositAddress: "+depositAddress)
+		return
+	}
+
+	// Use always lowercase
+	depositAddress = strings.ToLower(depositAddress)
+
+	valKeys, err := m.Postgres.GetValidatorKeysFromDepositAddress([]string{depositAddress}, apiRetryOpts...)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get validator keys for deposit address: "+err.Error())
+		return
+	}
+
+	type httpOkKeysOfDeposit struct {
+		DepositAddress     string   `json:"deposit_address"`
+		Length             int      `json:"length"`
+		ValidatorAddresses []string `json:"validator_addresses"`
+	}
+
+	m.respondOK(w, httpOkKeysOfDeposit{
+		DepositAddress:     depositAddress,
+		Length:             len(valKeys),
+		ValidatorAddresses: valKeys,
 	})
 }
 
