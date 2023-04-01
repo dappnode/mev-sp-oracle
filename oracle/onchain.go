@@ -31,16 +31,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Default retry options. This specifies what to do when a call to the
-// consensus or execution client fails. Default is to retry 5 times
-// with a 15 seconds delay and the default backoff strategy (see avas/retry-go)
-// Note that in some cases we might want to avoid retrying at all, for example
-// when serving data to an api, we may want to just fail fast and return an error
-var defaultRetryOpts = []retry.Option{
-	retry.Attempts(5),
-	retry.Delay(15 * time.Second),
-}
-
 // This file provides different functions to access the blockchain state from both consensus and
 // execution layer and modifying the its state via smart contract calls.
 type EpochDuties struct {
@@ -60,6 +50,7 @@ type Onchain struct {
 	Cfg             *config.Config
 	Contract        *contract.Contract
 	Postgres        *postgres.Postgresql
+	NumRetries      int
 }
 
 func NewOnchain(cfg config.Config) (*Onchain, error) {
@@ -122,7 +113,7 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 		return nil, errors.New("Error instantiating contract: " + err.Error())
 	}
 
-	postgres, err := postgres.New(cfg.PostgresEndpoint)
+	postgres, err := postgres.New(cfg.PostgresEndpoint, cfg.NumRetries)
 	if err != nil {
 		return nil, errors.New("Error instantiating postgres: " + err.Error())
 	}
@@ -136,32 +127,32 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 	}, nil
 }
 
-func (f *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
+func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	var err error
 	var execSync *ethereum.SyncProgress
 	var consSync *api.SyncState
 
 	err = retry.Do(func() error {
-		execSync, err = f.ExecutionClient.SyncProgress(context.Background())
+		execSync, err = o.ExecutionClient.SyncProgress(context.Background())
 		if err != nil {
 			log.Warn("Failed attempt to fetch execution client sync progress: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching execution client sync progress: " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return false, errors.New("Could not fetch execution client sync progress: " + err.Error())
 	}
 
 	err = retry.Do(func() error {
-		consSync, err = f.ConsensusClient.NodeSyncing(context.Background())
+		consSync, err = o.ConsensusClient.NodeSyncing(context.Background())
 		if err != nil {
 			log.Warn("Failed attempt to fetch consensus client sync progress: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching execution client sync progress: " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return false, errors.New("Could not fetch consensus client sync progress: " + err.Error())
@@ -175,19 +166,19 @@ func (f *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	return false, nil
 }
 
-func (f *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*spec.VersionedSignedBeaconBlock, error) {
+func (o *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*spec.VersionedSignedBeaconBlock, error) {
 	slotStr := strconv.FormatUint(slot, 10)
 	var signedBeaconBlock *spec.VersionedSignedBeaconBlock
 	var err error
 
 	err = retry.Do(func() error {
-		signedBeaconBlock, err = f.ConsensusClient.SignedBeaconBlock(context.Background(), slotStr)
+		signedBeaconBlock, err = o.ConsensusClient.SignedBeaconBlock(context.Background(), slotStr)
 		if err != nil {
 			log.Warn("Failed attempt to fetch block at slot ", slotStr, ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching block at slot " + slotStr + ": " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return nil, errors.New("Could not fetch block at slot " + slotStr + ": " + err.Error())
@@ -196,18 +187,18 @@ func (f *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 }
 
 // Given a validator key, returns the validator index
-func (f *Onchain) GetValidatorIndexByKey(valKey string, opts ...retry.Option) (uint64, error) {
+func (o *Onchain) GetValidatorIndexByKey(valKey string, opts ...retry.Option) (uint64, error) {
 	var err error
 	var validators map[phase0.ValidatorIndex]*api.Validator
 
 	err = retry.Do(func() error {
-		validators, err = f.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", []phase0.BLSPubKey{StringToBlsKey(valKey)})
+		validators, err = o.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", []phase0.BLSPubKey{StringToBlsKey(valKey)})
 		if err != nil {
 			log.Warn("Failed attempt to fetch validator index: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching validator index: " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return 0, errors.New("Could not fetch validator index: " + err.Error())
@@ -224,18 +215,18 @@ func (f *Onchain) GetValidatorIndexByKey(valKey string, opts ...retry.Option) (u
 }
 
 // Given a validator index, returns the validator key
-func (f *Onchain) GetValidatorKeyByIndex(valIndex uint64, opts ...retry.Option) (string, error) {
+func (o *Onchain) GetValidatorKeyByIndex(valIndex uint64, opts ...retry.Option) (string, error) {
 	var err error
 	var validators map[phase0.ValidatorIndex]*api.Validator
 
 	err = retry.Do(func() error {
-		validators, err = f.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
+		validators, err = o.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
 		if err != nil {
 			log.Warn("Failed attempt to fetch validator key: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching validator index: " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return "", errors.New("Could not fetch validator index: " + err.Error())
@@ -248,7 +239,7 @@ func (f *Onchain) GetValidatorKeyByIndex(valIndex uint64, opts ...retry.Option) 
 	return validator.Validator.PublicKey.String(), nil
 }
 
-func (f *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
+func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
 	// Hardcoded value, slots in an epoch
 	slotsInEpoch := uint64(32)
 	epoch := slot / slotsInEpoch
@@ -270,14 +261,14 @@ func (f *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.Propo
 	var err error
 
 	err = retry.Do(func() error {
-		duties, err = f.ConsensusClient.ProposerDuties(
+		duties, err = o.ConsensusClient.ProposerDuties(
 			context.Background(), phase0.Epoch(epoch), indexes)
 		if err != nil {
 			log.Warn("Failed attempt to fetch proposal duties at slot ", slotStr, ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching proposal duties at slot " + slotStr + ": " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return nil, errors.New("Error fetching proposal duties at slot " + slotStr + ": " + err.Error())
@@ -290,7 +281,7 @@ func (f *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.Propo
 }
 
 // This function is expensive as gets every tx receipt from the block. Use only if needed
-func (f *Onchain) GetExecHeaderAndReceipts(
+func (o *Onchain) GetExecHeaderAndReceipts(
 	blockNumber *big.Int,
 	rawTxs []bellatrix.Transaction,
 	opts ...retry.Option) (*types.Header, []*types.Receipt, error) {
@@ -299,13 +290,13 @@ func (f *Onchain) GetExecHeaderAndReceipts(
 	var err error
 
 	err = retry.Do(func() error {
-		header, err = f.ExecutionClient.HeaderByNumber(context.Background(), blockNumber)
+		header, err = o.ExecutionClient.HeaderByNumber(context.Background(), blockNumber)
 		if err != nil {
 			log.Warn("Failed attempt to fetch header for block ", blockNumber.String(), ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching header for block " + blockNumber.String() + ": " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return nil, nil, errors.New("Could not fetch header for block " + blockNumber.String() + ": " + err.Error())
@@ -321,13 +312,13 @@ func (f *Onchain) GetExecHeaderAndReceipts(
 		var receipt *types.Receipt
 
 		err = retry.Do(func() error {
-			receipt, err = f.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
+			receipt, err = o.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
 			if err != nil {
 				log.Warn("Failed attempt to fetch receipt for tx ", tx.Hash().String(), ": ", err.Error(), " Retrying...")
 				return errors.New("Error fetching receipt for tx " + tx.Hash().String() + ": " + err.Error())
 			}
 			return nil
-		}, GetRetryOpts(opts)...)
+		}, o.GetRetryOpts(opts)...)
 
 		if err != nil {
 			return nil, nil, errors.New("Could not fetch receipt for tx " + tx.Hash().String() + ": " + err.Error())
@@ -357,7 +348,7 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([
 			return errors.New("Error filtering donations for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return nil, errors.New("Could not filter donations for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
@@ -407,7 +398,7 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return nil, errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
@@ -459,7 +450,7 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 			return errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return nil, errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
@@ -507,7 +498,7 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 			}
 			rewardsRootStr = "0x" + hex.EncodeToString(rewardsRoot[:])
 			return nil
-		}, GetRetryOpts(opts)...)
+		}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return "", errors.New("could not get merkle root from contract: " + err.Error())
@@ -528,7 +519,7 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 			return errors.New("could not get balance for address " + address + ": " + err.Error())
 		}
 		return nil
-	}, GetRetryOpts(opts)...)
+	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return nil, errors.New("could not get balance for address " + address + ": " + err.Error())
@@ -762,9 +753,19 @@ func (o *Onchain) GetDepositAddressOfValidator(validatorPubKey string, slot uint
 	return someDepositAddresses[slot%7]
 }
 
-func GetRetryOpts(opts []retry.Option) []retry.Option {
+func (o *Onchain) GetRetryOpts(opts []retry.Option) []retry.Option {
+	// Default retry options. This specifies what to do when a call to the
+	// consensus or execution client fails. Default is to retry x times (see config)
+	// with a 15 seconds delay and the default backoff strategy (see avas/retry-go)
+	// Note that in some cases we might want to avoid retrying at all, for example
+	// when serving data to an api, we may want to just fail fast and return an error
+	// If this function is called with retry options, we use those instead as a way
+	// to override the default retry options
 	if len(opts) == 0 {
-		return defaultRetryOpts
+		return []retry.Option{
+			retry.Attempts(uint(o.Cfg.NumRetries)),
+			retry.Delay(15 * time.Second),
+		}
 	} else {
 		return opts
 	}
