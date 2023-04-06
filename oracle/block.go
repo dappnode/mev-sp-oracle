@@ -210,7 +210,7 @@ func (b *VersionedSignedBeaconBlock) GetProposerTip(blockHeader *types.Header, t
 
 // This function detects an Eth transaction sent to an address. Note that if it sent
 // by interacting with an smart contract, it will not be detected here.
-// Unusued
+// This does not takes into account txs made from the fee recipient (MEV txs)
 func (b *VersionedSignedBeaconBlock) SentEthToAddress(poolAddress string) *big.Int {
 	sentEth := big.NewInt(0)
 	numTxs := 0
@@ -236,6 +236,55 @@ func (b *VersionedSignedBeaconBlock) SentEthToAddress(poolAddress string) *big.I
 		}
 	}
 	return sentEth
+}
+
+// Note that this does not detect tx made from smart contract, just plain eth txs
+// This function is called on everyblock and MevRewardInWei, which iterate the same
+// set of transactions. As a TODO: we can refactor this to only iterate once and get
+// both information.
+func (b *VersionedSignedBeaconBlock) GetDonations(poolAddress string) []Donation {
+	donations := []Donation{}
+
+	for _, rawTx := range b.GetBlockTransactions() {
+		tx, msg, err := DecodeTx(rawTx)
+		if err != nil {
+			log.Fatal("could not decode tx: ", err)
+		}
+		// If a transaction was sent to the pool
+		// And the sender is not the fee recipient (exclude MEV transactions)
+		// Note that msg.To() is nil for contract creation transactions
+		if msg.To() == nil {
+			continue
+		}
+
+		// Make sure we are not comparing different length addresses
+		if len(msg.To().String()) != len(poolAddress) {
+			log.Fatal("pool address is not the same length as msg.To()",
+				msg.To().String(), " ", poolAddress)
+		}
+
+		// This just detect normal eth transactions sent to the pool address, not via
+		// smart conrtacts interactions.
+		// It also ignores txs made by the fee recipient (MEV txs)
+		if strings.ToLower(msg.To().String()) == strings.ToLower(poolAddress) &&
+			(strings.ToLower(msg.From().String()) != strings.ToLower(b.GetFeeRecipient())) {
+
+			log.WithFields(log.Fields{
+				"RewardWei":   msg.Value(),
+				"BlockNumber": b.GetBlockNumber(),
+				"Type":        "Donation",
+				"TxHash":      tx.Hash().String(),
+			}).Info("New Reward")
+
+			donations = append(donations, Donation{
+				AmountWei: msg.Value(),
+				Block:     b.GetBlockNumber(),
+				TxHash:    tx.Hash().String(),
+			},
+			)
+		}
+	}
+	return donations
 }
 
 // Returns the fee recipient of the block, depending on the fork version

@@ -245,6 +245,25 @@ func Test_DonatedAmountInWei_Slot_5320342(t *testing.T) {
 	require.Equal(t, donation2, big.NewInt(3648455520393139))
 }
 
+func Test_GetDonations(t *testing.T) {
+
+	fileName := "bellatrix_slot_5320342_mainnet"
+	block, _, _ := LoadBlockHeaderReceiptsBellatrix(t, fileName)
+	extendedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &block}
+	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+
+	// one donation is sent to this addres: 0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e
+	donations := myBlock.GetDonations("0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e")
+
+	number, ok := new(big.Int).SetString("20000000000000000000", 10)
+	require.Equal(t, ok, true)
+	require.Equal(t, len(donations), 1)
+	require.Equal(t, number, donations[0].AmountWei)
+	require.Equal(t, uint64(16153707), donations[0].Block)
+	require.Equal(t, "0x49b86d86afaf59de4e1707d91f2cc19c387a421e10d0751c66669c02c494d9d8", donations[0].TxHash)
+
+}
+
 // Util to load from file
 func LoadBlockHeaderReceiptsBellatrix(t *testing.T, file string) (bellatrix.SignedBeaconBlock, types.Header, []*types.Receipt) {
 	blockJson, err := os.Open("../mock/block_" + file)
