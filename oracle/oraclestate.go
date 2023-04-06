@@ -498,24 +498,26 @@ func (state *OracleState) HandleManualUnsubscriptions(
 			log.WithFields(log.Fields{
 				"BlockNumber":    newUnsubscription.BlockNumber,
 				"Sender":         newUnsubscription.Sender,
-				"TxHash":         newUnsubscription.TxHash[0:12],
+				"TxHash":         newUnsubscription.TxHash,
 				"ValidatorIndex": newUnsubscription.ValidatorIndex,
-				"ValidatorKey":   newUnsubscription.ValidatorKey[0:8],
+				"ValidatorKey":   newUnsubscription.ValidatorKey,
 				"DepositAddress": newUnsubscription.DepositAddress,
 			}).Warn("Unsubscription made from a different address than the deposit address")
-			return
+			continue
 		}
 
 		if found {
 			// If the validator is subscribed, we update it state according to the event
 			state.AdvanceStateMachine(valIdx, Unsubscribe)
+			state.IncreaseAllPendingRewards(state.Validators[valIdx].PendingRewardsWei)
+			state.ResetPendingRewards(valIdx)
 		} else {
 			log.WithFields(log.Fields{
 				"BlockNumber":    newUnsubscription.BlockNumber,
 				"Sender":         newUnsubscription.Sender,
-				"TxHash":         newUnsubscription.TxHash[0:12],
+				"TxHash":         newUnsubscription.TxHash,
 				"ValidatorIndex": newUnsubscription.ValidatorIndex,
-				"ValidatorKey":   newUnsubscription.ValidatorKey[0:8],
+				"ValidatorKey":   newUnsubscription.ValidatorKey,
 				"DepositAddress": newUnsubscription.DepositAddress,
 			}).Warn("Found and unsubscription event for a validator that is not subscribed")
 		}
