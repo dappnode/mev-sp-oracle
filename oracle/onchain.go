@@ -331,6 +331,7 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 // TODO: Rethink this function. Its not just donations but eth rx to the contract
 // in general
 func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([]Donation, error) {
+	log.Fatal("This function is deprecated. Use GetDonations instead")
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
 
@@ -604,10 +605,12 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 
 	// TODO: This is wrong, as this event will also be triggered when a validator proposes a MEV block
 	// Fetch donations in this block
-	blockDonations, err := o.GetDonationEvents(extendedBlock.GetBlockNumber())
-	if err != nil {
-		log.Fatal("could not get block donations: ", err)
-	}
+	//blockDonations, err := o.GetDonationEvents(extendedBlock.GetBlockNumber())
+	//if err != nil {
+	//	log.Fatal("could not get block donations: ", err)
+	//}
+
+	blockDonations := extendedBlock.GetDonations(o.Cfg.PoolAddress)
 
 	return poolBlock, blockSubs, blockUnsubs, blockDonations
 }
