@@ -177,6 +177,99 @@ func Test_ConsolidateBalance_Eligible(t *testing.T) {
 	require.Equal(t, big.NewInt(0), state.Validators[10].PendingRewardsWei)
 }
 
+func Test_HandleManualUnsubscriptions(t *testing.T) {
+	// TODO: unsubscribe and rejoin?
+	state := NewOracleState(&config.Config{})
+
+	// Two validators
+	state.AddSubscriptionIfNotAlready(10, "0x1000000000000000000000000000000000000000", "0x_key_10")
+	state.AddSubscriptionIfNotAlready(20, "0x2000000000000000000000000000000000000000", "0x_key_20")
+
+	// 10 proposes a block
+	block1 := Block{
+		Slot:           0,
+		ValidatorIndex: 10,
+		ValidatorKey:   "0x",
+		Reward:         big.NewInt(50000000),
+		RewardType:     VanilaBlock,
+		DepositAddress: "0x1000000000000000000000000000000000000000",
+	}
+	state.HandleCorrectBlockProposal(block1)
+
+	// 20 proposes a block
+	block2 := Block{
+		Slot:           0,
+		ValidatorIndex: 20,
+		ValidatorKey:   "0x",
+		Reward:         big.NewInt(90000000),
+		RewardType:     VanilaBlock,
+		DepositAddress: "0x2000000000000000000000000000000000000000",
+	}
+	state.HandleCorrectBlockProposal(block2)
+
+	require.Equal(t, big.NewInt(45000000), state.Validators[10].PendingRewardsWei)
+	require.Equal(t, big.NewInt(25000000), state.Validators[10].AccumulatedRewardsWei)
+
+	require.Equal(t, big.NewInt(0), state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(70000000), state.Validators[20].AccumulatedRewardsWei)
+
+	// 10 unsubscribed from the pool
+	state.HandleManualUnsubscriptions([]Unsubscription{
+		{
+			ValidatorIndex: 10,
+			ValidatorKey:   "0x_key_10",
+			Sender:         "0x1000000000000000000000000000000000000000",
+			BlockNumber:    0,
+			TxHash:         "",
+			DepositAddress: "0x1000000000000000000000000000000000000000",
+		},
+	})
+
+	// Pending are resetted, accumulated remains the same
+	require.Equal(t, big.NewInt(0), state.Validators[10].PendingRewardsWei)
+	require.Equal(t, big.NewInt(25000000), state.Validators[10].AccumulatedRewardsWei)
+
+	// The unsubscribed validator is still tracked
+	require.Equal(t, NotSubscribed, state.Validators[10].ValidatorStatus)
+
+	// The other validator gets all the pending rewards, acc remain unchanged.
+	require.Equal(t, big.NewInt(45000000), state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(70000000), state.Validators[20].AccumulatedRewardsWei)
+
+	// Unsubscriptions that do not match and are not tracked
+	state.HandleManualUnsubscriptions([]Unsubscription{
+		{
+			ValidatorIndex: 50,
+			ValidatorKey:   "0x_key_10",
+			Sender:         "0xffffffffffffffffffffffffffffffffffffffff",
+			BlockNumber:    0,
+			TxHash:         "",
+			DepositAddress: "0x1000000000000000000000000000000000000000",
+		},
+		{
+			ValidatorIndex: 60,
+			ValidatorKey:   "0x_key_10",
+			Sender:         "0xffffffffffffffffffffffffffffffffffffffff",
+			BlockNumber:    0,
+			TxHash:         "",
+			DepositAddress: "0x1000000000000000000000000000000000000000",
+		},
+	})
+
+	// Nothing changed
+
+	// Pending are resetted, accumulated remains the same
+	require.Equal(t, big.NewInt(0), state.Validators[10].PendingRewardsWei)
+	require.Equal(t, big.NewInt(25000000), state.Validators[10].AccumulatedRewardsWei)
+
+	// The unsubscribed validator is still tracked
+	require.Equal(t, NotSubscribed, state.Validators[10].ValidatorStatus)
+
+	// The other validator gets all the pending rewards, acc remain unchanged.
+	require.Equal(t, big.NewInt(45000000), state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(70000000), state.Validators[20].AccumulatedRewardsWei)
+}
+
 func Test_StateMachine(t *testing.T) {
 	state := NewOracleState(&config.Config{})
 	valIndex1 := uint64(1000)
