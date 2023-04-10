@@ -34,7 +34,6 @@ func main() {
 		log.Fatal("Could not create new onchain object: ", err)
 	}
 	oracleInstance := oracle.NewOracle(cfg)
-	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
 
 	balance, err := onchain.GetEthBalance(cfg.PoolAddress)
 	if err != nil {
@@ -53,6 +52,8 @@ func main() {
 	} else {
 		log.Info("Previous state not found or could not be loaded, syncing from the begining")
 	}
+
+	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
 
 	go api.StartHTTPServer()
 	go mainLoop(oracleInstance, onchain, cfg)
