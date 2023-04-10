@@ -508,6 +508,38 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	return rewardsRootStr, nil
 }
 
+// TODO: Only in finalized slots!
+func (o *Onchain) GetContractClaimedBalance(depositAddress string, opts ...retry.Option) (*big.Int, error) {
+	var claimedBalance *big.Int
+	var err error
+
+	if !common.IsHexAddress(depositAddress) {
+		log.Fatal("Invalid deposit address: ", depositAddress)
+	}
+
+	hexDepAddres := common.HexToAddress(depositAddress)
+
+	// Retries multiple times before errorings
+	err = retry.Do(
+		func() error {
+			// TODO: This should be performed in the last finalized slot for consistency
+			// Otherwise our local view and remote view can be different. See if it applies to other functions, like merkle tree.
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			claimedBalance, err = o.Contract.ClaimedBalance(callOpts, hexDepAddres)
+			if err != nil {
+				log.Warn("Failed attempt to get claimed balance from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get claimed balance from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return big.NewInt(0), errors.New("could not get claimed balance from contract: " + err.Error())
+	}
+
+	return claimedBalance, nil
+}
+
 func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int, error) {
 	account := common.HexToAddress(address)
 	var err error

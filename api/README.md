@@ -38,13 +38,19 @@ Returns all the validators that are tracked by the smoothing pool in any state.
 curl 157.90.93.245:7300/memory/validators
 ```
 
+Returns the configuration of the pool
+
+```
+curl 157.90.93.245:7300/config
+```
+
 Return information of a given validator index registered in the pool.
 
 ```
 curl 157.90.93.245:7300/memory/validator/408120
 ```
 
-Return information of all subscribed validators from a deposit address
+Return information of all subscribed validators from a deposit address, including validators not tracked by the pool
 
 ```
 curl 157.90.93.245:7300/memory/validators/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
@@ -72,6 +78,12 @@ Return all blocks that were wrong (wrong fee recipient of subscribed validators)
 curl 157.90.93.245:7300/memory/wrongfeeblocks
 ```
 
+Returns all blocks that the pool has knowledge of (`proposedblocks`, `missedblocks`, `wrongfeeblocks`)
+
+```
+curl 157.90.93.245:7300/memory/allblocks
+```
+
 Return a list of all donations to the pool
 ```
 curl 157.90.93.245:7300/memory/donations
@@ -92,7 +104,7 @@ Returns the merkle proofs that the pool owner can use to claim its fees.
 curl 157.90.93.245:7300/onchain/proof/fees
 ```
 
-Returns the merkle proofs of the given deposit address, that can be used on chain to claim the rewards.
+Returns the merkle proofs of the given deposit address, that can be used on chain to claim the rewards. It also returns different information about the deposit address such as claimable rewards, which are accumulated minus the already claimed ones.
 
 ```
 curl 157.90.93.245:7300/onchain/proof/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55

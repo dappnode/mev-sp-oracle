@@ -99,3 +99,12 @@ func StringToBlsKey(str string) phase0.BLSPubKey {
 
 	return validator
 }
+
+func NumInSlice(a uint64, list []uint64) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}

@@ -44,6 +44,7 @@ const (
 	RedCard       ValidatorStatus = 3
 	NotSubscribed ValidatorStatus = 4
 	Banned        ValidatorStatus = 5
+	Untracked     ValidatorStatus = 6
 )
 
 // Events in the state machine that trigger transitions
@@ -889,6 +890,8 @@ func ValidatorStateToString(valState ValidatorStatus) string {
 		return "notsubscribed"
 	} else if valState == Banned {
 		return "banned"
+	} else if valState == Untracked {
+		return "untracked"
 	}
 	log.Fatal("unknown validator state")
 	return ""

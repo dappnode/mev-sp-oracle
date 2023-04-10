@@ -25,6 +25,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TODO: Add getters so that the api cannot screw up the state
+
 // Note that the api has no paging, so it is not suitable for large queries, but
 // it should be able to scale to a few thousand subscribed validators without any problem
 
@@ -40,6 +42,7 @@ const defaultMerkleRoot = "0x000000000000000000000000000000000000000000000000000
 const (
 	// Available endpoints
 	pathStatus                = "/status"
+	pathConfig                = "/config"
 	pathValidatorRelayers     = "/registeredrelays/{valpubkey}"
 	pathDepositAddressByIndex = "/depositaddress/{valindex}"
 	pathValidatorsByDeposit   = "/validatorkeys/{depositaddress}"
@@ -51,6 +54,7 @@ const (
 	pathMemoryFeesInfo            = "/memory/feesinfo"
 	pathMemorySubscriptions       = "/memory/subscriptions"   // TODO
 	pathMemoryUnsubscriptions     = "/memory/unsubscriptions" // TODO
+	pathMemoryAllBlocks           = "/memory/allblocks"
 	pathMemoryProposedBlocks      = "/memory/proposedblocks"
 	pathMemoryMissedBlocks        = "/memory/missedblocks"
 	pathMemoryWrongFeeBlocks      = "/memory/wrongfeeblocks"
@@ -151,16 +155,21 @@ type httpOkValidatorState struct {
 }
 
 type httpOkProofs struct {
-	LeafDepositAddress     string   `json:"leaf_deposit_address"`
-	LeafAccumulatedBalance *big.Int `json:"leaf_accumulated_balance"`
-	MerkleRoot             string   `json:"merkleroot"`
-	CheckpointSlot         uint64   `json:"checkpoint_slot"`
-	Proofs                 []string `json:"merkle_proofs"`
-	RegisteredValidators   []uint64 `json:"registered_validators"`
+	LeafDepositAddress         string   `json:"leaf_deposit_address"`
+	LeafAccumulatedBalance     *big.Int `json:"leaf_accumulated_balance"`
+	MerkleRoot                 string   `json:"merkleroot"`
+	CheckpointSlot             uint64   `json:"checkpoint_slot"`
+	Proofs                     []string `json:"merkle_proofs"`
+	RegisteredValidators       []uint64 `json:"registered_validators"`
+	TotalAccumulatedRewardsWei *big.Int `json:"total_accumulated_rewards_wei"`
+	AlreadyClaimedRewardsWei   *big.Int `json:"already_claimed_rewards_wei"`
+	ClaimableRewardsWei        *big.Int `json:"claimable_rewards_wei"`
+	PendingRewardsWei          *big.Int `json:"pending_rewards_wei"`
 }
 
 type ApiService struct {
 	srv           *http.Server
+	config        *config.Config
 	Postgres      *postgres.Postgresql
 	OracleState   *oracle.OracleState
 	Onchain       *oracle.Onchain
@@ -168,7 +177,7 @@ type ApiService struct {
 	Network       string
 }
 
-func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle.Onchain) *ApiService {
+func NewApiService(cfg *config.Config, state *oracle.OracleState, onchain *oracle.Onchain) *ApiService {
 	postgres, err := postgres.New(cfg.PostgresEndpoint, cfg.NumRetries)
 	if err != nil {
 		// TODO: Return error instead of fatal
@@ -178,6 +187,7 @@ func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle
 	return &ApiService{
 		// TODO: configure, add cli flag
 		ApiListenAddr: "0.0.0.0:7300",
+		config:        cfg,
 		Postgres:      postgres,
 		OracleState:   state,
 		Onchain:       onchain,
@@ -212,6 +222,7 @@ func (m *ApiService) getRouter() http.Handler {
 
 	// General endpoints
 	r.HandleFunc(pathStatus, m.handleStatus).Methods(http.MethodGet)
+	r.HandleFunc(pathConfig, m.handleConfig).Methods(http.MethodGet)
 	r.HandleFunc(pathValidatorRelayers, m.handleValidatorRelayers).Methods(http.MethodGet)
 	r.HandleFunc(pathDepositAddressByIndex, m.handleDepositAddressByIndex).Methods(http.MethodGet)
 	r.HandleFunc(pathValidatorsByDeposit, m.handleValidatorKeysByDeposit).Methods(http.MethodGet)
@@ -222,6 +233,7 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc(pathMemoryValidatorsByDeposit, m.handleMemoryValidatorsByDeposit).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryFeesInfo, m.handleMemoryFeesInfo).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryPoolStatistics, m.handleMemoryStatistics).Methods(http.MethodGet)
+	r.HandleFunc(pathMemoryAllBlocks, m.handleMemoryAllBlocks).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryProposedBlocks, m.handleMemoryProposedBlocks).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryMissedBlocks, m.handleMemoryMissedBlocks).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryWrongFeeBlocks, m.handleMemoryWrongFeeBlocks).Methods(http.MethodGet)
@@ -394,6 +406,14 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	m.respondOK(w, status)
 }
 
+func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
+	if m.config == nil {
+		m.respondError(w, http.StatusInternalServerError, "no config loaded, nil value")
+		return
+	}
+	m.respondOK(w, m.config)
+}
+
 func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Request) {
 	// Perhaps a bit dangerours to access this directly without getters.
 	m.respondOK(w, m.OracleState.Validators)
@@ -427,18 +447,76 @@ func (m *ApiService) handleMemoryValidatorsByDeposit(w http.ResponseWriter, req 
 		return
 	}
 
-	// Use always lowercase
-	depositAddress = strings.ToLower(depositAddress)
-	validatorsByDeposit := make([]*oracle.ValidatorInfo, 0)
-
-	// Get the validators that have the requested deposit address
+	// Get the validators the oracle is tracking, whose deposit address match
+	trackedValidatorsByDeposit := make([]*oracle.ValidatorInfo, 0)
 	for _, validator := range m.OracleState.Validators {
-		if validator.DepositAddress == depositAddress {
-			validatorsByDeposit = append(validatorsByDeposit, validator)
+		if strings.ToLower(validator.DepositAddress) == strings.ToLower(depositAddress) {
+			trackedValidatorsByDeposit = append(trackedValidatorsByDeposit, validator)
 		}
 	}
 
-	m.respondOK(w, validatorsByDeposit)
+	if len(trackedValidatorsByDeposit) == 0 {
+		m.respondOK(w, trackedValidatorsByDeposit)
+		return
+	}
+
+	// Now get all for that deposit address from the beacon node
+	// Use always lowercase
+	depositAddress = strings.ToLower(depositAddress)
+
+	valKeys, err := m.Postgres.GetValidatorKeysFromDepositAddress([]string{depositAddress}, apiRetryOpts...)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get validator keys for deposit address: "+err.Error())
+		return
+	}
+
+	// Should not really happen
+	if len(valKeys) == 0 {
+		m.respondOK(w, trackedValidatorsByDeposit)
+		return
+	}
+
+	allKeys := make([]phase0.BLSPubKey, 0)
+
+	for _, valKey := range valKeys {
+		allKeys = append(allKeys, phase0.BLSPubKey(oracle.StringToBlsKey(valKey)))
+	}
+
+	validators, err := m.Onchain.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", allKeys)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get validator keys for deposit address: "+err.Error())
+		return
+	}
+
+	if len(valKeys) != len(validators) {
+		m.respondError(w, http.StatusInternalServerError, "could not get all validators for the given deposit address, perhaps too many"+err.Error())
+		return
+	}
+
+	notTracked := make([]*oracle.ValidatorInfo, 0)
+
+	// Add the ones that are missing from the oracle (meaning untracked validators that can be subscribed)
+	// TODO: Very inefficient.
+	for _, val := range validators {
+		found := false
+		for _, trackedVal := range trackedValidatorsByDeposit {
+			// We already have this, skip
+			if trackedVal.ValidatorIndex == uint64(val.Index) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			notTracked = append(notTracked, &oracle.ValidatorInfo{
+				ValidatorStatus: oracle.Untracked,
+				ValidatorIndex:  uint64(val.Index),
+				ValidatorKey:    "0x" + hex.EncodeToString(val.Validator.PublicKey[:]),
+				DepositAddress:  depositAddress,
+			})
+		}
+	}
+
+	m.respondOK(w, append(trackedValidatorsByDeposit, notTracked...))
 }
 
 func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Request) {
@@ -453,6 +531,17 @@ func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Reque
 		PoolFeesAddress:     m.OracleState.PoolFeesAddress,
 		PoolAccumulatedFees: m.OracleState.PoolAccumulatedFees,
 	})
+}
+
+func (m *ApiService) handleMemoryAllBlocks(w http.ResponseWriter, req *http.Request) {
+	allBlocks := make([]oracle.Block, 0)
+
+	// Concat all the blocks, order is not guaranteed
+	allBlocks = append(allBlocks, m.OracleState.ProposedBlocks...)
+	allBlocks = append(allBlocks, m.OracleState.MissedBlocks...)
+	allBlocks = append(allBlocks, m.OracleState.WrongFeeBlocks...)
+
+	m.respondOK(w, allBlocks)
 }
 
 func (m *ApiService) handleMemoryProposedBlocks(w http.ResponseWriter, req *http.Request) {
@@ -585,13 +674,31 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 		}
 	}
 
+	claimed, err := m.Onchain.GetContractClaimedBalance(depositAddress, apiRetryOpts...)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get claimed balance so far from contract: "+err.Error())
+		return
+	}
+
+	totalPending := big.NewInt(0)
+
+	for _, validator := range m.OracleState.LatestCommitedState.Validators {
+		if strings.ToLower(validator.DepositAddress) == strings.ToLower(depositAddress) {
+			totalPending.Add(totalPending, validator.PendingRewardsWei)
+		}
+	}
+
 	m.respondOK(w, httpOkProofs{
-		LeafDepositAddress:     leafs.DepositAddress,
-		LeafAccumulatedBalance: leafs.AccumulatedBalance,
-		MerkleRoot:             m.OracleState.LatestCommitedState.MerkleRoot,
-		CheckpointSlot:         m.OracleState.LatestCommitedState.Slot,
-		Proofs:                 proofs,
-		RegisteredValidators:   registeredValidators,
+		LeafDepositAddress:         leafs.DepositAddress,
+		LeafAccumulatedBalance:     leafs.AccumulatedBalance,
+		MerkleRoot:                 m.OracleState.LatestCommitedState.MerkleRoot,
+		CheckpointSlot:             m.OracleState.LatestCommitedState.Slot,
+		Proofs:                     proofs,
+		RegisteredValidators:       registeredValidators,
+		TotalAccumulatedRewardsWei: leafs.AccumulatedBalance,
+		ClaimableRewardsWei:        new(big.Int).Sub(leafs.AccumulatedBalance, claimed),
+		AlreadyClaimedRewardsWei:   claimed,
+		PendingRewardsWei:          totalPending,
 	})
 }
 
