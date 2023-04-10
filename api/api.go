@@ -653,15 +653,58 @@ func (m *ApiService) handleValidatorKeysByDeposit(w http.ResponseWriter, req *ht
 	}
 
 	type httpOkKeysOfDeposit struct {
-		DepositAddress     string   `json:"deposit_address"`
-		Length             int      `json:"length"`
-		ValidatorAddresses []string `json:"validator_addresses"`
+		DepositAddress     string     `json:"deposit_address"`
+		Length             int        `json:"length"`
+		ValidatorAddresses []string   `json:"validator_addresses"`
+		ValidatorIndexes   []uint64   `json:"validator_indexes"`
+		StatusInBeaconNode []string   `json:"status_in_beacon_node"`
+		Balance            []*big.Int `json:"balance_gwei"`
+	}
+
+	if len(valKeys) == 0 {
+		m.respondOK(w, httpOkKeysOfDeposit{
+			DepositAddress: depositAddress,
+			Length:         0,
+		})
+		return
+	}
+
+	allKeys := make([]phase0.BLSPubKey, 0)
+
+	for _, valKey := range valKeys {
+		allKeys = append(allKeys, phase0.BLSPubKey(oracle.StringToBlsKey(valKey)))
+	}
+
+	validators, err := m.Onchain.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", allKeys)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get validator keys for deposit address: "+err.Error())
+		return
+	}
+
+	if len(valKeys) != len(validators) {
+		m.respondError(w, http.StatusInternalServerError, "could not get all validators for the given deposit address, perhaps too many"+err.Error())
+		return
+	}
+
+	var addresses []string
+	var indexes []uint64
+	var status []string
+	var balances []*big.Int
+
+	for _, val := range validators {
+		addresses = append(addresses, "0x"+hex.EncodeToString(val.Validator.PublicKey[:]))
+		indexes = append(indexes, uint64(val.Index))
+		status = append(status, fmt.Sprintf("%s", val.Status))
+		balances = append(balances, big.NewInt(0).SetUint64(uint64(val.Balance)))
 	}
 
 	m.respondOK(w, httpOkKeysOfDeposit{
 		DepositAddress:     depositAddress,
 		Length:             len(valKeys),
-		ValidatorAddresses: valKeys,
+		ValidatorAddresses: addresses,
+		ValidatorIndexes:   indexes,
+		StatusInBeaconNode: status,
+		Balance:            balances,
 	})
 }
 
