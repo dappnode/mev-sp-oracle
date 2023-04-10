@@ -45,14 +45,14 @@ func main() {
 		"BalanceWei": balance,
 	}).Info("Pool Address Balance")
 
-	// TODO: Try to resume syncing from latest known state from file
-	// TODO: Temporally disabled until further tested
-	//recoveredState, err := or.ReadStateFromFile()
-	//if err == nil {
-	//	oracle.State = recoveredState
-	//} else {
-	//	log.Info("Previous state not found or could not be loaded, syncing from the begining")
-	//}
+	// TODO Enabled, but requires further testing
+	recoveredState, err := oracle.ReadStateFromFile()
+	if err == nil {
+		log.Info("Found previous state to continue syncing")
+		oracleInstance.State = recoveredState
+	} else {
+		log.Info("Previous state not found or could not be loaded, syncing from the begining")
+	}
 
 	go api.StartHTTPServer()
 	go mainLoop(oracleInstance, onchain, cfg)

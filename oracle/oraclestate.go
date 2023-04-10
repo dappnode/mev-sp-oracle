@@ -187,6 +187,9 @@ func ReadStateFromFile() (*OracleState, error) {
 		WrongFeeBlocks:      make([]Block, 0),
 	}
 
+	// TODO: Run reconciliation here to ensure the state is correct
+	// TODO: Run checks here on config. Same testnet, same fees, same addresses
+
 	file, err := os.Open(StateFileName)
 
 	if err != nil {
