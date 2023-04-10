@@ -25,6 +25,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TODO: Add getters so that the api cannot screw up the state
+
 // Note that the api has no paging, so it is not suitable for large queries, but
 // it should be able to scale to a few thousand subscribed validators without any problem
 
@@ -52,6 +54,7 @@ const (
 	pathMemoryFeesInfo            = "/memory/feesinfo"
 	pathMemorySubscriptions       = "/memory/subscriptions"   // TODO
 	pathMemoryUnsubscriptions     = "/memory/unsubscriptions" // TODO
+	pathMemoryAllBlocks           = "/memory/allblocks"
 	pathMemoryProposedBlocks      = "/memory/proposedblocks"
 	pathMemoryMissedBlocks        = "/memory/missedblocks"
 	pathMemoryWrongFeeBlocks      = "/memory/wrongfeeblocks"
@@ -226,6 +229,7 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc(pathMemoryValidatorsByDeposit, m.handleMemoryValidatorsByDeposit).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryFeesInfo, m.handleMemoryFeesInfo).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryPoolStatistics, m.handleMemoryStatistics).Methods(http.MethodGet)
+	r.HandleFunc(pathMemoryAllBlocks, m.handleMemoryAllBlocks).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryProposedBlocks, m.handleMemoryProposedBlocks).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryMissedBlocks, m.handleMemoryMissedBlocks).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryWrongFeeBlocks, m.handleMemoryWrongFeeBlocks).Methods(http.MethodGet)
@@ -465,6 +469,17 @@ func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Reque
 		PoolFeesAddress:     m.OracleState.PoolFeesAddress,
 		PoolAccumulatedFees: m.OracleState.PoolAccumulatedFees,
 	})
+}
+
+func (m *ApiService) handleMemoryAllBlocks(w http.ResponseWriter, req *http.Request) {
+	allBlocks := make([]oracle.Block, 0)
+
+	// Concat all the blocks, order is not guaranteed
+	allBlocks = append(allBlocks, m.OracleState.ProposedBlocks...)
+	allBlocks = append(allBlocks, m.OracleState.MissedBlocks...)
+	allBlocks = append(allBlocks, m.OracleState.WrongFeeBlocks...)
+
+	m.respondOK(w, allBlocks)
 }
 
 func (m *ApiService) handleMemoryProposedBlocks(w http.ResponseWriter, req *http.Request) {

@@ -78,6 +78,12 @@ Return all blocks that were wrong (wrong fee recipient of subscribed validators)
 curl 157.90.93.245:7300/memory/wrongfeeblocks
 ```
 
+Returns all blocks that the pool has knowledge of (`proposedblocks`, `missedblocks`, `wrongfeeblocks`)
+
+```
+curl 157.90.93.245:7300/memory/allblocks
+```
+
 Return a list of all donations to the pool
 ```
 curl 157.90.93.245:7300/memory/donations
