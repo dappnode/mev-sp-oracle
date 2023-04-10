@@ -104,7 +104,7 @@ Returns the merkle proofs that the pool owner can use to claim its fees.
 curl 157.90.93.245:7300/onchain/proof/fees
 ```
 
-Returns the merkle proofs of the given deposit address, that can be used on chain to claim the rewards.
+Returns the merkle proofs of the given deposit address, that can be used on chain to claim the rewards. It also returns different information about the deposit address such as claimable rewards, which are accumulated minus the already claimed ones.
 
 ```
 curl 157.90.93.245:7300/onchain/proof/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55

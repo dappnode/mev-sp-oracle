@@ -155,12 +155,16 @@ type httpOkValidatorState struct {
 }
 
 type httpOkProofs struct {
-	LeafDepositAddress     string   `json:"leaf_deposit_address"`
-	LeafAccumulatedBalance *big.Int `json:"leaf_accumulated_balance"`
-	MerkleRoot             string   `json:"merkleroot"`
-	CheckpointSlot         uint64   `json:"checkpoint_slot"`
-	Proofs                 []string `json:"merkle_proofs"`
-	RegisteredValidators   []uint64 `json:"registered_validators"`
+	LeafDepositAddress         string   `json:"leaf_deposit_address"`
+	LeafAccumulatedBalance     *big.Int `json:"leaf_accumulated_balance"`
+	MerkleRoot                 string   `json:"merkleroot"`
+	CheckpointSlot             uint64   `json:"checkpoint_slot"`
+	Proofs                     []string `json:"merkle_proofs"`
+	RegisteredValidators       []uint64 `json:"registered_validators"`
+	TotalAccumulatedRewardsWei *big.Int `json:"total_accumulated_rewards_wei"`
+	AlreadyClaimedRewardsWei   *big.Int `json:"already_claimed_rewards_wei"`
+	ClaimableRewardsWei        *big.Int `json:"claimable_rewards_wei"`
+	PendingRewardsWei          *big.Int `json:"pending_rewards_wei"`
 }
 
 type ApiService struct {
@@ -670,13 +674,31 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 		}
 	}
 
+	claimed, err := m.Onchain.GetContractClaimedBalance(depositAddress, apiRetryOpts...)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get claimed balance so far from contract: "+err.Error())
+		return
+	}
+
+	totalPending := big.NewInt(0)
+
+	for _, validator := range m.OracleState.LatestCommitedState.Validators {
+		if strings.ToLower(validator.DepositAddress) == strings.ToLower(depositAddress) {
+			totalPending.Add(totalPending, validator.PendingRewardsWei)
+		}
+	}
+
 	m.respondOK(w, httpOkProofs{
-		LeafDepositAddress:     leafs.DepositAddress,
-		LeafAccumulatedBalance: leafs.AccumulatedBalance,
-		MerkleRoot:             m.OracleState.LatestCommitedState.MerkleRoot,
-		CheckpointSlot:         m.OracleState.LatestCommitedState.Slot,
-		Proofs:                 proofs,
-		RegisteredValidators:   registeredValidators,
+		LeafDepositAddress:         leafs.DepositAddress,
+		LeafAccumulatedBalance:     leafs.AccumulatedBalance,
+		MerkleRoot:                 m.OracleState.LatestCommitedState.MerkleRoot,
+		CheckpointSlot:             m.OracleState.LatestCommitedState.Slot,
+		Proofs:                     proofs,
+		RegisteredValidators:       registeredValidators,
+		TotalAccumulatedRewardsWei: leafs.AccumulatedBalance,
+		ClaimableRewardsWei:        new(big.Int).Sub(leafs.AccumulatedBalance, claimed),
+		AlreadyClaimedRewardsWei:   claimed,
+		PendingRewardsWei:          totalPending,
 	})
 }
 
