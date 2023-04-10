@@ -443,18 +443,76 @@ func (m *ApiService) handleMemoryValidatorsByDeposit(w http.ResponseWriter, req 
 		return
 	}
 
-	// Use always lowercase
-	depositAddress = strings.ToLower(depositAddress)
-	validatorsByDeposit := make([]*oracle.ValidatorInfo, 0)
-
-	// Get the validators that have the requested deposit address
+	// Get the validators the oracle is tracking, whose deposit address match
+	trackedValidatorsByDeposit := make([]*oracle.ValidatorInfo, 0)
 	for _, validator := range m.OracleState.Validators {
-		if validator.DepositAddress == depositAddress {
-			validatorsByDeposit = append(validatorsByDeposit, validator)
+		if strings.ToLower(validator.DepositAddress) == strings.ToLower(depositAddress) {
+			trackedValidatorsByDeposit = append(trackedValidatorsByDeposit, validator)
 		}
 	}
 
-	m.respondOK(w, validatorsByDeposit)
+	if len(trackedValidatorsByDeposit) == 0 {
+		m.respondOK(w, trackedValidatorsByDeposit)
+		return
+	}
+
+	// Now get all for that deposit address from the beacon node
+	// Use always lowercase
+	depositAddress = strings.ToLower(depositAddress)
+
+	valKeys, err := m.Postgres.GetValidatorKeysFromDepositAddress([]string{depositAddress}, apiRetryOpts...)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get validator keys for deposit address: "+err.Error())
+		return
+	}
+
+	// Should not really happen
+	if len(valKeys) == 0 {
+		m.respondOK(w, trackedValidatorsByDeposit)
+		return
+	}
+
+	allKeys := make([]phase0.BLSPubKey, 0)
+
+	for _, valKey := range valKeys {
+		allKeys = append(allKeys, phase0.BLSPubKey(oracle.StringToBlsKey(valKey)))
+	}
+
+	validators, err := m.Onchain.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", allKeys)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get validator keys for deposit address: "+err.Error())
+		return
+	}
+
+	if len(valKeys) != len(validators) {
+		m.respondError(w, http.StatusInternalServerError, "could not get all validators for the given deposit address, perhaps too many"+err.Error())
+		return
+	}
+
+	notTracked := make([]*oracle.ValidatorInfo, 0)
+
+	// Add the ones that are missing from the oracle (meaning untracked validators that can be subscribed)
+	// TODO: Very inefficient.
+	for _, val := range validators {
+		found := false
+		for _, trackedVal := range trackedValidatorsByDeposit {
+			// We already have this, skip
+			if trackedVal.ValidatorIndex == uint64(val.Index) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			notTracked = append(notTracked, &oracle.ValidatorInfo{
+				ValidatorStatus: oracle.Untracked,
+				ValidatorIndex:  uint64(val.Index),
+				ValidatorKey:    "0x" + hex.EncodeToString(val.Validator.PublicKey[:]),
+				DepositAddress:  depositAddress,
+			})
+		}
+	}
+
+	m.respondOK(w, append(trackedValidatorsByDeposit, notTracked...))
 }
 
 func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Request) {

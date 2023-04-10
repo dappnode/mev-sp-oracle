@@ -113,3 +113,10 @@ func Test_StringToBlsKey(t *testing.T) {
 	rec2 := StringToBlsKey("800010c20716ef4264a6d93b3873a008ece58fb9312ac2cc3b0ccc40aedb050f2038281e6a92242a35476af9903c7919")
 	require.Equal(t, rec2, phase0.BLSPubKey{128, 0, 16, 194, 7, 22, 239, 66, 100, 166, 217, 59, 56, 115, 160, 8, 236, 229, 143, 185, 49, 42, 194, 204, 59, 12, 204, 64, 174, 219, 5, 15, 32, 56, 40, 30, 106, 146, 36, 42, 53, 71, 106, 249, 144, 60, 121, 25})
 }
+
+func Test_NumInSlice(t *testing.T) {
+	require.Equal(t, true, NumInSlice(1, []uint64{1, 2, 3}))
+	require.Equal(t, false, NumInSlice(4, []uint64{1, 2, 3}))
+	require.Equal(t, true, NumInSlice(2, []uint64{2, 2, 2}))
+	require.Equal(t, false, NumInSlice(1000, []uint64{2, 2, 2}))
+}
