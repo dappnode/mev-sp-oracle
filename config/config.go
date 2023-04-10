@@ -13,20 +13,20 @@ import (
 )
 
 type Config struct {
-	ConsensusEndpoint     string
-	ExecutionEndpoint     string
-	Network               string
-	PoolAddress           string
-	UpdaterAddress        string
-	DeployedSlot          uint64
-	CheckPointSizeInSlots uint64
-	PostgresEndpoint      string
-	DeployerPrivateKey    string
-	PoolFeesPercent       int
-	PoolFeesAddress       string
-	DryRun                bool
-	NumRetries            int
-	CollateralInWei       *big.Int
+	ConsensusEndpoint     string   `json:"consensus_endpoint"`
+	ExecutionEndpoint     string   `json:"execution_endpoint"`
+	Network               string   `json:"network"`
+	PoolAddress           string   `json:"pool_address"`
+	UpdaterAddress        string   `json:"updater_address"`
+	DeployedSlot          uint64   `json:"deployed_slot"`
+	CheckPointSizeInSlots uint64   `json:"checkpoint_size"`
+	PostgresEndpoint      string   `json:"postgres_endpoint"`
+	DeployerPrivateKey    string   `json:"-"` // TODO: This will be a file protected by a password
+	PoolFeesPercent       int      `json:"pool_fees_percent"`
+	PoolFeesAddress       string   `json:"pool_fees_address"`
+	DryRun                bool     `json:"dry_run"`
+	NumRetries            int      `json:"num_retries"`
+	CollateralInWei       *big.Int `json:"collateral_in_wei"`
 }
 
 // By default the release is a custom build. CI takes care of upgrading it with

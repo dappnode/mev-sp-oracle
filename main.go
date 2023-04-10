@@ -53,7 +53,7 @@ func main() {
 		log.Info("Previous state not found or could not be loaded, syncing from the begining")
 	}
 
-	api := api.NewApiService(*cfg, oracleInstance.State, onchain)
+	api := api.NewApiService(cfg, oracleInstance.State, onchain)
 
 	go api.StartHTTPServer()
 	go mainLoop(oracleInstance, onchain, cfg)

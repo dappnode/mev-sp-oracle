@@ -40,6 +40,7 @@ const defaultMerkleRoot = "0x000000000000000000000000000000000000000000000000000
 const (
 	// Available endpoints
 	pathStatus                = "/status"
+	pathConfig                = "/config"
 	pathValidatorRelayers     = "/registeredrelays/{valpubkey}"
 	pathDepositAddressByIndex = "/depositaddress/{valindex}"
 	pathValidatorsByDeposit   = "/validatorkeys/{depositaddress}"
@@ -161,6 +162,7 @@ type httpOkProofs struct {
 
 type ApiService struct {
 	srv           *http.Server
+	config        *config.Config
 	Postgres      *postgres.Postgresql
 	OracleState   *oracle.OracleState
 	Onchain       *oracle.Onchain
@@ -168,7 +170,7 @@ type ApiService struct {
 	Network       string
 }
 
-func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle.Onchain) *ApiService {
+func NewApiService(cfg *config.Config, state *oracle.OracleState, onchain *oracle.Onchain) *ApiService {
 	postgres, err := postgres.New(cfg.PostgresEndpoint, cfg.NumRetries)
 	if err != nil {
 		// TODO: Return error instead of fatal
@@ -178,6 +180,7 @@ func NewApiService(cfg config.Config, state *oracle.OracleState, onchain *oracle
 	return &ApiService{
 		// TODO: configure, add cli flag
 		ApiListenAddr: "0.0.0.0:7300",
+		config:        cfg,
 		Postgres:      postgres,
 		OracleState:   state,
 		Onchain:       onchain,
@@ -212,6 +215,7 @@ func (m *ApiService) getRouter() http.Handler {
 
 	// General endpoints
 	r.HandleFunc(pathStatus, m.handleStatus).Methods(http.MethodGet)
+	r.HandleFunc(pathConfig, m.handleConfig).Methods(http.MethodGet)
 	r.HandleFunc(pathValidatorRelayers, m.handleValidatorRelayers).Methods(http.MethodGet)
 	r.HandleFunc(pathDepositAddressByIndex, m.handleDepositAddressByIndex).Methods(http.MethodGet)
 	r.HandleFunc(pathValidatorsByDeposit, m.handleValidatorKeysByDeposit).Methods(http.MethodGet)
@@ -392,6 +396,14 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	}
 
 	m.respondOK(w, status)
+}
+
+func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
+	if m.config == nil {
+		m.respondError(w, http.StatusInternalServerError, "no config loaded, nil value")
+		return
+	}
+	m.respondOK(w, m.config)
 }
 
 func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Request) {

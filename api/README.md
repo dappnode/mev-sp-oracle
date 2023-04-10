@@ -38,6 +38,12 @@ Returns all the validators that are tracked by the smoothing pool in any state.
 curl 157.90.93.245:7300/memory/validators
 ```
 
+Returns the configuration of the pool
+
+```
+curl 157.90.93.245:7300/config
+```
+
 Return information of a given validator index registered in the pool.
 
 ```
