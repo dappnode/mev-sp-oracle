@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/stretchr/testify/require"
@@ -115,7 +116,9 @@ func Test_100_slots_test(t *testing.T) {
 
 	subsIndex := make([]uint64, 0)
 	totalAssets := big.NewInt(0)
-
+	seed := time.Now().UnixNano()
+	rand.Seed(seed)
+	fmt.Printf("Execution SEED: %d\n", seed)
 	// main loop, iterates through 100 slots
 	for i := 0; i <= 99; i++ {
 		newSubscription := make([]Subscription, 0)
@@ -135,7 +138,7 @@ func Test_100_slots_test(t *testing.T) {
 				/*depositAddrs*/ []string{"0xaaa0000000000000000000000000000000000000"},
 			)
 			subsIndex = append(subsIndex, newSubscription[0].ValidatorIndex)
-			//totalAssets.Add(totalAssets, newSubscription[0].Collateral)
+			totalAssets.Add(totalAssets, newSubscription[0].Collateral)
 		}
 
 		//throw dice to determine if a new unsubscription is set in this slot. 1/3 chance
@@ -167,6 +170,7 @@ func Test_100_slots_test(t *testing.T) {
 				TxHash:    "my_tx_hash",
 			}
 			don = append(don, newDonation)
+			totalAssets.Add(totalAssets, donationAmount)
 		}
 
 		//throw dice to determine block type (ok, missed, wrongfee)
@@ -215,18 +219,9 @@ func Test_100_slots_test(t *testing.T) {
 	}
 	totalLiabilities.Add(totalLiabilities, oracle.State.PoolAccumulatedFees) // TODO: rename wei
 
-	//What we have (block fees already calculated when submiting good block + collateral + donations)
-	for _, val := range oracle.State.Validators {
-		if val.CollateralWei != nil {
-			totalAssets.Add(totalAssets, val.CollateralWei)
-		}
-	}
-	for _, val := range oracle.State.Donations {
-		if val.AmountWei != nil {
-			totalAssets.Add(totalAssets, val.AmountWei)
-		}
-	}
 	require.Equal(t, totalAssets, totalLiabilities)
+	fmt.Printf("total assets: %d\n", totalAssets)
+
 }
 
 func Test_Oracle_WrongInputData(t *testing.T) {
