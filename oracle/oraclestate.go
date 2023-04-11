@@ -647,6 +647,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalOk",
 				"StateChange":    "Active -> Active",
 				"ValidatorIndex": valIndex,
+				"Slot/Block":     state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case ProposalWrongFee:
@@ -654,6 +655,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalWrongFee",
 				"StateChange":    "Active -> Banned",
 				"ValidatorIndex": valIndex,
+				"Slot/Block":     state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
@@ -661,6 +663,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalMissed",
 				"StateChange":    "Active -> YellowCard",
 				"ValidatorIndex": valIndex,
+				"Slot/Block":     state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case Unsubscribe:
@@ -668,6 +671,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalMissed",
 				"StateChange":    "Active -> NotSubscribed",
 				"ValidatorIndex": valIndex,
+				"Slot/Block":     state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -678,6 +682,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "ProposalOk",
 				"StateChange":     "YellowCard -> Active",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case ProposalWrongFee:
@@ -685,6 +690,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "ProposalWrongFee",
 				"StateChange":     "YellowCard -> Banned",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
@@ -692,6 +698,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "ProposalMissed",
 				"StateChange":     "YellowCard -> RedCard",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
@@ -699,6 +706,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "ProposalMissed",
 				"StateChange":     "YellowCard -> NotSubscribed",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -709,6 +717,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "ProposalOk",
 				"StateChange":     "RedCard -> YellowCard",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case ProposalWrongFee:
@@ -716,6 +725,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "ProposalWrongFee",
 				"StateChange":     "RedCard -> Banned",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
@@ -723,6 +733,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "ProposalMissed",
 				"StateChange":     "RedCard -> RedCard",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
@@ -730,6 +741,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "ProposalMissed",
 				"StateChange":     "RedCard -> NotSubscribed",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -740,6 +752,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "ManualSubscription",
 				"StateChange":     "NotSubscribed -> Active",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case AutoSubscription:
@@ -747,6 +760,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":           "AutoSubscription",
 				"StateChange":     "NotSubscribed -> Active",
 				"ValidatorIndex:": valIndex,
+				"Slot/Block":      state.LatestSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		}
