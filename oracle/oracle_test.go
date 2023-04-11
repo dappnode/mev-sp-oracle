@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/stretchr/testify/require"
@@ -116,7 +115,7 @@ func Test_100_slots_test(t *testing.T) {
 
 	subsIndex := make([]uint64, 0)
 	totalAssets := big.NewInt(0)
-	seed := time.Now().UnixNano()
+	const seed int64 = 50000
 	rand.Seed(seed)
 	fmt.Printf("Execution SEED: %d\n", seed)
 	// main loop, iterates through 100 slots
