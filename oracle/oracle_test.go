@@ -1,7 +1,10 @@
 package oracle
 
 import (
+	"fmt"
 	"math/big"
+	"math/rand"
+	"strconv"
 	"testing"
 
 	"github.com/dappnode/mev-sp-oracle/config"
@@ -92,6 +95,139 @@ func Test_Oracle_ManualSubscription(t *testing.T) {
 }
 
 // TODO: Mix manual and automatic subscriptions
+
+// Simulates 100 slots with "AdvanceStateToNextSlot". Each slot is configured randomly with a
+// new sub, unsub or donation. The block proposed can be okproposal, missed or wrongfee.
+// these are all randomly set each block
+func Test_100_slots_test(t *testing.T) {
+
+	//set new oracle instance
+	oracle := NewOracle(&config.Config{
+		Network:               "mainnet",
+		PoolAddress:           "0xdead000000000000000000000000000000000000",
+		UpdaterAddress:        "",
+		DeployedSlot:          uint64(50000),
+		CheckPointSizeInSlots: uint64(100),
+		PoolFeesPercent:       5,
+		PoolFeesAddress:       "0xfee0000000000000000000000000000000000000",
+		CollateralInWei:       big.NewInt(1000000),
+	})
+
+	subsIndex := make([]uint64, 0)
+	totalAssets := big.NewInt(0)
+
+	// main loop, iterates through 100 slots
+	for i := 0; i <= 99; i++ {
+		newSubscription := make([]Subscription, 0)
+		newUnsubscription := make([]Unsubscription, 0)
+		don := make([]Donation, 0)
+		fmt.Println("NEW BLOCK:")
+
+		//throw dice to determine if a new subscription is set in this slot. 1/2 chance
+		dice := rand.Intn(2)
+		if dice == 0 {
+			newSubscription = GenerateSubsctiptions(
+				/*valIndexs*/ []uint64{50000 + uint64(i)},
+				/*valKeys*/ []string{"val" + strconv.FormatUint(50000+uint64(i), 10)},
+				/*collaterals*/ []*big.Int{big.NewInt(1000000)},
+				/*blockNums*/ []uint64{50000 + uint64(i)},
+				/*txHashes*/ []string{"0x1"},
+				/*depositAddrs*/ []string{"0xaaa0000000000000000000000000000000000000"},
+			)
+			subsIndex = append(subsIndex, newSubscription[0].ValidatorIndex)
+			//totalAssets.Add(totalAssets, newSubscription[0].Collateral)
+		}
+
+		//throw dice to determine if a new unsubscription is set in this slot. 1/3 chance
+		//(can only unsubscribe already subbed validators)
+		dice = rand.Intn(3)
+		if dice == 0 && len(subsIndex) > 0 {
+			indexRandom := rand.Intn(len(subsIndex))
+			valtoUnsub := subsIndex[indexRandom]
+			newUnsubscription = GenerateUnsunscriptions(
+				/*valIndexs*/ []uint64{valtoUnsub},
+				/*valKeys*/ []string{"val" + strconv.FormatUint(valtoUnsub, 10)},
+				/*sender*/ []string{strconv.FormatUint(50000+uint64(i), 10)},
+				/*blockNums*/ []uint64{50000 + uint64(i)},
+				/*txHashes*/ []string{"0x1"},
+				/*depositAddrs*/ []string{strconv.FormatUint(50000+uint64(i), 10)},
+			)
+			//unsubsIndex = append(unsubsIndex, newUnsubscription[0].ValidatorIndex)
+
+			//delete subbed validator from slice that keeps all subbed validators
+			subsIndex = append(subsIndex[:indexRandom], subsIndex[indexRandom+1:]...)
+		}
+		//throw dice to determine if a new donation is set in this slot. 1/5 chance
+		dice = rand.Intn(5)
+		if dice == 0 {
+			donationAmount := big.NewInt(int64(rand.Intn(1000) + 10000))
+			newDonation := Donation{
+				AmountWei: donationAmount,
+				Block:     50000,
+				TxHash:    "my_tx_hash",
+			}
+			don = append(don, newDonation)
+		}
+
+		//throw dice to determine block type (ok, missed, wrongfee)
+		dice = rand.Intn(3)
+		//valToPropose := subsIndex[rand.Intn(len(subsIndex))]
+
+		//choose randomly a validator to propopse the block (can be an unsubbed validator, so we check automatic subs)
+		valToPropose := uint64(rand.Intn(101) + 50000)
+
+		if dice == 0 {
+			mevReward := big.NewInt(int64(rand.Intn(1000) + 10000))
+			processedSlot, err := oracle.AdvanceStateToNextSlot(blockOkProposal(
+				50000+uint64(i),
+				valToPropose,
+				strconv.FormatUint(50000+uint64(i), 10),
+				mevReward,
+				"0xaaa0000000000000000000000000000000000000"), newSubscription, newUnsubscription, don)
+			require.NoError(t, err)
+			_ = processedSlot
+			totalAssets.Add(totalAssets, mevReward) // block reward
+
+		} else if dice == 1 {
+			processedSlot, err := oracle.AdvanceStateToNextSlot(MissedBlock(
+				50000+uint64(i),
+				valToPropose,
+				"0x"), newSubscription, newUnsubscription, don)
+			require.NoError(t, err)
+			_ = processedSlot
+
+		} else {
+			processedSlot, err := oracle.AdvanceStateToNextSlot(WrongFeeBlock(
+				50000+uint64(i),
+				valToPropose,
+				"0x"), newSubscription, newUnsubscription, don)
+			require.NoError(t, err)
+			_ = processedSlot
+
+		}
+	}
+
+	// What we owe
+	totalLiabilities := big.NewInt(0)
+	for _, val := range oracle.State.Validators {
+		totalLiabilities.Add(totalLiabilities, val.AccumulatedRewardsWei)
+		totalLiabilities.Add(totalLiabilities, val.PendingRewardsWei)
+	}
+	totalLiabilities.Add(totalLiabilities, oracle.State.PoolAccumulatedFees) // TODO: rename wei
+
+	//What we have (block fees already calculated when submiting good block + collateral + donations)
+	for _, val := range oracle.State.Validators {
+		if val.CollateralWei != nil {
+			totalAssets.Add(totalAssets, val.CollateralWei)
+		}
+	}
+	for _, val := range oracle.State.Donations {
+		if val.AmountWei != nil {
+			totalAssets.Add(totalAssets, val.AmountWei)
+		}
+	}
+	require.Equal(t, totalAssets, totalLiabilities)
+}
 
 func Test_Oracle_WrongInputData(t *testing.T) {
 }
@@ -211,5 +347,17 @@ func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) Block {
 		ValidatorIndex: valIndex,
 		ValidatorKey:   pubKey,
 		BlockType:      WrongFeeRecipient,
+	}
+}
+
+func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, depAddr string) Block {
+	return Block{
+		Slot:           slot,
+		ValidatorIndex: valIndex,
+		ValidatorKey:   pubKey,
+		BlockType:      OkPoolProposal,
+		Reward:         reward,
+		RewardType:     MevBlock,
+		DepositAddress: depAddr,
 	}
 }

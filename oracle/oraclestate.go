@@ -665,7 +665,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case Unsubscribe:
 			log.WithFields(log.Fields{
-				"Event":          "ProposalMissed",
+				"Event":          "Unsubscribe",
 				"StateChange":    "Active -> NotSubscribed",
 				"ValidatorIndex": valIndex,
 			}).Info("Validator state change")
@@ -696,7 +696,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
 			log.WithFields(log.Fields{
-				"Event":           "ProposalMissed",
+				"Event":           "Unsubscribe",
 				"StateChange":     "YellowCard -> NotSubscribed",
 				"ValidatorIndex:": valIndex,
 			}).Info("Validator state change")
@@ -727,7 +727,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
 			log.WithFields(log.Fields{
-				"Event":           "ProposalMissed",
+				"Event":           "Unsubscribe",
 				"StateChange":     "RedCard -> NotSubscribed",
 				"ValidatorIndex:": valIndex,
 			}).Info("Validator state change")
