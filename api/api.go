@@ -442,6 +442,9 @@ func (m *ApiService) handleMemoryValidatorsByDeposit(w http.ResponseWriter, req 
 	vars := mux.Vars(req)
 	depositAddress := vars["depositaddress"]
 
+	// Use always lowercase
+	depositAddress = strings.ToLower(depositAddress)
+
 	if !IsValidAddress(depositAddress) {
 		m.respondError(w, http.StatusBadRequest, "invalid depositAddress: "+depositAddress)
 		return
@@ -455,15 +458,7 @@ func (m *ApiService) handleMemoryValidatorsByDeposit(w http.ResponseWriter, req 
 		}
 	}
 
-	if len(trackedValidatorsByDeposit) == 0 {
-		m.respondOK(w, trackedValidatorsByDeposit)
-		return
-	}
-
 	// Now get all for that deposit address from the beacon node
-	// Use always lowercase
-	depositAddress = strings.ToLower(depositAddress)
-
 	valKeys, err := m.Postgres.GetValidatorKeysFromDepositAddress([]string{depositAddress}, apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get validator keys for deposit address: "+err.Error())
@@ -489,8 +484,10 @@ func (m *ApiService) handleMemoryValidatorsByDeposit(w http.ResponseWriter, req 
 	}
 
 	if len(valKeys) != len(validators) {
-		m.respondError(w, http.StatusInternalServerError, "could not get all validators for the given deposit address, perhaps too many"+err.Error())
-		return
+		// Not an error, just means that the beacon node has not seen the validator yet.
+		//m.respondError(w, http.StatusInternalServerError,
+		//	fmt.Sprintf("could not get all validators for the given deposit address, perhaps too many: %d vs %d", len(validators), len(valKeys)))
+		//return
 	}
 
 	notTracked := make([]*oracle.ValidatorInfo, 0)
