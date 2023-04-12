@@ -20,7 +20,7 @@ x-logging: &logging
 
 services:
   oracle:
-    image: "dappnode/mev-sp-oracle:03cc357"
+    image: "dappnode/mev-sp-oracle:e83a37f"
     restart: "no"
     <<: *logging
     depends_on:
