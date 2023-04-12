@@ -269,6 +269,12 @@ func (b *VersionedSignedBeaconBlock) GetDonations(poolAddress string) []Donation
 		if strings.ToLower(msg.To().String()) == strings.ToLower(poolAddress) &&
 			(strings.ToLower(msg.From().String()) != strings.ToLower(b.GetFeeRecipient())) {
 
+			// We want pure eth transactions. If its a smart contract interaction (eg subscription)
+			// we skip it. Otherwise subscriptions would be detected as donations.
+			if len(msg.Data()) > 0 {
+				continue
+			}
+
 			log.WithFields(log.Fields{
 				"RewardWei":   msg.Value(),
 				"BlockNumber": b.GetBlockNumber(),
