@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"flag"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -99,8 +100,10 @@ func Test_Oracle_ManualSubscription(t *testing.T) {
 // Simulates 100 slots with "AdvanceStateToNextSlot". Each slot is configured randomly with a
 // new sub, unsub or donation. The block proposed can be okproposal, missed or wrongfee.
 // these are all randomly set each block
-func Test_100_slots_test(t *testing.T) {
+var numIterations = flag.Int("iterations", 100, "Number of iterations for the test")
 
+func Test_100_slots_test(t *testing.T) {
+	fmt.Printf("Number of iterations: %d\n", *numIterations)
 	//set new oracle instance
 	oracle := NewOracle(&config.Config{
 		Network:               "mainnet",
@@ -119,7 +122,7 @@ func Test_100_slots_test(t *testing.T) {
 	rand.Seed(seed)
 	fmt.Printf("Execution SEED: %d\n", seed)
 	// main loop, iterates through 100 slots
-	for i := 0; i <= 99; i++ {
+	for i := 0; i <= *numIterations; i++ {
 		newSubscription := make([]Subscription, 0)
 		newUnsubscription := make([]Unsubscription, 0)
 		don := make([]Donation, 0)
@@ -177,9 +180,47 @@ func Test_100_slots_test(t *testing.T) {
 		//valToPropose := subsIndex[rand.Intn(len(subsIndex))]
 
 		//choose randomly a validator to propopse the block (can be an unsubbed validator, so we check automatic subs)
-		valToPropose := uint64(rand.Intn(101) + 50000)
+		valToPropose := uint64(rand.Intn(*numIterations) + 50000)
 
+		fmt.Println("Mocked Subscription in this block")
+		if len(newSubscription) == 0 {
+			fmt.Println("Subscription empty")
+		}
+		for _, sub := range newSubscription {
+			fmt.Printf("Val Index %d \n", sub.ValidatorIndex)
+			fmt.Printf("Val Key %s \n", sub.ValidatorKey)
+			fmt.Printf("Val collateral %d \n", sub.Collateral)
+			fmt.Printf("Val deposit address %s \n", sub.DepositAddress)
+			fmt.Printf("Val Tx Hash %s \n", sub.TxHash)
+
+		}
+		fmt.Printf("\n")
+		fmt.Println("Mocked Unsubscription in this block:")
+		if len(newUnsubscription) == 0 {
+			fmt.Println("Unsubscription empty")
+		}
+		for _, unsub := range newUnsubscription {
+			fmt.Printf("Val Index %d \n", unsub.ValidatorIndex)
+			fmt.Printf("Val Key %s \n", unsub.ValidatorKey)
+			fmt.Printf("Val sender %s \n", unsub.Sender)
+			fmt.Printf("Val deposit address %s \n", unsub.DepositAddress)
+			fmt.Printf("Val Tx Hash %s \n", unsub.TxHash)
+
+		}
+		fmt.Printf("\n")
+		fmt.Println("Mocked Donation in this block:")
+		if len(don) == 0 {
+			fmt.Println("Donation empty")
+		}
+		for _, don := range don {
+			fmt.Printf("Amount wei %d \n", don.AmountWei)
+			fmt.Printf("Block %d \n", don.Block)
+			fmt.Printf("Val Tx Hash %s \n", don.TxHash)
+		}
+
+		fmt.Printf("Validator Index to propose: %d\n", valToPropose)
 		if dice == 0 {
+			fmt.Println("Block type: BlockOkProposal")
 			mevReward := big.NewInt(int64(rand.Intn(1000) + 10000))
 			processedSlot, err := oracle.AdvanceStateToNextSlot(blockOkProposal(
 				50000+uint64(i),
@@ -192,6 +233,7 @@ func Test_100_slots_test(t *testing.T) {
 			totalAssets.Add(totalAssets, mevReward) // block reward
 
 		} else if dice == 1 {
+			fmt.Println("Block type: MissedBlock")
 			processedSlot, err := oracle.AdvanceStateToNextSlot(MissedBlock(
 				50000+uint64(i),
 				valToPropose,
@@ -200,6 +242,7 @@ func Test_100_slots_test(t *testing.T) {
 			_ = processedSlot
 
 		} else {
+			fmt.Println("Block type: WrongFeeBlock")
 			processedSlot, err := oracle.AdvanceStateToNextSlot(WrongFeeBlock(
 				50000+uint64(i),
 				valToPropose,
