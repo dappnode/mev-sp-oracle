@@ -434,6 +434,26 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 	return blockUnsubscriptions, nil
 }
 
+func (o *Onchain) GetContractCollateral(opts ...retry.Option) (*big.Int, error) {
+	subscriptionCollateral := new(big.Int)
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			var err error
+			subscriptionCollateral, err = o.Contract.SubscriptionCollateral(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get subscription collateral from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get subscription collateral from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("could not get subscription collateral from contract: " + err.Error())
+	}
+	return subscriptionCollateral, nil
+}
+
 func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	var rewardsRootStr string
 

@@ -45,6 +45,18 @@ func main() {
 		"BalanceWei": balance,
 	}).Info("Pool Address Balance")
 
+	//Ensure that configured collateral in oracle matches contract collateral
+	contractCollateral, err := onchain.GetContractCollateral()
+	if err != nil {
+		log.Fatal("Could not fetch subscription collateral from smart contract onchain")
+	} else if contractCollateral.Cmp(cfg.CollateralInWei) != 0 {
+		log.WithFields(log.Fields{
+			"Defined Collateral":  cfg.CollateralInWei,
+			"Contract Collateral": contractCollateral,
+		}).Fatal("Defined collateral does not match contract collateral")
+	}
+
+	// TODO Enabled, but requires further testing
 	err = oracleInstance.State.LoadStateFromFile()
 	if err == nil {
 		log.Info("Found previous state to continue syncing")
