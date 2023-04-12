@@ -59,6 +59,7 @@ services:
       - --authrpc.jwtsecret=/jwtsecret
       - --datadir=/geth
       - --port=30303
+      - --txlookuplimit=0
     ports:
       - 127.0.0.1:8551:8551
       - 127.0.0.1:8545:8545
