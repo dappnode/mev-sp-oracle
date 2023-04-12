@@ -50,7 +50,7 @@ func main() {
 		log.Info("Found previous state to continue syncing")
 		oracleInstance.State = recoveredState
 	} else {
-		log.Info("Previous state not found or could not be loaded, syncing from the begining")
+		log.Info("Previous state not found or could not be loaded, syncing from the begining: ", err)
 	}
 
 	api := api.NewApiService(cfg, oracleInstance.State, onchain)

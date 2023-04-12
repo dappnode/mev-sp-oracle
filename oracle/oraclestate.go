@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/dappnode/mev-sp-oracle/config"
@@ -21,6 +22,7 @@ import (
 
 // Default filename to persist the state of the oracle
 var StateFileName = "state.gob"
+var StateFolder = "oracle-data"
 
 type RewardType uint8
 type ValidatorStatus uint8
@@ -152,7 +154,12 @@ type OracleState struct {
 }
 
 func (p *OracleState) SaveStateToFile() {
-	file, err := os.Create(StateFileName)
+	path := filepath.Join(StateFolder, StateFileName)
+	err := os.MkdirAll(StateFolder, os.ModePerm)
+	if err != nil {
+		log.Fatal("could not create folder: ", err)
+	}
+	file, err := os.Create(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -164,11 +171,11 @@ func (p *OracleState) SaveStateToFile() {
 
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
-		"File":            StateFileName,
 		"LatestSlot":      p.LatestSlot,
 		"TotalValidators": len(p.Validators),
 		"Network":         p.Network,
 		"PoolAddress":     p.PoolAddress,
+		"Path":            path,
 		//"MerkleRoot":      mRoot,
 		//"EnoughData":      enoughData,
 	}).Info("Saving state to file")
@@ -190,8 +197,8 @@ func ReadStateFromFile() (*OracleState, error) {
 
 	// TODO: Run reconciliation here to ensure the state is correct
 	// TODO: Run checks here on config. Same testnet, same fees, same addresses
-
-	file, err := os.Open(StateFileName)
+	path := filepath.Join(StateFolder, StateFileName)
+	file, err := os.Open(path)
 
 	if err != nil {
 		return nil, err
@@ -200,13 +207,13 @@ func ReadStateFromFile() (*OracleState, error) {
 	decoder := gob.NewDecoder(file)
 	err = decoder.Decode(&state)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	mRoot, enoughData := state.GetMerkleRootIfAny()
 
 	log.WithFields(log.Fields{
-		"File":            StateFileName,
+		"Path":            path,
 		"LatestSlot":      state.LatestSlot,
 		"TotalValidators": len(state.Validators),
 		"Network":         state.Network,
