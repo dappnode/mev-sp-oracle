@@ -39,11 +39,9 @@ const defaultMerkleRoot = "0x000000000000000000000000000000000000000000000000000
 
 const (
 	// Available endpoints
-	pathStatus                = "/status"
-	pathConfig                = "/config"
-	pathValidatorRelayers     = "/registeredrelays/{valpubkey}"
-	pathDepositAddressByIndex = "/depositaddress/{valindex}"
-	pathValidatorsByDeposit   = "/validatorkeys/{depositaddress}" // TODO: Deprecate
+	pathStatus            = "/status"
+	pathConfig            = "/config"
+	pathValidatorRelayers = "/registeredrelays/{valpubkey}"
 
 	// Memory endpoints: what the oracle knows
 	pathMemoryValidators             = "/memory/validators"

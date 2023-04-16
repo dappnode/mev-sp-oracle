@@ -13,20 +13,16 @@ Fetches the status of the oracle, indicating if the underlying consensus and exe
 curl 157.90.93.245:7300/status
 ```
 
+Returns the configuration parameters of the smoothing pool.
+```
+curl 157.90.93.245:7300/config
+```
+
 Returns if a given validator public key is registered in a set of relays. Use to know if a validator
 ```
 curl 157.90.93.245:7300/registeredrelays/0xb1ce83f50ba296bdfedba0e4a42a65f8cee1bdeb2ba78aaa61b452141684930406412bbef6c0f65b4121f8fc82dbb6ba
 ```
 
-Returns the deposit address and validator public key of a validator index.
-```
-curl 157.90.93.245:7300/depositaddress/400000
-```
-
-Returns all the validator keys that were deposited with the provided deposit address.
-```
-curl 157.90.93.245:7300/validatorkeys/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
-```
 
 ## Memory endpoints
 
@@ -50,7 +46,7 @@ Return information of a given validator index registered in the pool.
 curl 157.90.93.245:7300/memory/validator/408120
 ```
 
-Return information of all subscribed validators from a deposit address, including validators not tracked by the pool
+Return information of all subscribed validators from a withdrawal address, including validators not tracked by the pool
 
 ```
 curl 157.90.93.245:7300/memory/validators/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
@@ -104,7 +100,7 @@ Returns the merkle proofs that the pool owner can use to claim its fees.
 curl 157.90.93.245:7300/onchain/proof/fees
 ```
 
-Returns the merkle proofs of the given deposit address, that can be used on chain to claim the rewards. It also returns different information about the deposit address such as claimable rewards, which are accumulated minus the already claimed ones.
+Returns the merkle proofs of the given withdrawal address, that can be used on chain to claim the rewards. It also returns different information about the deposit address such as claimable rewards, which are accumulated minus the already claimed ones.
 
 ```
 curl 157.90.93.245:7300/onchain/proof/0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
