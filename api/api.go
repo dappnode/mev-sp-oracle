@@ -17,10 +17,8 @@ import (
 	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
-	"github.com/dappnode/mev-sp-oracle/postgres"
 	"github.com/flashbots/go-boost-utils/types"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
@@ -170,7 +168,6 @@ type httpOkProofs struct {
 type ApiService struct {
 	srv           *http.Server
 	config        *config.Config
-	Postgres      *postgres.Postgresql
 	Onchain       *oracle.Onchain
 	oracle        *oracle.Oracle
 	ApiListenAddr string
@@ -182,18 +179,11 @@ func NewApiService(
 	oracle *oracle.Oracle,
 	onchain *oracle.Onchain) *ApiService {
 
-	postgres, err := postgres.New(cfg.PostgresEndpoint, cfg.NumRetries)
-	if err != nil {
-		// TODO: Return error instead of fatal
-		log.Fatal(err)
-	}
-
 	return &ApiService{
 		// TODO: configure, add cli flag
 		ApiListenAddr: "0.0.0.0:7300",
 		config:        cfg,
 		oracle:        oracle,
-		Postgres:      postgres,
 		Onchain:       onchain,
 		Network:       cfg.Network,
 	}
@@ -228,8 +218,6 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc(pathStatus, m.handleStatus).Methods(http.MethodGet)
 	r.HandleFunc(pathConfig, m.handleConfig).Methods(http.MethodGet)
 	r.HandleFunc(pathValidatorRelayers, m.handleValidatorRelayers).Methods(http.MethodGet)
-	r.HandleFunc(pathDepositAddressByIndex, m.handleDepositAddressByIndex).Methods(http.MethodGet)
-	r.HandleFunc(pathValidatorsByDeposit, m.handleValidatorKeysByDeposit).Methods(http.MethodGet)
 
 	// Memory endpoints
 	r.HandleFunc(pathMemoryValidators, m.handleMemoryValidators).Methods(http.MethodGet)
@@ -695,105 +683,6 @@ func (m *ApiService) handleLatestMerkleRoot(w http.ResponseWriter, req *http.Req
 	}
 	m.respondOK(w, httpOkMerkleRoot{
 		MerkleRoot: contractMerkleRoot,
-	})
-}
-
-func (m *ApiService) handleDepositAddressByIndex(w http.ResponseWriter, req *http.Request) {
-	vars := mux.Vars(req)
-	valIndex, err := strconv.ParseUint(vars["valindex"], 10, 64)
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not parse valIndex: "+err.Error())
-		return
-	}
-
-	valInfo, err := m.Onchain.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
-	valPubKeyByte := valInfo[phase0.ValidatorIndex(valIndex)].Validator.PublicKey
-	valPubKeyStr := "0x" + hex.EncodeToString(valPubKeyByte[:])
-
-	depositAddress, err := m.Postgres.GetDepositAddressOfValidatorKey(valPubKeyStr, apiRetryOpts...)
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not get deposit address for valindex: "+err.Error())
-		return
-	}
-
-	m.respondOK(w, httpOkDepositAddress{
-		DepositAddress:   depositAddress,
-		ValidatorIndex:   valIndex,
-		ValidatorAddress: valPubKeyStr,
-	})
-}
-
-func (m *ApiService) handleValidatorKeysByDeposit(w http.ResponseWriter, req *http.Request) {
-	vars := mux.Vars(req)
-	depositAddress := vars["depositaddress"]
-
-	if !IsValidAddress(depositAddress) {
-		m.respondError(w, http.StatusBadRequest, "invalid depositAddress: "+depositAddress)
-		return
-	}
-
-	// Use always lowercase
-	depositAddress = strings.ToLower(depositAddress)
-
-	valKeys, err := m.Postgres.GetValidatorKeysFromDepositAddress([]string{depositAddress}, apiRetryOpts...)
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not get validator keys for deposit address: "+err.Error())
-		return
-	}
-
-	type httpOkKeysOfDeposit struct {
-		DepositAddress     string     `json:"deposit_address"`
-		Length             int        `json:"length"`
-		ValidatorAddresses []string   `json:"validator_addresses"`
-		ValidatorIndexes   []uint64   `json:"validator_indexes"`
-		StatusInBeaconNode []string   `json:"status_in_beacon_node"`
-		Balance            []*big.Int `json:"balance_gwei"`
-	}
-
-	if len(valKeys) == 0 {
-		m.respondOK(w, httpOkKeysOfDeposit{
-			DepositAddress: depositAddress,
-			Length:         0,
-		})
-		return
-	}
-
-	allKeys := make([]phase0.BLSPubKey, 0)
-
-	for _, valKey := range valKeys {
-		allKeys = append(allKeys, phase0.BLSPubKey(oracle.StringToBlsKey(valKey)))
-	}
-
-	validators, err := m.Onchain.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", allKeys)
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not get validator keys for deposit address: "+err.Error())
-		return
-	}
-
-	if len(valKeys) != len(validators) {
-		m.respondError(w, http.StatusInternalServerError, "could not get all validators for the given deposit address, perhaps too many"+err.Error())
-		return
-	}
-
-	var addresses []string
-	var indexes []uint64
-	var status []string
-	var balances []*big.Int
-
-	for _, val := range validators {
-		addresses = append(addresses, "0x"+hex.EncodeToString(val.Validator.PublicKey[:]))
-		indexes = append(indexes, uint64(val.Index))
-		status = append(status, fmt.Sprintf("%s", val.Status))
-		balances = append(balances, big.NewInt(0).SetUint64(uint64(val.Balance)))
-	}
-
-	m.respondOK(w, httpOkKeysOfDeposit{
-		DepositAddress:     depositAddress,
-		Length:             len(valKeys),
-		ValidatorAddresses: addresses,
-		ValidatorIndexes:   indexes,
-		StatusInBeaconNode: status,
-		Balance:            balances,
 	})
 }
 

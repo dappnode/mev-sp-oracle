@@ -26,7 +26,6 @@ services:
     depends_on:
       - geth
       - teku
-      - postgres
     command:
       - --checkpoint-size=${CHECKPOINT_SIZE}
       - --consensus-endpoint=http://teku:5051
@@ -38,7 +37,6 @@ services:
       - --pool-address=${POOL_ADDRESS}
       - --pool-fees-address=${POOL_FEES_ADDRESS}
       - --pool-fees-percent=${POOL_FEES_PERCENT}
-      - --postgres-endpoint=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432
       - --collateral-in-wei=${COLLATERAL_IN_WEI}
       #- --num-retries=5 #default infinite
     ports:
@@ -95,56 +93,3 @@ services:
     volumes:
       - ./teku:/opt/teku/data
       - ./jwtsecret:/jwtsecret
-
-  postgres:
-    image: postgres:15.1
-    restart: on-failure
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    ports:
-      - 127.0.0.1:5432:5432
-    volumes: 
-      - ./postgres-data:/var/lib/postgresql/data
-
-  chaind:
-    image: wealdtech/chaind:0.7.4
-    restart: on-failure
-    # TODO: export prometheus metrics
-    #ports:
-    #  - 127.0.0.1:xxx:yyy
-    # This config just indexes deposits
-    command:
-      - --blocks.enable=false
-      - --finalizer.enable=false
-      - --summarizer.enable=false
-      - --summarizer.epochs.enable=false
-      - --summarizer.blocks.enable=false
-      - --summarizer.validators.enable=false
-      - --validators.enable=false
-      - --validators.balances.enable=false
-      - --beacon-committees.enable=false
-      - --proposer-duties.enable=false
-      - --sync-committees.enable=false
-      - --eth1deposits.enable=true
-      - --eth1deposits.start-block=${BLOCK_DEPOSIT_CONTRACT}
-      - --eth1client.address=http://geth:8545
-      - --chaindb.url=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432
-      - --eth2client.address=http://teku:5051
-      - --log-level=debug
-
-  metabase:
-    volumes:
-    # setup your SQLITE db (optional)
-      #- /PATH/TO/SQLITE/:/metabase
-      - ./metabase-data:/metabase-data
-    # First time has to be manualy configured
-    # Use POSTGRES_USER for both "Database name" and "Username"
-    environment:
-      - MB_DB_FILE=/metabase-data/metabase.db
-    ports:
-      - 3000:3000
-    image: metabase/metabase
-    restart: always
-    depends_on: 
-      - postgres

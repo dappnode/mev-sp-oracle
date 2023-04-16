@@ -356,6 +356,7 @@ func (state *OracleState) HandleManualSubscriptions(
 	subscriptions []Subscription) {
 
 	for _, subscription := range subscriptions {
+		// TODO: Check that the subscription comes from the withdrawal credentials
 		valIdx := subscription.ValidatorIndex
 		validator, found := state.Validators[valIdx]
 
@@ -773,108 +774,6 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 		}
 	}
 }
-
-// TODO: Add function that dumps the current state to the database
-// Its a nice to have to track the validator balance evolution over the
-// time
-
-// Dumps all the oracle state to the db
-// Note that this is a proof of concept. All data is stored in the memory
-// and dumped to the db on each checkpoint, but at some point
-// this may become unfeasible.
-
-/* TODO: Move this somewhere else
-func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { // TOOD: returning here the merkle root doesnt make sense. quick workaround
-	log.Info("Dumping all state to database")
-
-	// TODO: Define a type on validator parameters to store and stop
-	// using that many maps
-
-	mk := NewMerklelizer()
-	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
-	depositToLeaf, depositToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(state)
-	if !enoughData {
-		return nil, "", enoughData
-	}
-	merkleRootStr := hex.EncodeToString(tree.Root)
-	log.Info("Merkle root: ", merkleRootStr)
-
-	// TODO: Add also validator key on top of the index
-	for valIndex, validator := range state.Validators {
-		log.Info("Generating root for deposit: ", validator.DepositAddress)
-		block := depositToLeaf[validator.DepositAddress]
-		serrr, err := block.Serialize()
-		if err != nil {
-			log.Fatal("Error serializing block", err)
-		}
-		log.Info("Hash of leaf is: ", hex.EncodeToString(serrr))
-		proof, err := tree.GenerateProof(block)
-		if err != nil {
-			log.Fatal("Error generating proof", err)
-		}
-
-		_, err = state.Postgres.Db.Exec(
-			context.Background(),
-			postgres.InsertRewardsTable,
-
-			validator.DepositAddress, //TODO: This is empty?
-			validator.ValidatorKey,
-			valIndex,
-			validator.PendingRewardsWei.Uint64(), // TODO: can we overflow a uint64?
-			validator.AccumulatedRewardsWei.Uint64(),
-			uint64(0), // TODO: remove unbann balance
-			len(validator.ValidatorProposedBlocks),
-			len(validator.ValidatorMissedBlocks),
-			len(validator.ValidatorWrongFeeBlocks),
-			state.LatestSlot,
-			ByteArrayToStringArray(proof.Siblings),
-			"0x"+hex.EncodeToString(tree.Root))
-		if err != nil {
-			return err, "", false
-		}
-	}
-
-	_ = depositToRawLeaf
-
-	for depositAddress, rawLeaf := range depositToRawLeaf {
-		// Extra check to make sure the deposit address is the same as the key
-		if depositAddress != rawLeaf.DepositAddress {
-			log.Fatal("Deposit address in raw leaf doesnt match the key")
-		}
-		log.Info("deposit", depositAddress)
-		log.Info("rawLeaf", rawLeaf)
-
-		// TODO some duplicated code here
-		block := depositToLeaf[depositAddress]
-		proof, err := tree.GenerateProof(block)
-
-		test := ByteArrayToStringArray(proof.Siblings)
-		_ = test
-
-		_, err = state.Postgres.Db.Exec(
-			context.Background(),
-			postgres.InsertDepositAddressRewardsTable,
-			depositAddress,
-			"TODO: add keys for this address",
-			uint64(0), // TODO: pending rewards. is it stored somewhere else?
-			rawLeaf.AccumulatedBalance.Uint64(),
-			uint64(0), //TODO remove unbann balance,
-			state.LatestSlot,
-			ByteArrayToStringArray(proof.Siblings),
-			"0x"+hex.EncodeToString(tree.Root),
-		)
-		if err != nil {
-			// improve error handling
-			log.Fatal(err)
-			//return err, ""
-		}
-
-	}
-
-	return nil, merkleRootStr, true
-
-}
-*/
 
 // TODO: Remove this and get the merkle tree from somewhere else. See stored state
 func (state *OracleState) GetMerkleRootIfAny() (string, bool) {

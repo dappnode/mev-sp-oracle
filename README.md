@@ -23,8 +23,6 @@ Usage of ./mev-sp-oracle:
     	Network to run in: mainnet|goerli (default "mainnet")
   -pool-address string
     	Address of the smoothing pool contract
-  -postgres-endpoint string
-    	Postgres endpoint
   -version
     	Prints the release version and exits
 ```
@@ -38,7 +36,6 @@ $ ./mev-sp-oracle \
 ./mev-sp-oracle \
 --consensus-endpoint="http://127.0.0.1:5051" \
 --execution-endpoint="http://127.0.0.1:8545" \
---postgres-endpoint="postgres://xxx:yyy@localhost:5432" \
 --deployed-slot=5195000 \
 --pool-address="0x455e5aa18469bc6ccef49594645666c587a3a71b" \
 --checkpoint-size=100 \
@@ -72,8 +69,6 @@ export CHECKPOINT_SIZE=10000
 export POOL_ADDRESS=0x553BD5a94bcC09FFab6550274d5db140a95AE9bC
 export POOL_FEES_ADDRESS=0x692E1Afbc1b0F9Ad6f67a4868A56D138C822D400
 export POOL_FEES_PERCENT=10
-export POSTGRES_USER=xxx
-export POSTGRES_PASSWORD=yyy
 export BLOCK_DEPOSIT_CONTRACT=4367322
 export DEPLOYER_PRIVATE_KEY=xxx
 export COLLATERAL_IN_WEI=10000000000000000

@@ -13,7 +13,6 @@ import (
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
-	"github.com/dappnode/mev-sp-oracle/postgres"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
@@ -49,7 +48,6 @@ type Onchain struct {
 	ExecutionClient *ethclient.Client
 	Cfg             *config.Config
 	Contract        *contract.Contract
-	Postgres        *postgres.Postgresql
 	NumRetries      int
 }
 
@@ -113,17 +111,11 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 		return nil, errors.New("Error instantiating contract: " + err.Error())
 	}
 
-	postgres, err := postgres.New(cfg.PostgresEndpoint, cfg.NumRetries)
-	if err != nil {
-		return nil, errors.New("Error instantiating postgres: " + err.Error())
-	}
-
 	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
 		Cfg:             &cfg,
 		Contract:        contract,
-		Postgres:        postgres,
 	}, nil
 }
 
@@ -434,7 +426,7 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 		if err != nil {
 			return nil, errors.New("could not get validator key: " + err.Error())
 		}
-		depositAddress := o.GetDepositAddressOfValidator(valKey, uint64(event.ValidatorID))
+		depositAddress := "TODO:"
 
 		blockSubscriptions = append(blockSubscriptions, Subscription{
 			ValidatorIndex: uint64(event.ValidatorID),
@@ -486,7 +478,7 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 		if err != nil {
 			return nil, errors.New("could not get validator key: " + err.Error())
 		}
-		depositAddress := o.GetDepositAddressOfValidator(valKey, uint64(event.ValidatorID))
+		depositAddress := "TODO:"
 
 		blockUnsubscriptions = append(blockUnsubscriptions, Unsubscription{
 			ValidatorIndex: uint64(event.ValidatorID),
@@ -636,7 +628,7 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 		// And check if it contained a reward for the pool or not
 		if correctFeeRec {
 			poolBlock.BlockType = OkPoolProposal
-			poolBlock.DepositAddress = o.GetDepositAddressOfValidator(valPublicKey, slot)
+			poolBlock.DepositAddress = "TODO:"
 		} else {
 			poolBlock.BlockType = WrongFeeRecipient
 		}
@@ -779,32 +771,6 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
 	return tx.Hash().Hex()
-}
-
-// TODO: Remove the slot from the input, makes no sense
-// TODO: Do not go to mainnet with this, only for goerli since some validators
-// dont have a deposit address
-func (o *Onchain) GetDepositAddressOfValidator(validatorPubKey string, slot uint64) string {
-	depositAddress, err := o.Postgres.GetDepositAddressOfValidatorKey(validatorPubKey)
-	if err == nil {
-		return depositAddress
-	}
-	log.Warn("Deposit key not found for ", validatorPubKey, ". Expected in goerli. Using a default one. err: ", err)
-
-	// TODO: Remove this in production. Used in goerli for testing with differenet addresses
-	// TODO: Dont go to mainnet with this. If there is a bug in the code, we will be using
-	// and invalid address. In mainnet, fail if we cant find the deposit address.
-	someDepositAddresses := []string{
-		"0x001eDa52592fE2f8a28dA25E8033C263744b1b6E",
-		"0x0029a125E6A3f058628Bd619C91f481e4470D673",
-		"0x003718fb88964A1F167eCf205c7f04B25FF46B8E",
-		"0x004b1EaBc3ea60331a01fFfC3D63E5F6B3aB88B3",
-		"0x005CD1608e40d1e775a97d12e4f594029567C071",
-		"0x0069c9017BDd6753467c138449eF98320be1a4E4",
-		"0x007cF0936ACa64Ef22C0019A616801Bec7FCCECF",
-	}
-	//Just pick a "random" one to not always the same
-	return someDepositAddresses[slot%7]
 }
 
 func (o *Onchain) GetRetryOpts(opts []retry.Option) []retry.Option {
