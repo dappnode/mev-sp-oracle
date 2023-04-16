@@ -53,7 +53,7 @@ func main() {
 		log.Info("Previous state not found or could not be loaded, syncing from the begining: ", err)
 	}
 
-	api := api.NewApiService(cfg, oracleInstance.State, onchain)
+	api := api.NewApiService(cfg, oracleInstance, onchain)
 
 	go api.StartHTTPServer()
 	go mainLoop(oracleInstance, onchain, cfg)
@@ -73,6 +73,14 @@ func main() {
 }
 
 func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config) {
+
+	log.Info("Loading existing validators in the beacon chain")
+	vals, err := onchain.GetFinalizedValidators()
+	if err != nil {
+		log.Fatal("Could not get validators: ", err)
+	}
+	oracleInstance.SetFinalizedValidators(vals)
+	log.Info("Done loading existing validators in the beacon chain total: ", len(vals))
 
 	log.Info("Starting to process from slot (see api for progress): ", oracleInstance.State.LatestSlot)
 
@@ -136,6 +144,16 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			// the intermediate validator balances in db
 			// So a valaidator can see it balance over time.
 			// Not feasible to store this in memory
+		}
+
+		// 300 slots is 1 hour
+		UpdateValidatorsIntervalSlots := uint64(300)
+		if oracleInstance.State.LatestSlot%UpdateValidatorsIntervalSlots == 0 {
+			vals, err := onchain.GetFinalizedValidators()
+			if err != nil {
+				log.Fatal("Could not get validators: ", err)
+			}
+			oracleInstance.SetFinalizedValidators(vals)
 		}
 
 		// Every CheckPointSizeInSlots we commit the state

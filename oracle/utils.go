@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"encoding/hex"
+	"errors"
 	"math/big"
 	"strings"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/hako/durafmt"
 	log "github.com/sirupsen/logrus"
 )
+
+// TODO: Move to utils module
 
 func ToBytes20(x []byte) [20]byte {
 	var y [20]byte
@@ -107,4 +110,46 @@ func NumInSlice(a uint64, list []uint64) bool {
 		}
 	}
 	return false
+}
+
+// See: https://github.com/ethereum/eth2.0-specs/blob/dev/specs/phase0/validator.md#withdrawal-credentials
+// Input example: 00fccee96b30754af30208261e38df169a95aa3c722662a9df8fc057cc7d3a69 (true)
+func IsBlsType(withdrawalCred string) bool {
+	if len(withdrawalCred) != 64 {
+		return false
+	}
+
+	/* BLS_WITHDRAWAL_PREFIX */
+	if strings.HasPrefix(withdrawalCred, "00") {
+		return true
+	}
+	return false
+}
+
+// See: https://github.com/ethereum/eth2.0-specs/blob/dev/specs/phase0/validator.md#withdrawal-credentials
+// Input example: 010000000000000000000000dc62f9e8c34be08501cdef4ebde0a280f576d762 (true)
+func IsEth1Type(withdrawalCred string) bool {
+	if len(withdrawalCred) != 64 {
+		return false
+	}
+
+	/* ETH1_ADDRESS_WITHDRAWAL_PREFIX*/
+	if strings.HasPrefix(withdrawalCred, "010000000000000000000000") {
+		return true
+	}
+	return false
+}
+
+// See: https://github.com/ethereum/eth2.0-specs/blob/dev/specs/phase0/validator.md#withdrawal-credentials
+// Input example: 01000000000000000000000059b0d71688da01057c08e4c1baa8faa629819c2a
+// Output example: 0x59b0d71688da01057c08e4c1baa8faa629819c2a
+func GetEth1Address(withdrawalCred string) (string, error) {
+	if len(withdrawalCred) != 64 {
+		return "", errors.New("Withdrawal credentials are not a valid length")
+	}
+	/* ETH1_ADDRESS_WITHDRAWAL_PREFIX*/
+	if !strings.HasPrefix(withdrawalCred, "010000000000000000000000") {
+		return "", errors.New("Withdrawal credentials prefix does not match the spec")
+	}
+	return "0x" + withdrawalCred[24:], nil
 }

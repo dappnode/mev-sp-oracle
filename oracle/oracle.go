@@ -4,12 +4,15 @@ import (
 	"errors"
 	"fmt"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/config"
 )
 
 type Oracle struct {
-	cfg   *config.Config
-	State *OracleState
+	cfg        *config.Config
+	State      *OracleState
+	validators map[phase0.ValidatorIndex]*v1.Validator
 }
 
 func NewOracle(cfg *config.Config) *Oracle {
@@ -83,4 +86,12 @@ func (or *Oracle) validateParameters(
 
 	// TODO: Add more validators to block subs unsubs, donations, etc
 	return nil
+}
+
+func (or *Oracle) SetFinalizedValidators(validators map[phase0.ValidatorIndex]*v1.Validator) {
+	or.validators = validators
+}
+
+func (or *Oracle) GetFinalizedValidators() map[phase0.ValidatorIndex]*v1.Validator {
+	return or.validators
 }

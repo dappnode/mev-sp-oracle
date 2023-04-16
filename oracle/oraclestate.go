@@ -112,7 +112,7 @@ type ValidatorInfo struct {
 	AccumulatedRewardsWei   *big.Int        `json:"accumulated_rewards_wei"`
 	PendingRewardsWei       *big.Int        `json:"pending_rewards_wei"`
 	CollateralWei           *big.Int        `json:"collateral_wei"`
-	DepositAddress          string          `json:"deposit_address"`
+	DepositAddress          string          `json:"deposit_address"` // TODO: Rename to: withdrawal_address (keeping it for backwards compatibility by now)
 	ValidatorIndex          uint64          `json:"validator_index"`
 	ValidatorKey            string          `json:"validator_key"`
 	ValidatorProposedBlocks []Block         `json:"proposed_block"`

@@ -70,7 +70,7 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 
 	// Dial the consensus client
 	client, err := http.New(context.Background(),
-		http.WithTimeout(60*time.Second),
+		http.WithTimeout(120*time.Second),
 		http.WithAddress(cfg.ConsensusEndpoint),
 		http.WithLogLevel(zerolog.WarnLevel),
 	)
@@ -184,6 +184,25 @@ func (o *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 		return nil, errors.New("Could not fetch block at slot " + slotStr + ": " + err.Error())
 	}
 	return signedBeaconBlock, err
+}
+
+func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.ValidatorIndex]*api.Validator, error) {
+	var validators map[phase0.ValidatorIndex]*api.Validator
+	var err error
+
+	err = retry.Do(func() error {
+		validators, err = o.ConsensusClient.Validators(context.Background(), "finalized", nil)
+		if err != nil {
+			log.Warn("Failed attempt to fetch finalized validators: ", err.Error(), " Retrying...")
+			return errors.New("Error fetching finalized validators: " + err.Error())
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Could not fetch finalized validators: " + err.Error())
+	}
+	return validators, err
 }
 
 // Given a validator key, returns the validator index
