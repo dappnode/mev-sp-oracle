@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/api"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
@@ -75,6 +76,14 @@ func main() {
 func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config) {
 
 	log.Info("Starting to process from slot (see api for progress): ", oracleInstance.State.LatestSlot)
+
+	//Ensure that configured collateral in oracle matches contract collateral
+	contractCollateral, err := onchain.GetContractCollateral(retry.Attempts(uint(cfg.NumRetries)))
+	if err != nil {
+		log.Fatal("Could not fetch subscription collateral from smart contract onchain")
+	} else if contractCollateral != cfg.CollateralInWei {
+		log.Fatal("Defined collateral does not match contract collateral")
+	}
 
 	for {
 		// Ensure that the nodes we are using are in sync with the blockchain (consensus + execution)
