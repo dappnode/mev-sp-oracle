@@ -361,15 +361,12 @@ func (state *OracleState) HandleManualSubscriptions(
 	// do not allow, existed, slashed, etc.
 
 	for _, subscription := range subscriptions {
-		if subscription.Validator == nil {
-			// someone tried tosubscribe a validator that does not exist
-			// TODO : warning
-			continue
-		}
-		// TODO: Check that the subscription comes from the withdrawal credentials
+		// TODO: A bit spaghetti, refactor
+
+		// TODO: Check that the subscription comes from the withdrawal credentials. blocked by contract
 		valIdx := uint64(subscription.Event.ValidatorID) // TODO: Contract should be uint64
-		collateral := subscription.Event.SuscriptionCollateral
 		validator, tracked := state.Validators[valIdx]
+		collateral := subscription.Event.SuscriptionCollateral
 
 		if valIdx != uint64(subscription.Validator.Index) {
 			log.Fatal("Subscription event validator index doesnt match the validator index. ",
@@ -382,7 +379,20 @@ func (state *OracleState) HandleManualSubscriptions(
 				"Collateral":     subscription.Event.SuscriptionCollateral,
 				"TxHash":         subscription.Event.Raw.TxHash,
 				"ValidatorIndex": valIdx,
-			}).Warn("[Subscription]: Received subscription for non existing validator")
+			}).Warn("[Subscription]: Received subscription for non existing validator, sending collateral to pool")
+			state.SendRewardToPool(collateral)
+			continue
+		}
+
+		if !CanValidatorSubscribeToPool(subscription.Validator) {
+			log.WithFields(log.Fields{
+				"BlockNumber":    subscription.Event.Raw.BlockNumber,
+				"Collateral":     subscription.Event.SuscriptionCollateral,
+				"TxHash":         subscription.Event.Raw.TxHash,
+				"ValidatorIndex": valIdx,
+				"ValidatorState": validator.ValidatorStatus,
+			}).Warn("[Subscription]: Received subscription for validator that cannot subscribe, sending collateral to pool")
+			state.SendRewardToPool(collateral)
 			continue
 		}
 
@@ -395,10 +405,11 @@ func (state *OracleState) HandleManualSubscriptions(
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: Banned validator added more collateral, ignoring + returning it")
 
+			// TODO: This should be a function
 			state.Validators[valIdx].AccumulatedRewardsWei.Add(
 				state.Validators[valIdx].AccumulatedRewardsWei,
 				collateral)
-			return
+			continue
 		}
 
 		// If its tracked and its already subscribed, weird. Return the collateral
@@ -414,9 +425,11 @@ func (state *OracleState) HandleManualSubscriptions(
 			// Increase pending, adding the collateral to accumulated, in an attempt
 			// to return this extra collateral to the user. It can be seen as a
 			// way of donating to a given validator.
+			// TODO: This should be a function
 			state.Validators[valIdx].AccumulatedRewardsWei.Add(
 				state.Validators[valIdx].AccumulatedRewardsWei,
 				collateral)
+			continue
 
 			// Otherwise if we havent found it or is not subscribed
 		} else {
@@ -434,11 +447,6 @@ func (state *OracleState) HandleManualSubscriptions(
 			// only if the collateral is enough >= minCollateralWei
 			// Note that the validator starts in NotSubscribed, and its state
 			// its advanced below in AdvanceStateMachine
-
-			if !CanValidatorSubscribeToPool(subscription.Validator) {
-				// TODO: log
-				continue
-			}
 
 			withdrawalAddress, err := GetEth1AddressByte(subscription.Validator.Validator.WithdrawalCredentials)
 			if err != nil {
@@ -699,6 +707,11 @@ func (state *OracleState) IncreaseAllPendingRewards(
 	for _, eligibleIndex := range eligibleValidators {
 		state.Validators[eligibleIndex].PendingRewardsWei.Add(state.Validators[eligibleIndex].PendingRewardsWei, perValidatorReward)
 	}
+}
+
+// TODO: unit test
+func (state *OracleState) SendRewardToPool(reward *big.Int) {
+	state.PoolAccumulatedFees.Add(state.PoolAccumulatedFees, reward)
 }
 
 func (state *OracleState) ResetPendingRewards(valIndex uint64) {

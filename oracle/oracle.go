@@ -51,7 +51,8 @@ func (or *Oracle) AdvanceStateToNextSlot(
 
 		if blockPool.BlockType == OkPoolProposalBlsKeys {
 			// TODO: This is a bit hackish
-			log.Warn("Block proposal was ok but the bls keys were wrong. This is not supported, sending rewards to pool")
+			log.Warn("Block proposal was ok but bls keys are not supported, sending rewards to pool")
+			or.State.SendRewardToPool(blockPool.Reward)
 			// TODO: Send rewards to pool as we dont know any validator address to give it
 		}
 
