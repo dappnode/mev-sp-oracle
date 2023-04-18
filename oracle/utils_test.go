@@ -152,4 +152,8 @@ func Test_WithdrawalCredentials(t *testing.T) {
 	rec2, err := GetEth1Address(eth1Key2)
 	require.NoError(t, err)
 	require.Equal(t, rec2, "0x59b0d71688da01057c08e4c1baa8faa629819c2a")
+
+	b1, err := GetEth1AddressByte([]byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237})
+	require.NoError(t, err)
+	require.Equal(t, b1, "0x9427a30991170f917d7b83def6e44d26577871ed")
 }

@@ -440,7 +440,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		return
 	}
 
-	if m.oracle.GetFinalizedValidators() == nil {
+	if m.Onchain.Validators() == nil {
 		m.respondError(w, http.StatusInternalServerError, "finalized validators not loaded yet, try again later")
 		return
 	}
@@ -455,16 +455,28 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 
 	// 2) Get all onchain validators for that deposit address (untracked)
 	notTracked := make([]*oracle.ValidatorInfo, 0)
-	for _, validator := range m.oracle.GetFinalizedValidators() {
+	for _, validator := range m.Onchain.Validators() {
 
 		// Check if the withdrawal address matches the requested one
 		credStr := hex.EncodeToString(validator.Validator.WithdrawalCredentials)
-		eth1Add, _ := oracle.GetEth1Address(credStr)
-		if eth1Add != withdrawalAddress {
+		eth1Add, err := oracle.GetEth1Address(credStr)
+
+		// Skip validators without non eth withdrawal address (bls address)
+		if err != nil {
 			continue
 		}
 
-		// If it matches, check if its already tracked
+		// Skip if the address does not match with the requested
+		if strings.ToLower(eth1Add) != strings.ToLower(withdrawalAddress) {
+			continue
+		}
+
+		// Skip validators that cannot be subscribed
+		if !oracle.CanValidatorSubscribeToPool(validator) {
+			continue
+		}
+
+		// Check if we are already tracking it in the oracle
 		found := false
 		for _, trackedVal := range trackedValidators {
 			if trackedVal.ValidatorIndex == uint64(validator.Index) {

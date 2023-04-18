@@ -31,14 +31,16 @@ func Test_Oracle_ManualSubscription(t *testing.T) {
 	})
 
 	// Manually subscribe 3 validators with enogh collateral
-	subs := GenerateSubsctiptions(
-		/*valIndexs*/ []uint64{400000, 500000, 700000},
-		/*valKeys*/ []string{"0xval_400000", "0xval_500000", "0xval_700000"},
-		/*collaterals*/ []*big.Int{big.NewInt(1000000), big.NewInt(1000000), big.NewInt(1000000)},
-		/*blockNums*/ []uint64{500, 500, 500},
-		/*txHashes*/ []string{"0x1", "0x2", "0x3"},
-		/*depositAddrs*/ []string{"0xaaa0000000000000000000000000000000000000", "0xaaa0000000000000000000000000000000000000", "0xccc0000000000000000000000000000000000000"},
-	)
+	/*
+		subs := GenerateSubsctiptions(
+			 []uint64{400000, 500000, 700000},
+			[]string{"0xval_400000", "0xval_500000", "0xval_700000"},
+			 []*big.Int{big.NewInt(1000000), big.NewInt(1000000), big.NewInt(1000000)},
+			 []uint64{500, 500, 500},
+			 []string{"0x1", "0x2", "0x3"},
+			 []string{"0xaaa0000000000000000000000000000000000000", "0xaaa0000000000000000000000000000000000000", "0xccc0000000000000000000000000000000000000"},
+		)*/
+	subs := []Subscription{} // TODO:
 
 	// Process block with 3 subscriptions (no reward sent to pool)
 	processedSlot, err := oracle.AdvanceStateToNextSlot(WrongFeeBlock(50000, 1, "0x"), subs, []Unsubscription{}, []Donation{})
@@ -133,36 +135,40 @@ func Test_100_slots_test(t *testing.T) {
 		//throw dice to determine if a new subscription is set in this slot. 1/2 chance
 		dice := rand.Intn(2)
 		if dice == 0 {
-			newSubscription = GenerateSubsctiptions(
-				/*valIndexs*/ []uint64{50000 + uint64(i)},
-				/*valKeys*/ []string{"val" + strconv.FormatUint(50000+uint64(i), 10)},
-				/*collaterals*/ []*big.Int{big.NewInt(1000000)},
-				/*blockNums*/ []uint64{50000 + uint64(i)},
-				/*txHashes*/ []string{"0x1"},
-				/*depositAddrs*/ []string{"0xaaa0000000000000000000000000000000000000"},
-			)
-			subsIndex = append(subsIndex, newSubscription[0].ValidatorIndex)
-			totalAssets.Add(totalAssets, newSubscription[0].Collateral)
+			/*
+				newSubscription = GenerateSubsctiptions(
+					[]uint64{50000 + uint64(i)},
+					[]string{"val" + strconv.FormatUint(50000+uint64(i), 10)},
+					[]*big.Int{big.NewInt(1000000)},
+					[]uint64{50000 + uint64(i)},
+					[]string{"0x1"},
+					[]string{"0xaaa0000000000000000000000000000000000000"},
+				)
+				subsIndex = append(subsIndex, newSubscription[0].ValidatorIndex)
+				totalAssets.Add(totalAssets, newSubscription[0].Collateral)*/
 		}
 
 		//throw dice to determine if a new unsubscription is set in this slot. 1/3 chance
 		//(can only unsubscribe already subbed validators)
 		dice = rand.Intn(3)
 		if dice == 0 && len(subsIndex) > 0 {
-			indexRandom := rand.Intn(len(subsIndex))
-			valtoUnsub := subsIndex[indexRandom]
-			newUnsubscription = GenerateUnsunscriptions(
-				/*valIndexs*/ []uint64{valtoUnsub},
-				/*valKeys*/ []string{"val" + strconv.FormatUint(valtoUnsub, 10)},
-				/*sender*/ []string{strconv.FormatUint(50000+uint64(i), 10)},
-				/*blockNums*/ []uint64{50000 + uint64(i)},
-				/*txHashes*/ []string{"0x1"},
-				/*depositAddrs*/ []string{strconv.FormatUint(50000+uint64(i), 10)},
-			)
-			//unsubsIndex = append(unsubsIndex, newUnsubscription[0].ValidatorIndex)
+			/*
+				indexRandom := rand.Intn(len(subsIndex))
+				valtoUnsub := subsIndex[indexRandom]
 
-			//delete subbed validator from slice that keeps all subbed validators
-			subsIndex = append(subsIndex[:indexRandom], subsIndex[indexRandom+1:]...)
+				newUnsubscription = GenerateUnsunscriptions(
+					 []uint64{valtoUnsub},
+					 []string{"val" + strconv.FormatUint(valtoUnsub, 10)},
+					[]string{strconv.FormatUint(50000+uint64(i), 10)},
+					 []uint64{50000 + uint64(i)},
+					 []string{"0x1"},
+					 []string{strconv.FormatUint(50000+uint64(i), 10)},
+				)
+				//unsubsIndex = append(unsubsIndex, newUnsubscription[0].ValidatorIndex)
+
+				//delete subbed validator from slice that keeps all subbed validators
+				subsIndex = append(subsIndex[:indexRandom], subsIndex[indexRandom+1:]...)
+			*/
 		}
 		//throw dice to determine if a new donation is set in this slot. 1/5 chance
 		dice = rand.Intn(5)
@@ -184,32 +190,33 @@ func Test_100_slots_test(t *testing.T) {
 		//choose randomly a validator to propopse the block (can be an unsubbed validator, so we check automatic subs)
 		valToPropose := uint64(rand.Intn(numBlocks) + 50000)
 
-		for _, sub := range newSubscription {
-			log.WithFields(log.Fields{
-				"ValidatorIndex":  sub.ValidatorIndex,
-				"ValidatorKey":    sub.ValidatorKey,
-				"Collateral":      sub.Collateral,
-				"Deposit Address": sub.DepositAddress,
-				"Tx Hash":         sub.TxHash,
-			}).Info("Mocked Event: Subscription")
-		}
+		/*
+			for _, sub := range newSubscription {
+				log.WithFields(log.Fields{
+					"ValidatorIndex":  sub.ValidatorIndex,
+					"ValidatorKey":    sub.ValidatorKey,
+					"Collateral":      sub.Collateral,
+					"Deposit Address": sub.DepositAddress,
+					"Tx Hash":         sub.TxHash,
+				}).Info("Mocked Event: Subscription")
+			}
 
-		for _, unsub := range newUnsubscription {
-			log.WithFields(log.Fields{
-				"ValidatorIndex":  unsub.ValidatorIndex,
-				"ValidatorKey":    unsub.ValidatorKey,
-				"Sender":          unsub.Sender,
-				"Deposit Address": unsub.DepositAddress,
-				"Tx Hash":         unsub.TxHash,
-			}).Info("Mocked Event: Unsubscription")
-		}
-		for _, don := range don {
-			log.WithFields(log.Fields{
-				"Amount(wei)": don.AmountWei,
-				"Block":       don.Block,
-				"Tx Hash":     don.TxHash,
-			}).Info("Mocked Event: Donation")
-		}
+			for _, unsub := range newUnsubscription {
+				log.WithFields(log.Fields{
+					"ValidatorIndex":  unsub.ValidatorIndex,
+					"ValidatorKey":    unsub.ValidatorKey,
+					"Sender":          unsub.Sender,
+					"Deposit Address": unsub.DepositAddress,
+					"Tx Hash":         unsub.TxHash,
+				}).Info("Mocked Event: Unsubscription")
+			}
+			for _, don := range don {
+				log.WithFields(log.Fields{
+					"Amount(wei)": don.AmountWei,
+					"Block":       don.Block,
+					"Tx Hash":     don.TxHash,
+				}).Info("Mocked Event: Donation")
+			}*/
 
 		log.Infof("Validator Index to propose: %d\n", valToPropose)
 		if dice == 0 {
@@ -260,18 +267,6 @@ func Test_100_slots_test(t *testing.T) {
 func Test_Oracle_WrongInputData(t *testing.T) {
 }
 
-func Test_Oracle_Unsubscription(t *testing.T) {
-	unsubs := GenerateUnsunscriptions(
-		/*valIndexs*/ []uint64{1, 2, 3},
-		/*valKeys*/ []string{"0xaa", "0xba", "0xca"},
-		/*senders*/ []string{"0xad", "0xbd", "0xcd"},
-		/*blockNums*/ []uint64{0, 0, 0},
-		/*txHashes*/ []string{"0xae", "0xbe", "0xce"},
-		/*depositAddrs*/ []string{"0xaf", "0xbf", "0xcf"},
-	)
-	_ = unsubs
-}
-
 func Test_Oracle_Donation(t *testing.T) {
 	blockWrongFee := Block{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
@@ -319,6 +314,7 @@ func Test_Oracle_Missed_ToRed(t *testing.T) {
 
 }
 
+/*
 // Some util functions to faciliatet testing
 func GenerateSubsctiptions(
 	valIndex []uint64, valKey []string,
@@ -358,7 +354,7 @@ func GenerateUnsunscriptions(
 		})
 	}
 	return unsubs
-}
+}*/
 
 func MissedBlock(slot uint64, valIndex uint64, pubKey string) Block {
 	return Block{

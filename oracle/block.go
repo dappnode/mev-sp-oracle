@@ -70,7 +70,7 @@ func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.In
 					"Reward":       msg.Value(),
 					"TxHash":       tx.Hash().String()[0:4],
 					"Type":         "MevBlock",
-				}).Info("New Reward")
+				}).Info("[Reward]")
 				numTxs++
 			}
 		}
@@ -125,7 +125,7 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 			"Reward":       reward.String(),
 			"Type":         "VanilaBlock",
 			"FeeRecipient": b.GetFeeRecipient(),
-		}).Info("New Reward")
+		}).Info("[Reward]")
 		txType = VanilaBlock
 		wasRewardSent = true
 	}
@@ -280,7 +280,7 @@ func (b *VersionedSignedBeaconBlock) GetDonations(poolAddress string) []Donation
 				"BlockNumber": b.GetBlockNumber(),
 				"Type":        "Donation",
 				"TxHash":      tx.Hash().String(),
-			}).Info("New Reward")
+			}).Info("[Reward]")
 
 			donations = append(donations, Donation{
 				AmountWei: msg.Value(),

@@ -104,29 +104,3 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	err = binary.Write(fTxs, binary.LittleEndian, serializedReceipts)
 	require.NoError(t, err)
 }
-
-func Test_GetValidatorIndexByKey(t *testing.T) {
-	t.Skip("Skipping test")
-	var cfg = config.Config{
-		ConsensusEndpoint: "http://127.0.0.1:5051",
-		ExecutionEndpoint: "http://127.0.0.1:8545",
-	}
-	onchain, err := NewOnchain(cfg)
-	require.NoError(t, err)
-	vals, err := onchain.GetValidatorIndexByKey("0x800010c20716ef4264a6d93b3873a008ece58fb9312ac2cc3b0ccc40aedb050f2038281e6a92242a35476af9903c7919")
-	require.NoError(t, err)
-	_ = vals // TODO
-}
-
-func Test_GetValidatorKeyByIndex(t *testing.T) {
-	t.Skip("Skipping test")
-	var cfg = config.Config{
-		ConsensusEndpoint: "http://127.0.0.1:5051",
-		ExecutionEndpoint: "http://127.0.0.1:8545",
-	}
-	onchain, err := NewOnchain(cfg)
-	require.NoError(t, err)
-	vals, err := onchain.GetValidatorKeyByIndex(123)
-	require.NoError(t, err)
-	_ = vals // TODO
-}

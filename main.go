@@ -74,13 +74,8 @@ func main() {
 
 func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config) {
 
-	log.Info("Loading existing validators in the beacon chain")
-	vals, err := onchain.GetFinalizedValidators()
-	if err != nil {
-		log.Fatal("Could not get validators: ", err)
-	}
-	oracleInstance.SetFinalizedValidators(vals)
-	log.Info("Done loading existing validators in the beacon chain total: ", len(vals))
+	// Load all the validators from the beacon chain
+	onchain.RefreshBeaconValidators()
 
 	log.Info("Starting to process from slot (see api for progress): ", oracleInstance.State.LatestSlot)
 
@@ -149,11 +144,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		// 300 slots is 1 hour
 		UpdateValidatorsIntervalSlots := uint64(300)
 		if oracleInstance.State.LatestSlot%UpdateValidatorsIntervalSlots == 0 {
-			vals, err := onchain.GetFinalizedValidators()
-			if err != nil {
-				log.Fatal("Could not get validators: ", err)
-			}
-			oracleInstance.SetFinalizedValidators(vals)
+			onchain.RefreshBeaconValidators()
 		}
 
 		// Every CheckPointSizeInSlots we commit the state

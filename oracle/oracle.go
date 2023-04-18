@@ -4,15 +4,13 @@ import (
 	"errors"
 	"fmt"
 
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/config"
+	log "github.com/sirupsen/logrus"
 )
 
 type Oracle struct {
-	cfg        *config.Config
-	State      *OracleState
-	validators map[phase0.ValidatorIndex]*v1.Validator
+	cfg   *config.Config
+	State *OracleState
 }
 
 func NewOracle(cfg *config.Config) *Oracle {
@@ -51,6 +49,12 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	// If a block was proposed in the slot (not missed)
 	if blockPool.BlockType != MissedProposal {
 
+		if blockPool.BlockType == OkPoolProposalBlsKeys {
+			// TODO: This is a bit hackish
+			log.Warn("Block proposal was ok but the bls keys were wrong. This is not supported, sending rewards to pool")
+			// TODO: Send rewards to pool as we dont know any validator address to give it
+		}
+
 		// Manual subscription. If feeRec is ok, means the reward was sent to the pool
 		if blockPool.BlockType == OkPoolProposal {
 			or.State.HandleCorrectBlockProposal(blockPool)
@@ -86,12 +90,4 @@ func (or *Oracle) validateParameters(
 
 	// TODO: Add more validators to block subs unsubs, donations, etc
 	return nil
-}
-
-func (or *Oracle) SetFinalizedValidators(validators map[phase0.ValidatorIndex]*v1.Validator) {
-	or.validators = validators
-}
-
-func (or *Oracle) GetFinalizedValidators() map[phase0.ValidatorIndex]*v1.Validator {
-	return or.validators
 }

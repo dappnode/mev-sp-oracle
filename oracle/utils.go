@@ -153,3 +153,15 @@ func GetEth1Address(withdrawalCred string) (string, error) {
 	}
 	return "0x" + withdrawalCred[24:], nil
 }
+
+func GetEth1AddressByte(withdrawalCredByte []byte) (string, error) {
+	withdrawalCred := hex.EncodeToString(withdrawalCredByte)
+	if len(withdrawalCred) != 64 {
+		return "", errors.New("Withdrawal credentials are not a valid length")
+	}
+	/* ETH1_ADDRESS_WITHDRAWAL_PREFIX*/
+	if !strings.HasPrefix(withdrawalCred, "010000000000000000000000") {
+		return "", errors.New("Withdrawal credentials prefix does not match the spec")
+	}
+	return "0x" + withdrawalCred[24:], nil
+}

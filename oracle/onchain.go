@@ -15,6 +15,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/contract"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -49,6 +50,7 @@ type Onchain struct {
 	Cfg             *config.Config
 	Contract        *contract.Contract
 	NumRetries      int
+	validators      map[phase0.ValidatorIndex]*v1.Validator
 }
 
 func NewOnchain(cfg config.Config) (*Onchain, error) {
@@ -197,59 +199,6 @@ func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.Valid
 	return validators, err
 }
 
-// Given a validator key, returns the validator index
-func (o *Onchain) GetValidatorIndexByKey(valKey string, opts ...retry.Option) (uint64, error) {
-	var err error
-	var validators map[phase0.ValidatorIndex]*api.Validator
-
-	err = retry.Do(func() error {
-		validators, err = o.ConsensusClient.ValidatorsByPubKey(context.Background(), "finalized", []phase0.BLSPubKey{StringToBlsKey(valKey)})
-		if err != nil {
-			log.Warn("Failed attempt to fetch validator index: ", err.Error(), " Retrying...")
-			return errors.New("Error fetching validator index: " + err.Error())
-		}
-		return nil
-	}, o.GetRetryOpts(opts)...)
-
-	if err != nil {
-		return 0, errors.New("Could not fetch validator index: " + err.Error())
-	}
-
-	// A bit convoluted, refactor
-	for _, v := range validators {
-		recValKey := v.Validator.PublicKey.String()
-		if recValKey == valKey {
-			return uint64(v.Index), nil
-		}
-	}
-	return 0, errors.New("Could not fetch validator index:")
-}
-
-// Given a validator index, returns the validator key
-func (o *Onchain) GetValidatorKeyByIndex(valIndex uint64, opts ...retry.Option) (string, error) {
-	var err error
-	var validators map[phase0.ValidatorIndex]*api.Validator
-
-	err = retry.Do(func() error {
-		validators, err = o.ConsensusClient.Validators(context.Background(), "finalized", []phase0.ValidatorIndex{phase0.ValidatorIndex(valIndex)})
-		if err != nil {
-			log.Warn("Failed attempt to fetch validator key: ", err.Error(), " Retrying...")
-			return errors.New("Error fetching validator index: " + err.Error())
-		}
-		return nil
-	}, o.GetRetryOpts(opts)...)
-
-	if err != nil {
-		return "", errors.New("Could not fetch validator index: " + err.Error())
-	}
-
-	validator, ok := validators[phase0.ValidatorIndex(valIndex)]
-	if !ok {
-		return "", errors.New("Could not fetch validator index:")
-	}
-	return validator.Validator.PublicKey.String(), nil
-}
-
 func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
 	// Hardcoded value, slots in an epoch
 	slotsInEpoch := uint64(32)
@@ -341,6 +290,7 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 
 // TODO: Rethink this function. Its not just donations but eth rx to the contract
 // in general
+// TODO:? Unused?
 func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([]Donation, error) {
 	log.Fatal("This function is deprecated. Use GetDonations instead")
 	startBlock := uint64(blockNumber)
@@ -419,22 +369,9 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 	// Loop over all found events
 	blockSubscriptions := make([]Subscription, 0)
 	for itr.Next() {
-		event := itr.Event
-
-		// And add some extra data to the return subscription struct
-		valKey, err := o.GetValidatorKeyByIndex(uint64(event.ValidatorID))
-		if err != nil {
-			return nil, errors.New("could not get validator key: " + err.Error())
-		}
-		depositAddress := "TODO:"
-
 		blockSubscriptions = append(blockSubscriptions, Subscription{
-			ValidatorIndex: uint64(event.ValidatorID),
-			ValidatorKey:   valKey,
-			Collateral:     event.SuscriptionCollateral,
-			BlockNumber:    blockNumber,
-			TxHash:         event.Raw.TxHash.Hex(),
-			DepositAddress: depositAddress,
+			Event:     itr.Event,
+			Validator: o.validators[phase0.ValidatorIndex(itr.Event.ValidatorID)],
 		})
 	}
 	err = itr.Close()
@@ -471,22 +408,9 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 	// Loop over all found events
 	blockUnsubscriptions := make([]Unsubscription, 0)
 	for itr.Next() {
-		event := itr.Event
-
-		// Fetch also extra data
-		valKey, err := o.GetValidatorKeyByIndex(uint64(event.ValidatorID))
-		if err != nil {
-			return nil, errors.New("could not get validator key: " + err.Error())
-		}
-		depositAddress := "TODO:"
-
 		blockUnsubscriptions = append(blockUnsubscriptions, Unsubscription{
-			ValidatorIndex: uint64(event.ValidatorID),
-			Sender:         event.Sender.String(),
-			BlockNumber:    blockNumber,
-			TxHash:         event.Raw.TxHash.Hex(),
-			ValidatorKey:   valKey,
-			DepositAddress: depositAddress,
+			Event:     itr.Event,
+			Validator: o.validators[phase0.ValidatorIndex(itr.Event.ValidatorID)],
 		})
 	}
 	err = itr.Close()
@@ -628,7 +552,13 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 		// And check if it contained a reward for the pool or not
 		if correctFeeRec {
 			poolBlock.BlockType = OkPoolProposal
-			poolBlock.DepositAddress = "TODO:"
+			withdrawalAddress, err := GetEth1AddressByte(o.validators[slotDuty.ValidatorIndex].Validator.WithdrawalCredentials)
+			if err != nil {
+				poolBlock.BlockType = OkPoolProposalBlsKeys
+			} else {
+				poolBlock.BlockType = OkPoolProposal
+				poolBlock.DepositAddress = withdrawalAddress
+			}
 		} else {
 			poolBlock.BlockType = WrongFeeRecipient
 		}
@@ -746,8 +676,8 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		"NewMerkleRoot": newMerkleRoot,
 	}).Info("Tx sent to Ethereum updating rewards merkle root, wait to be validated")
 
-	// Leave 5 minutes for the tx to be validated
-	deadline := time.Now().Add(5 * time.Minute)
+	// Leave 15 minutes for the tx to be validated
+	deadline := time.Now().Add(15 * time.Minute)
 	ctx, cancelCtx := context.WithDeadline(context.Background(), deadline)
 	defer cancelCtx()
 
@@ -771,6 +701,21 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
 	return tx.Hash().Hex()
+}
+
+// Loads all validator from the beacon chain into the oracle, must be called periodically
+func (o *Onchain) RefreshBeaconValidators() {
+	log.Info("Loading existing validators in the beacon chain")
+	vals, err := o.GetFinalizedValidators()
+	if err != nil {
+		log.Fatal("Could not get validators: ", err)
+	}
+	o.validators = vals
+	log.Info("Done loading existing validators in the beacon chain total: ", len(vals))
+}
+
+func (o *Onchain) Validators() map[phase0.ValidatorIndex]*v1.Validator {
+	return o.validators
 }
 
 func (o *Onchain) GetRetryOpts(opts []retry.Option) []retry.Option {
