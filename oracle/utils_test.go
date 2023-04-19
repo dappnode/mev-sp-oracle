@@ -157,3 +157,7 @@ func Test_WithdrawalCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, b1, "0x9427a30991170f917d7b83def6e44d26577871ed")
 }
+
+func Test_AreAddressEqual(t *testing.T) {
+	require.Equal(t, true, AreAddressEqual("0x0000", "0x0000"))
+}

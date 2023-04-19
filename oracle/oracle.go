@@ -42,7 +42,7 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	or.State.HandleManualSubscriptions(or.cfg.CollateralInWei, blockSubs)
 
 	// If the validator was subscribed and missed proposed the block in this slot
-	if blockPool.BlockType == MissedProposal && or.State.IsValidatorSubscribed(blockPool.ValidatorIndex) {
+	if blockPool.BlockType == MissedProposal && or.State.IsSubscribed(blockPool.ValidatorIndex) {
 		or.State.HandleMissedBlock(blockPool)
 	}
 
@@ -62,7 +62,7 @@ func (or *Oracle) AdvanceStateToNextSlot(
 		}
 		// If the validator was subscribed but the fee recipient was wrong
 		// we ban the validator as it is not following the protocol rules
-		if blockPool.BlockType == WrongFeeRecipient && or.State.IsValidatorSubscribed(blockPool.ValidatorIndex) {
+		if blockPool.BlockType == WrongFeeRecipient && or.State.IsSubscribed(blockPool.ValidatorIndex) {
 			or.State.HandleBanValidator(blockPool)
 		}
 	}

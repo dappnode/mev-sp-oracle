@@ -496,11 +496,11 @@ func Test_IsValidatorSubscribed(t *testing.T) {
 		AccumulatedRewardsWei: big.NewInt(50),
 		PendingRewardsWei:     big.NewInt(10),
 	}
-	require.Equal(t, true, state.IsValidatorSubscribed(10))
-	require.Equal(t, true, state.IsValidatorSubscribed(20))
-	require.Equal(t, true, state.IsValidatorSubscribed(30))
-	require.Equal(t, false, state.IsValidatorSubscribed(40))
-	require.Equal(t, false, state.IsValidatorSubscribed(50))
+	require.Equal(t, true, state.IsSubscribed(10))
+	require.Equal(t, true, state.IsSubscribed(20))
+	require.Equal(t, true, state.IsSubscribed(30))
+	require.Equal(t, false, state.IsSubscribed(40))
+	require.Equal(t, false, state.IsSubscribed(50))
 }
 
 func Test_BanValidator(t *testing.T) {

@@ -142,7 +142,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		}
 
 		// 300 slots is 1 hour
-		UpdateValidatorsIntervalSlots := uint64(300)
+		UpdateValidatorsIntervalSlots := uint64(3000)
 		if oracleInstance.State.LatestSlot%UpdateValidatorsIntervalSlots == 0 {
 			onchain.RefreshBeaconValidators()
 		}
