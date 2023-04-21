@@ -6,7 +6,10 @@ import (
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,6 +64,87 @@ func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 	require.Equal(t, big.NewInt(3333), state.Validators[2].PendingRewardsWei)
 	require.Equal(t, big.NewInt(3333), state.Validators[3].PendingRewardsWei)
 	require.Equal(t, big.NewInt(1), state.PoolAccumulatedFees)
+}
+
+func Test_HandleManualSubscriptions_Valid(t *testing.T) {
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	sub1 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           33,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+		},
+	}
+
+	state.HandleManualSubscriptions([]Subscription{sub1})
+
+	// TODO: Asserts
+}
+
+func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	sub1 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           33,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+		},
+	}
+
+	state.HandleManualSubscriptions([]Subscription{sub1, sub1})
+
+	// TODO: Asserts
+}
+
+func Test_HandleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	sub1 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           33,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address
+				WithdrawalCredentials: []byte{0, 120, 22, 197, 153, 67, 183, 29, 244, 168, 13, 66, 101, 227, 165, 250, 41, 86, 97, 10, 40, 91, 140, 65, 154, 102, 143, 67, 117, 255, 140, 254},
+			},
+		},
+	}
+
+	state.HandleManualSubscriptions([]Subscription{sub1})
+
+	// TODO: Asserts
 }
 
 func Test_IncreaseAllPendingRewards_2(t *testing.T) {

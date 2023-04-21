@@ -153,7 +153,7 @@ type OracleState struct {
 	MissedBlocks    []Block
 	WrongFeeBlocks  []Block
 
-	// TODO: add config here. and also assert when loading the state that matches the existing one
+	Config *config.Config
 }
 
 func (p *OracleState) SaveStateToFile() {
@@ -249,6 +249,7 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		ProposedBlocks:  make([]Block, 0),
 		MissedBlocks:    make([]Block, 0),
 		WrongFeeBlocks:  make([]Block, 0),
+		Config:          cfg,
 	}
 }
 
@@ -339,9 +340,8 @@ func (state *OracleState) IsTracked(validatorIndex uint64) bool {
 	return false
 }
 
-// TODO: unit test. TODO: remove collateralRequrement
-func (state *OracleState) IsCollateralEnough(collateralRequirement *big.Int, collateral *big.Int) bool {
-	return collateral.Cmp(collateralRequirement) >= 0
+func (state *OracleState) IsCollateralEnough(collateral *big.Int) bool {
+	return collateral.Cmp(state.Config.CollateralInWei) >= 0
 }
 
 func (state *OracleState) HandleDonations(donations []Donation) {
@@ -371,7 +371,6 @@ func (state *OracleState) HandleCorrectBlockProposal(block Block) {
 }
 
 func (state *OracleState) HandleManualSubscriptions(
-	minCollateralWei *big.Int,
 	subscriptions []Subscription) {
 
 	for _, sub := range subscriptions {
@@ -471,7 +470,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		}
 
 		// Subscription received for a validator with not enough collateral
-		if !state.IsCollateralEnough(collateral, minCollateralWei) {
+		if !state.IsCollateralEnough(collateral) {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Event.Raw.BlockNumber,
 				"Collateral":     sub.Event.SuscriptionCollateral,
@@ -486,7 +485,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		// Valid subscription
 		if !state.IsSubscribed(valIdx) &&
 			!state.IsBanned(valIdx) &&
-			state.IsCollateralEnough(minCollateralWei, collateral) {
+			state.IsCollateralEnough(collateral) {
 
 			// Add valid subscription
 			if !state.IsTracked(valIdx) {

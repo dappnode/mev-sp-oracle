@@ -39,7 +39,7 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	}
 
 	// Handle subscriptions first thing
-	or.State.HandleManualSubscriptions(or.cfg.CollateralInWei, blockSubs)
+	or.State.HandleManualSubscriptions(blockSubs)
 
 	// If the validator was subscribed and missed proposed the block in this slot
 	if blockPool.BlockType == MissedProposal && or.State.IsSubscribed(blockPool.ValidatorIndex) {
