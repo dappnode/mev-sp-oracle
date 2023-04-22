@@ -7,9 +7,10 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"strings"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/contract"
 
 	log "github.com/sirupsen/logrus"
 	mt "github.com/txaty/go-merkletree"
@@ -62,10 +63,11 @@ const (
 
 // Block type
 const (
-	UnknownBlockType  BlockType = 0
-	MissedProposal    BlockType = 1
-	WrongFeeRecipient BlockType = 2
-	OkPoolProposal    BlockType = 3
+	UnknownBlockType      BlockType = 0
+	MissedProposal        BlockType = 1
+	WrongFeeRecipient     BlockType = 2
+	OkPoolProposal        BlockType = 3
+	OkPoolProposalBlsKeys BlockType = 4 // TODO: this state is a bit hackish
 )
 
 // Represents a block with information relevant for the pool
@@ -77,33 +79,32 @@ type Block struct {
 	Reward         *big.Int   `json:"reward_wei"`
 	RewardType     RewardType `json:"reward_type"`
 	DepositAddress string     `json:"deposit_address"`
+
+	/* As a nice to have would be nice to refactor to this:
+	Duty     *api.ProposerDuty
+	Block    *spec.VersionedSignedBeaconBlock
+	Header   *types.Header
+	Receipts []*types.Receipt*/
 }
 
 // Represents a donation made to the pool
+// TODO: deprecate this? donations are detected from the block content
 type Donation struct {
 	AmountWei *big.Int `json:"amount_wei"`
 	Block     uint64   `json:"block_number"`
 	TxHash    string   `json:"tx_hash"`
 }
 
-// Subscription of a validator to the pool
+// Subscription event and the associated validator (if any)
 type Subscription struct {
-	ValidatorIndex uint64   `json:"validator_index"`
-	ValidatorKey   string   `json:"validator_key"`
-	Collateral     *big.Int `json:"collateral_wei"`
-	BlockNumber    uint64   `json:"block_number"`
-	TxHash         string   `json:"tx_hash"`
-	DepositAddress string   `json:"deposit_address"`
+	Event     *contract.ContractSuscribeValidator
+	Validator *v1.Validator
 }
 
-// Unsubscription of a validator from the pool
+// Unsubscription event and the associated validator (if any)
 type Unsubscription struct {
-	ValidatorIndex uint64 `json:"validator_index"`
-	ValidatorKey   string `json:"validator_key"`
-	Sender         string `json:"sender"`
-	BlockNumber    uint64 `json:"block_number"`
-	TxHash         string `json:"tx_hash"`
-	DepositAddress string `json:"deposit_address"`
+	Event     *contract.ContractUnsuscribeValidator
+	Validator *v1.Validator
 }
 
 // Represents all the information that is stored of a validator
@@ -112,7 +113,7 @@ type ValidatorInfo struct {
 	AccumulatedRewardsWei   *big.Int        `json:"accumulated_rewards_wei"`
 	PendingRewardsWei       *big.Int        `json:"pending_rewards_wei"`
 	CollateralWei           *big.Int        `json:"collateral_wei"`
-	DepositAddress          string          `json:"deposit_address"`
+	DepositAddress          string          `json:"deposit_address"` // TODO: Rename to: withdrawal_address (keeping it for backwards compatibility by now)
 	ValidatorIndex          uint64          `json:"validator_index"`
 	ValidatorKey            string          `json:"validator_key"`
 	ValidatorProposedBlocks []Block         `json:"proposed_block"`
@@ -151,6 +152,8 @@ type OracleState struct {
 	ProposedBlocks  []Block
 	MissedBlocks    []Block
 	WrongFeeBlocks  []Block
+
+	Config *config.Config
 }
 
 func (p *OracleState) SaveStateToFile() {
@@ -246,6 +249,7 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		ProposedBlocks:  make([]Block, 0),
 		MissedBlocks:    make([]Block, 0),
 		WrongFeeBlocks:  make([]Block, 0),
+		Config:          cfg,
 	}
 }
 
@@ -305,9 +309,12 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	return true
 }
 
-func (state *OracleState) IsValidatorSubscribed(validatorIndex uint64) bool {
+func (state *OracleState) IsSubscribed(validatorIndex uint64) bool {
 	for valIndex, validator := range state.Validators {
-		if valIndex == validatorIndex && validator.ValidatorStatus != Banned && validator.ValidatorStatus != NotSubscribed {
+		if valIndex == validatorIndex &&
+			validator.ValidatorStatus != Banned &&
+			validator.ValidatorStatus != NotSubscribed &&
+			validator.ValidatorStatus != UnknownState {
 			return true
 		}
 	}
@@ -323,6 +330,18 @@ func (state *OracleState) IsBanned(validatorIndex uint64) bool {
 		return true
 	}
 	return false
+}
+
+func (state *OracleState) IsTracked(validatorIndex uint64) bool {
+	_, found := state.Validators[validatorIndex]
+	if found {
+		return true
+	}
+	return false
+}
+
+func (state *OracleState) IsCollateralEnough(collateral *big.Int) bool {
+	return collateral.Cmp(state.Config.CollateralInWei) >= 0
 }
 
 func (state *OracleState) HandleDonations(donations []Donation) {
@@ -352,122 +371,159 @@ func (state *OracleState) HandleCorrectBlockProposal(block Block) {
 }
 
 func (state *OracleState) HandleManualSubscriptions(
-	minCollateralWei *big.Int,
 	subscriptions []Subscription) {
 
-	for _, subscription := range subscriptions {
-		valIdx := subscription.ValidatorIndex
-		validator, found := state.Validators[valIdx]
+	for _, sub := range subscriptions {
 
-		// If validator was banned, return collateral in form of accumulated and ignore
-		if found && state.IsBanned(validator.ValidatorIndex) {
+		valIdx := uint64(sub.Event.ValidatorID) // TODO: Contract should be uint64
+		collateral := sub.Event.SuscriptionCollateral
+		sender := "0x" // TODO: Will be provided by contract
+		_ = sender
+
+		// Subscription recevied for a validator index that doesnt exist
+		if sub.Validator == nil {
 			log.WithFields(log.Fields{
-				"BlockNumber":    subscription.BlockNumber,
-				"Collateral":     subscription.Collateral,
-				"TxHash":         subscription.TxHash,
-				"ValidatorIndex": subscription.ValidatorIndex,
-			}).Warn("Banned validator added more collateral, ignoring + returning it")
-
-			state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei.Add(
-				state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei,
-				subscription.Collateral)
-			return
+				"BlockNumber":    sub.Event.Raw.BlockNumber,
+				"Collateral":     sub.Event.SuscriptionCollateral,
+				"TxHash":         sub.Event.Raw.TxHash,
+				"ValidatorIndex": valIdx,
+			}).Warn("[Subscription]: for non existing validator, skipping")
+			// Fees go to the pool, as we dont know who is the sender
+			state.SendRewardToPool(collateral)
+			continue
 		}
 
-		// If we found it and its already subscribed, weird. Return the collateral
-		if found && state.IsValidatorSubscribed(validator.ValidatorIndex) {
-			// Okay, but weird that an already subscribed validator deposited collateral
+		if valIdx != uint64(sub.Validator.Index) {
+			log.Fatal("Subscription event validator index doesnt match the validator index. ",
+				valIdx, " vs ", sub.Validator.Index)
+		}
+
+		// Subscription received for a validator that cannot subscribe (see states)
+		if !CanValidatorSubscribeToPool(sub.Validator) {
 			log.WithFields(log.Fields{
-				"BlockNumber":    subscription.BlockNumber,
-				"Collateral":     subscription.Collateral,
-				"TxHash":         subscription.TxHash,
-				"ValidatorIndex": subscription.ValidatorIndex,
-			}).Warn("Validator already subscribed sent colateral again (could be targeted donation)")
+				"BlockNumber":    sub.Event.Raw.BlockNumber,
+				"Collateral":     sub.Event.SuscriptionCollateral,
+				"TxHash":         sub.Event.Raw.TxHash,
+				"ValidatorIndex": valIdx,
+				"ValidatorState": sub.Validator.Status,
+			}).Warn("[Subscription]: for validator that cannot subscribe due to its state, skipping")
+			// Fees go to the pool, as we dont know who is the sender
+			state.SendRewardToPool(collateral)
+			continue
+		}
 
-			// Increase pending, adding the collateral to accumulated, in an attempt
-			// to return this extra collateral to the user. It can be seen as a
-			// way of donating to a given validator.
-			state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei.Add(
-				state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei,
-				subscription.Collateral)
+		// Subscription received for a validator that dont have eth1 withdrawal address (bls)
+		validatorWithdrawal, err := GetEth1AddressByte(sub.Validator.Validator.WithdrawalCredentials)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"BlockNumber":    sub.Event.Raw.BlockNumber,
+				"Collateral":     sub.Event.SuscriptionCollateral,
+				"TxHash":         sub.Event.Raw.TxHash,
+				"WithdrawalAddr": "0x" + hex.EncodeToString(sub.Validator.Validator.WithdrawalCredentials[:]),
+				"ValidatorIndex": valIdx,
+			}).Warn("[Subscription]: for validator with invalid withdrawal address (bls), skipping")
+			// Fees go to the pool, as we dont know who is the sender
+			state.SendRewardToPool(collateral)
+			continue
+		}
 
-			// Otherwise if we havent found it or is not subscribed
-		} else {
-			var prevAccumulatedRewardsWei *big.Int = big.NewInt(0)
-			var prevPendingRewardsWei *big.Int = big.NewInt(0)
+		// TODO: Enable this when smart contract is changed
+		// Subscription received from an address that is not the validator withdrawal address
+		/*if !AreAddressEqual(sender, validatorWithdrawal) {
+			log.WithFields(log.Fields{
+				"BlockNumber":         sub.Event.Raw.BlockNumber,
+				"Collateral":          sub.Event.SuscriptionCollateral,
+				"TxHash":              sub.Event.Raw.TxHash,
+				"ValidatorIndex":      valIdx,
+				"Sender":              sender,
+				"ValidatorWithdrawal": validatorWithdrawal,
+			}).Warn("[Subscription]: but tx sender is not the validator withdrawal address, skipping")
+			// Fees go to the pool, as we dont know who is the sender
+			state.SendRewardToPool(collateral)
+			continue
+		}*/
 
-			// Keep previous rewards in case the validator was already present but not subscribed
-			// This case happens when a validator subscribes with a lower amount of collateral than
-			// needed, and then subscribes again with enough collateral.
-			if found {
-				prevAccumulatedRewardsWei = validator.AccumulatedRewardsWei
-				prevPendingRewardsWei = validator.PendingRewardsWei
-			}
-			// If the validator is not subscribed, we add it to the state
-			// only if the collateral is enough >= minCollateralWei
-			// Note that the validator starts in NotSubscribed, and its state
-			// its advanced below in AdvanceStateMachine
-			if subscription.Collateral.Cmp(minCollateralWei) >= 0 {
-				state.Validators[subscription.ValidatorIndex] = &ValidatorInfo{
+		// Subscription received for a banned validator
+		if state.IsBanned(valIdx) {
+			log.WithFields(log.Fields{
+				"BlockNumber":    sub.Event.Raw.BlockNumber,
+				"Collateral":     sub.Event.SuscriptionCollateral,
+				"TxHash":         sub.Event.Raw.TxHash,
+				"ValidatorIndex": valIdx,
+			}).Warn("[Subscription]: for banned validator, skipping")
+			// Since we track this validator, give the collateral back
+			state.IncreaseValidatorAccumulatedRewards(valIdx, collateral)
+			continue
+		}
+
+		// Subscription received for an already subscribed validator
+		if state.IsSubscribed(valIdx) {
+			log.WithFields(log.Fields{
+				"BlockNumber":    sub.Event.Raw.BlockNumber,
+				"Collateral":     sub.Event.SuscriptionCollateral,
+				"TxHash":         sub.Event.Raw.TxHash,
+				"ValidatorIndex": valIdx,
+			}).Warn("[Subscription]: for an already subscribed validator, skipping")
+			// Return the collateral as accumulated balance
+			state.IncreaseValidatorAccumulatedRewards(valIdx, collateral)
+			continue
+		}
+
+		// Subscription received for a validator with not enough collateral
+		if !state.IsCollateralEnough(collateral) {
+			log.WithFields(log.Fields{
+				"BlockNumber":    sub.Event.Raw.BlockNumber,
+				"Collateral":     sub.Event.SuscriptionCollateral,
+				"TxHash":         sub.Event.Raw.TxHash,
+				"ValidatorIndex": valIdx,
+			}).Warn("[Subscription]: for a validator with not enough collateral, skipping")
+			// Wrong, collateral goes to pool
+			state.SendRewardToPool(collateral)
+			continue
+		}
+
+		// Valid subscription
+		if !state.IsSubscribed(valIdx) &&
+			!state.IsBanned(valIdx) &&
+			state.IsCollateralEnough(collateral) {
+
+			// Add valid subscription
+			if !state.IsTracked(valIdx) {
+				// If its not tracked, we create a new subscription
+				state.Validators[valIdx] = &ValidatorInfo{
 					ValidatorStatus:         NotSubscribed,
-					AccumulatedRewardsWei:   prevAccumulatedRewardsWei,
-					PendingRewardsWei:       prevPendingRewardsWei,
-					CollateralWei:           subscription.Collateral,
-					DepositAddress:          subscription.DepositAddress,
-					ValidatorIndex:          subscription.ValidatorIndex,
-					ValidatorKey:            subscription.ValidatorKey,
-					ValidatorProposedBlocks: make([]Block, 0),
-					ValidatorMissedBlocks:   make([]Block, 0),
-					ValidatorWrongFeeBlocks: make([]Block, 0),
-				}
-
-				// Increase pending, adding the collateral to pending so that whenever
-				// the validator proposes a block, the pending is converted into accumulated
-				// and it gets back its collateral.
-				// The exact collateral that was added is used, just in case by mistake someone
-				// adds more than the minimum.
-				state.Validators[subscription.ValidatorIndex].PendingRewardsWei.Add(
-					state.Validators[subscription.ValidatorIndex].PendingRewardsWei,
-					subscription.Collateral)
-
-				log.WithFields(log.Fields{
-					"BlockNumber":    subscription.BlockNumber,
-					"Collateral":     subscription.Collateral,
-					"TxHash":         subscription.TxHash,
-					"ValidatorIndex": subscription.ValidatorIndex,
-				}).Info("Validator subscribed with ok collateral")
-
-				// And update it state according to the event
-				state.AdvanceStateMachine(valIdx, ManualSubscription)
-			} else {
-				// If the collateral is not enough, we just track it but as unsubscribed
-				// and return the collateral to the user
-				log.WithFields(log.Fields{
-					"BlockNumber":    subscription.BlockNumber,
-					"Collateral":     subscription.Collateral,
-					"TxHash":         subscription.TxHash,
-					"ValidatorIndex": subscription.ValidatorIndex,
-				}).Warn("Validator subscribed but collateral is not enough")
-
-				state.Validators[subscription.ValidatorIndex] = &ValidatorInfo{
-					ValidatorStatus:         NotSubscribed, // We track it but as unsuscribed
 					AccumulatedRewardsWei:   big.NewInt(0),
 					PendingRewardsWei:       big.NewInt(0),
-					CollateralWei:           big.NewInt(0), // Set to zero since its returned
-					DepositAddress:          subscription.DepositAddress,
-					ValidatorIndex:          subscription.ValidatorIndex,
-					ValidatorKey:            subscription.ValidatorKey,
+					CollateralWei:           collateral,
+					DepositAddress:          validatorWithdrawal, // TODO: Rename withdrawal Address
+					ValidatorIndex:          valIdx,
+					ValidatorKey:            "0x" + hex.EncodeToString(sub.Validator.Validator.PublicKey[:]),
 					ValidatorProposedBlocks: make([]Block, 0),
 					ValidatorMissedBlocks:   make([]Block, 0),
 					ValidatorWrongFeeBlocks: make([]Block, 0),
 				}
-
-				// Return collateral adding it to accumulated rewards. Can be claimed at any time
-				state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei.Add(
-					state.Validators[subscription.ValidatorIndex].AccumulatedRewardsWei,
-					subscription.Collateral)
 			}
+			log.WithFields(log.Fields{
+				"BlockNumber":      sub.Event.Raw.BlockNumber,
+				"Collateral":       sub.Event.SuscriptionCollateral,
+				"TxHash":           sub.Event.Raw.TxHash,
+				"ValidatorIndex":   valIdx,
+				"WithdrawaAddress": validatorWithdrawal,
+			}).Info("[Subscription]: Validator subscribed ok")
+			state.IncreaseValidatorPendingRewards(valIdx, collateral)
+			state.AdvanceStateMachine(valIdx, ManualSubscription)
+			continue
 		}
+
+		// If we reach this point, its a case we havent considered, but its not valid
+		log.WithFields(log.Fields{
+			"BlockNumber":      sub.Event.Raw.BlockNumber,
+			"Collateral":       sub.Event.SuscriptionCollateral,
+			"TxHash":           sub.Event.Raw.TxHash,
+			"ValidatorIndex":   valIdx,
+			"WithdrawaAddress": validatorWithdrawal,
+		}).Info("[Subscription]: Not considered case meaning wrong subscription, skipping")
+		state.SendRewardToPool(collateral)
 	}
 }
 
@@ -494,44 +550,86 @@ func (state *OracleState) HandleMissedBlock(block Block) {
 func (state *OracleState) HandleManualUnsubscriptions(
 	newUnsubscriptions []Unsubscription) {
 
-	for _, newUnsubscription := range newUnsubscriptions {
-		valIdx := newUnsubscription.ValidatorIndex
-		_, found := state.Validators[valIdx]
+	for _, unsub := range newUnsubscriptions {
 
-		// Check the size is the same. To avoid 0x prefixed being mixed with non 0x prefixed
-		if len(newUnsubscription.DepositAddress) != len(newUnsubscription.Sender) {
-			log.Fatal("Deposit address and sender are not the same length: ", newUnsubscription.DepositAddress, " ", newUnsubscription.Sender)
+		valIdx := uint64(unsub.Event.ValidatorID) // TODO: should be uint64 in the contract
+		sender := unsub.Event.Sender.String()
+
+		// Unsubscription but for a validator that doesnt exist
+		if unsub.Validator == nil {
+			log.WithFields(log.Fields{
+				"BlockNumber":    unsub.Event.Raw.BlockNumber,
+				"TxHash":         unsub.Event.Raw.TxHash,
+				"Sender":         sender,
+				"ValidatorIndex": valIdx,
+			}).Warn("[Unsubscription]: for validator index that does not exist, skipping")
+			continue
+		}
+
+		if valIdx != uint64(unsub.Validator.Index) {
+			log.Fatal("Unsubscription event validator index doesnt match the validator index. ",
+				valIdx, " vs ", unsub.Validator.Index)
+		}
+
+		// Unsubscription but for a validator that does not have an eth1 address. Should never happen
+		withdrawalAddress, err := GetEth1AddressByte(unsub.Validator.Validator.WithdrawalCredentials)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"BlockNumber":    unsub.Event.Raw.BlockNumber,
+				"TxHash":         unsub.Event.Raw.TxHash,
+				"Sender":         sender,
+				"ValidatorIndex": valIdx,
+			}).Warn("[Unsubscription]: for validator with no eth1 withdrawal addres (bls), skipping")
+			continue
 		}
 
 		// Its very important to check that the unsubscription was made from the deposit address
 		// of the validator, otherwise anyone could call the unsubscription function.
-		if strings.ToLower(newUnsubscription.DepositAddress) != strings.ToLower(newUnsubscription.Sender) {
+		if !AreAddressEqual(sender, withdrawalAddress) {
 			log.WithFields(log.Fields{
-				"BlockNumber":    newUnsubscription.BlockNumber,
-				"Sender":         newUnsubscription.Sender,
-				"TxHash":         newUnsubscription.TxHash,
-				"ValidatorIndex": newUnsubscription.ValidatorIndex,
-				"ValidatorKey":   newUnsubscription.ValidatorKey,
-				"DepositAddress": newUnsubscription.DepositAddress,
-			}).Warn("Unsubscription made from a different address than the deposit address")
+				"BlockNumber":      unsub.Event.Raw.BlockNumber,
+				"TxHash":           unsub.Event.Raw.TxHash,
+				"ValidatorIndex":   valIdx,
+				"WithdrawaAddress": withdrawalAddress,
+				"Sender":           sender,
+			}).Warn("[Unsubscription] but sender does not match withdrawal address, skipping")
 			continue
 		}
 
-		if found {
-			// If the validator is subscribed, we update it state according to the event
+		// After all the checks, we can proceed with the unsubscription
+		if state.IsSubscribed(valIdx) {
 			state.AdvanceStateMachine(valIdx, Unsubscribe)
 			state.IncreaseAllPendingRewards(state.Validators[valIdx].PendingRewardsWei)
 			state.ResetPendingRewards(valIdx)
-		} else {
 			log.WithFields(log.Fields{
-				"BlockNumber":    newUnsubscription.BlockNumber,
-				"Sender":         newUnsubscription.Sender,
-				"TxHash":         newUnsubscription.TxHash,
-				"ValidatorIndex": newUnsubscription.ValidatorIndex,
-				"ValidatorKey":   newUnsubscription.ValidatorKey,
-				"DepositAddress": newUnsubscription.DepositAddress,
-			}).Warn("Found and unsubscription event for a validator that is not subscribed")
+				"BlockNumber":      unsub.Event.Raw.BlockNumber,
+				"TxHash":           unsub.Event.Raw.TxHash,
+				"ValidatorIndex":   valIdx,
+				"WithdrawaAddress": withdrawalAddress,
+				"Sender":           sender,
+			}).Info("[Unsubscription] Validator unsubscribed ok")
+			continue
 		}
+
+		if !state.IsSubscribed(valIdx) {
+			log.WithFields(log.Fields{
+				"BlockNumber":      unsub.Event.Raw.BlockNumber,
+				"TxHash":           unsub.Event.Raw.TxHash,
+				"ValidatorIndex":   valIdx,
+				"WithdrawaAddress": withdrawalAddress,
+				"Sender":           sender,
+			}).Warn("[Unsubscription] but the validator is not subscribed, skipping")
+			continue
+		}
+
+		// If we reach this point, its a case we havent considered, but its not valid
+		log.WithFields(log.Fields{
+			"BlockNumber":      unsub.Event.Raw.BlockNumber,
+			"TxHash":           unsub.Event.Raw.TxHash,
+			"ValidatorIndex":   valIdx,
+			"WithdrawaAddress": withdrawalAddress,
+			"Sender":           sender,
+		}).Warn("[Unsubscription] Not considered case meaning wrong unsubscription, skipping")
 	}
 }
 
@@ -627,6 +725,21 @@ func (state *OracleState) IncreaseAllPendingRewards(
 	for _, eligibleIndex := range eligibleValidators {
 		state.Validators[eligibleIndex].PendingRewardsWei.Add(state.Validators[eligibleIndex].PendingRewardsWei, perValidatorReward)
 	}
+}
+
+// TODO: unit test
+func (state *OracleState) IncreaseValidatorPendingRewards(valIndex uint64, reward *big.Int) {
+	state.Validators[valIndex].PendingRewardsWei.Add(state.Validators[valIndex].PendingRewardsWei, reward)
+}
+
+// TODO: unit test
+func (state *OracleState) IncreaseValidatorAccumulatedRewards(valIndex uint64, reward *big.Int) {
+	state.Validators[valIndex].AccumulatedRewardsWei.Add(state.Validators[valIndex].AccumulatedRewardsWei, reward)
+}
+
+// TODO: unit test
+func (state *OracleState) SendRewardToPool(reward *big.Int) {
+	state.PoolAccumulatedFees.Add(state.PoolAccumulatedFees, reward)
 }
 
 func (state *OracleState) ResetPendingRewards(valIndex uint64) {
@@ -774,107 +887,22 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 	}
 }
 
-// TODO: Add function that dumps the current state to the database
-// Its a nice to have to track the validator balance evolution over the
-// time
-
-// Dumps all the oracle state to the db
-// Note that this is a proof of concept. All data is stored in the memory
-// and dumped to the db on each checkpoint, but at some point
-// this may become unfeasible.
-
-/* TODO: Move this somewhere else
-func (state *OracleState) DumpOracleStateToDatabase() (error, string, bool) { // TOOD: returning here the merkle root doesnt make sense. quick workaround
-	log.Info("Dumping all state to database")
-
-	// TODO: Define a type on validator parameters to store and stop
-	// using that many maps
-
-	mk := NewMerklelizer()
-	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
-	depositToLeaf, depositToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(state)
-	if !enoughData {
-		return nil, "", enoughData
+func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
+	if validator.Status != v1.ValidatorStateActiveExiting &&
+		validator.Status != v1.ValidatorStateActiveSlashed &&
+		validator.Status != v1.ValidatorStateExitedUnslashed &&
+		validator.Status != v1.ValidatorStateExitedSlashed &&
+		validator.Status != v1.ValidatorStateWithdrawalPossible &&
+		validator.Status != v1.ValidatorStateWithdrawalDone &&
+		validator.Status != v1.ValidatorStateUnknown {
+		return true
 	}
-	merkleRootStr := hex.EncodeToString(tree.Root)
-	log.Info("Merkle root: ", merkleRootStr)
-
-	// TODO: Add also validator key on top of the index
-	for valIndex, validator := range state.Validators {
-		log.Info("Generating root for deposit: ", validator.DepositAddress)
-		block := depositToLeaf[validator.DepositAddress]
-		serrr, err := block.Serialize()
-		if err != nil {
-			log.Fatal("Error serializing block", err)
-		}
-		log.Info("Hash of leaf is: ", hex.EncodeToString(serrr))
-		proof, err := tree.GenerateProof(block)
-		if err != nil {
-			log.Fatal("Error generating proof", err)
-		}
-
-		_, err = state.Postgres.Db.Exec(
-			context.Background(),
-			postgres.InsertRewardsTable,
-
-			validator.DepositAddress, //TODO: This is empty?
-			validator.ValidatorKey,
-			valIndex,
-			validator.PendingRewardsWei.Uint64(), // TODO: can we overflow a uint64?
-			validator.AccumulatedRewardsWei.Uint64(),
-			uint64(0), // TODO: remove unbann balance
-			len(validator.ValidatorProposedBlocks),
-			len(validator.ValidatorMissedBlocks),
-			len(validator.ValidatorWrongFeeBlocks),
-			state.LatestSlot,
-			ByteArrayToStringArray(proof.Siblings),
-			"0x"+hex.EncodeToString(tree.Root))
-		if err != nil {
-			return err, "", false
-		}
-	}
-
-	_ = depositToRawLeaf
-
-	for depositAddress, rawLeaf := range depositToRawLeaf {
-		// Extra check to make sure the deposit address is the same as the key
-		if depositAddress != rawLeaf.DepositAddress {
-			log.Fatal("Deposit address in raw leaf doesnt match the key")
-		}
-		log.Info("deposit", depositAddress)
-		log.Info("rawLeaf", rawLeaf)
-
-		// TODO some duplicated code here
-		block := depositToLeaf[depositAddress]
-		proof, err := tree.GenerateProof(block)
-
-		test := ByteArrayToStringArray(proof.Siblings)
-		_ = test
-
-		_, err = state.Postgres.Db.Exec(
-			context.Background(),
-			postgres.InsertDepositAddressRewardsTable,
-			depositAddress,
-			"TODO: add keys for this address",
-			uint64(0), // TODO: pending rewards. is it stored somewhere else?
-			rawLeaf.AccumulatedBalance.Uint64(),
-			uint64(0), //TODO remove unbann balance,
-			state.LatestSlot,
-			ByteArrayToStringArray(proof.Siblings),
-			"0x"+hex.EncodeToString(tree.Root),
-		)
-		if err != nil {
-			// improve error handling
-			log.Fatal(err)
-			//return err, ""
-		}
-
-	}
-
-	return nil, merkleRootStr, true
-
+	// Accepted states are:
+	// -ValidatorStatePendingInitialized
+	// -ValidatorStatePendingQueued
+	// -ValidatorStateActiveOngoing
+	return false
 }
-*/
 
 // TODO: Remove this and get the merkle tree from somewhere else. See stored state
 func (state *OracleState) GetMerkleRootIfAny() (string, bool) {

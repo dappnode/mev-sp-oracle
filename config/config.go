@@ -20,7 +20,6 @@ type Config struct {
 	UpdaterAddress        string   `json:"updater_address"`
 	DeployedSlot          uint64   `json:"deployed_slot"`
 	CheckPointSizeInSlots uint64   `json:"checkpoint_size"`
-	PostgresEndpoint      string   `json:"postgres_endpoint"`
 	DeployerPrivateKey    string   `json:"-"` // TODO: This will be a file protected by a password
 	PoolFeesPercent       int      `json:"pool_fees_percent"`
 	PoolFeesAddress       string   `json:"pool_fees_address"`
@@ -61,7 +60,7 @@ func NewCliConfig() (*Config, error) {
 	var version = flag.Bool("version", false, "Prints the release version and exits")
 	var dryRun = flag.Bool("dry-run", false, "If enabled, the pool contract will not be updated")
 	var deployerPrivateKey = flag.String("deployer-private-key", "", "Private key of the deployer account")
-	var numRetries = flag.Int("num-retries", 0, "Number of retries for each interaction (consensus, execution, postgres): 0 infinite")
+	var numRetries = flag.Int("num-retries", 0, "Number of retries for each interaction (consensus, execution): 0 infinite")
 
 	// Mandatory flags TODO: Test!
 	var consensusEndpoint = flag.String("consensus-endpoint", "", "Ethereum consensus endpoint")
@@ -70,7 +69,6 @@ func NewCliConfig() (*Config, error) {
 	var poolAddress = flag.String("pool-address", "", "Address of the smoothing pool contract")
 	var deployedSlot = flag.Uint64("deployed-slot", 0, "Deployed slot of the smart contract: slot, not block")
 	var checkPointSizeInSlots = flag.Uint64("checkpoint-size", 0, "Size in slots for each checkpoint, used to generate dumps and update merkle roots")
-	var postgresEndpoint = flag.String("postgres-endpoint", "", "Postgres endpoint")
 	var poolFeesPercent = flag.Int("pool-fees-percent", -1, "Percent of fees pool-fees-percent takes [0-100]")
 	var poolFeesAddress = flag.String("pool-fees-address", "", "Ethereum account with 0x where pool fees go to")
 	var ethCollateral = flag.Uint64("collateral-in-wei", MaxUint64, "Amount of collateral in ETH wei")
@@ -159,7 +157,6 @@ func NewCliConfig() (*Config, error) {
 		UpdaterAddress:        updaterAddress,
 		DeployedSlot:          *deployedSlot,
 		CheckPointSizeInSlots: *checkPointSizeInSlots,
-		PostgresEndpoint:      *postgresEndpoint,
 		DeployerPrivateKey:    *deployerPrivateKey,
 		PoolFeesPercent:       *poolFeesPercent,
 		PoolFeesAddress:       *poolFeesAddress,
@@ -180,7 +177,6 @@ func logConfig(cfg *Config) {
 		"UpdaterAddress":        cfg.UpdaterAddress,
 		"DeployedSlot":          cfg.DeployedSlot,
 		"CheckPointSizeInSlots": cfg.CheckPointSizeInSlots,
-		"PostgresEndpoint":      cfg.PostgresEndpoint,
 		"DeployerPrivateKey":    "TODO: use a file with protected password",
 		"PoolFeesPercent":       cfg.PoolFeesPercent,
 		"PoolFeesAddress":       cfg.PoolFeesAddress,

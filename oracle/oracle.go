@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dappnode/mev-sp-oracle/config"
+	log "github.com/sirupsen/logrus"
 )
 
 type Oracle struct {
@@ -38,15 +39,22 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	}
 
 	// Handle subscriptions first thing
-	or.State.HandleManualSubscriptions(or.cfg.CollateralInWei, blockSubs)
+	or.State.HandleManualSubscriptions(blockSubs)
 
 	// If the validator was subscribed and missed proposed the block in this slot
-	if blockPool.BlockType == MissedProposal && or.State.IsValidatorSubscribed(blockPool.ValidatorIndex) {
+	if blockPool.BlockType == MissedProposal && or.State.IsSubscribed(blockPool.ValidatorIndex) {
 		or.State.HandleMissedBlock(blockPool)
 	}
 
 	// If a block was proposed in the slot (not missed)
 	if blockPool.BlockType != MissedProposal {
+
+		if blockPool.BlockType == OkPoolProposalBlsKeys {
+			// TODO: This is a bit hackish
+			log.Warn("Block proposal was ok but bls keys are not supported, sending rewards to pool")
+			or.State.SendRewardToPool(blockPool.Reward)
+			// TODO: Send rewards to pool as we dont know any validator address to give it
+		}
 
 		// Manual subscription. If feeRec is ok, means the reward was sent to the pool
 		if blockPool.BlockType == OkPoolProposal {
@@ -54,7 +62,7 @@ func (or *Oracle) AdvanceStateToNextSlot(
 		}
 		// If the validator was subscribed but the fee recipient was wrong
 		// we ban the validator as it is not following the protocol rules
-		if blockPool.BlockType == WrongFeeRecipient && or.State.IsValidatorSubscribed(blockPool.ValidatorIndex) {
+		if blockPool.BlockType == WrongFeeRecipient && or.State.IsSubscribed(blockPool.ValidatorIndex) {
 			or.State.HandleBanValidator(blockPool)
 		}
 	}
