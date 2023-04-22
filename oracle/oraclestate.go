@@ -760,34 +760,20 @@ func (state *OracleState) IncreaseAllPendingRewards(
 	}
 }
 
-// TODO: unit test
 func (state *OracleState) IncreaseValidatorPendingRewards(valIndex uint64, reward *big.Int) {
 	state.Validators[valIndex].PendingRewardsWei.Add(state.Validators[valIndex].PendingRewardsWei, reward)
 }
 
-// TODO: unit test
 func (state *OracleState) IncreaseValidatorAccumulatedRewards(valIndex uint64, reward *big.Int) {
 	state.Validators[valIndex].AccumulatedRewardsWei.Add(state.Validators[valIndex].AccumulatedRewardsWei, reward)
 }
 
-// TODO: unit test
 func (state *OracleState) SendRewardToPool(reward *big.Int) {
 	state.PoolAccumulatedFees.Add(state.PoolAccumulatedFees, reward)
 }
 
 func (state *OracleState) ResetPendingRewards(valIndex uint64) {
 	state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
-}
-
-func (state *OracleState) LogBalances() {
-	for valIndex, validator := range state.Validators {
-		log.WithFields(log.Fields{
-			"LatestProcessedSlot": state.LatestProcessedSlot,
-			"ValIndex":            valIndex,
-			"PendingRewards":      validator.PendingRewardsWei,
-			"AccumulatedRewards":  validator.AccumulatedRewardsWei,
-		}).Info("Validator balances")
-	}
 }
 
 // See the spec for state diagram with states and transitions. This tracks all the different
@@ -936,6 +922,17 @@ func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
 	// -ValidatorStatePendingQueued
 	// -ValidatorStateActiveOngoing
 	return false
+}
+
+func (state *OracleState) LogBalances() {
+	for valIndex, validator := range state.Validators {
+		log.WithFields(log.Fields{
+			"LatestProcessedSlot": state.LatestProcessedSlot,
+			"ValIndex":            valIndex,
+			"PendingRewards":      validator.PendingRewardsWei,
+			"AccumulatedRewards":  validator.AccumulatedRewardsWei,
+		}).Info("Validator balances")
+	}
 }
 
 // TODO: Remove this and get the merkle tree from somewhere else. See stored state

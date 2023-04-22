@@ -800,6 +800,60 @@ func Test_IncreaseAllPendingRewards_3(t *testing.T) {
 	}
 }
 
+func Test_IncreaseValidatorPendingRewards(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.Validators[12] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(100),
+		AccumulatedRewardsWei: big.NewInt(0),
+	}
+	state.Validators[200] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(100),
+		AccumulatedRewardsWei: big.NewInt(0),
+	}
+
+	state.IncreaseValidatorPendingRewards(12, big.NewInt(8765432))
+	require.Equal(t, big.NewInt(8765432+100), state.Validators[12].PendingRewardsWei)
+	require.Equal(t, big.NewInt(0), state.Validators[12].AccumulatedRewardsWei)
+
+	state.IncreaseValidatorPendingRewards(200, big.NewInt(0))
+	require.Equal(t, big.NewInt(100), state.Validators[200].PendingRewardsWei)
+
+	state.IncreaseValidatorPendingRewards(12, big.NewInt(1))
+	require.Equal(t, big.NewInt(8765432+100+1), state.Validators[12].PendingRewardsWei)
+}
+
+func Test_IncreaseValidatorAccumulatedRewards(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.Validators[9999999] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(100),
+		AccumulatedRewardsWei: big.NewInt(99999999999999),
+	}
+	state.IncreaseValidatorAccumulatedRewards(9999999, big.NewInt(87676545432))
+	require.Equal(t, big.NewInt(87676545432+99999999999999), state.Validators[9999999].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(100), state.Validators[9999999].PendingRewardsWei)
+}
+
+func Test_SendRewardToPool(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.SendRewardToPool(big.NewInt(10456543212340))
+	require.Equal(t, big.NewInt(10456543212340), state.PoolAccumulatedFees)
+
+	state.SendRewardToPool(big.NewInt(99999))
+	require.Equal(t, big.NewInt(10456543212340+99999), state.PoolAccumulatedFees)
+}
+
+func Test_ResetPendingRewards(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.Validators[1] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(99999999999999),
+		AccumulatedRewardsWei: big.NewInt(99999999999999),
+	}
+	state.ResetPendingRewards(1)
+
+	require.Equal(t, big.NewInt(0), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99999999999999), state.Validators[1].AccumulatedRewardsWei)
+}
+
 func Test_IncreasePendingRewards(t *testing.T) {
 	state := NewOracleState(&config.Config{})
 	state.Validators[12] = &ValidatorInfo{
