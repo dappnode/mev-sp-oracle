@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 )
@@ -45,6 +46,667 @@ func Test_AddDonation(t *testing.T) {
 	require.Equal(t, "0x2", state.Donations[1].TxHash)
 }
 
+func Test_HandleManualSubscriptions_Valid(t *testing.T) {
+	// Tests a valid subscription, with enough collateral to a not subscribed validator
+	// and sent from the validator's withdrawal address
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	sub1 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           33,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	state.HandleManualSubscriptions([]Subscription{sub1})
+
+	require.Equal(t, state.Validators[33], &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(0),
+		PendingRewardsWei:       big.NewInt(1000),
+		CollateralWei:           big.NewInt(1000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          33,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	})
+	require.Equal(t, 1, len(state.Validators))
+}
+
+func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
+	// Test a subscription to an already subscribed validator, we return the collateral
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	sub1 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           33,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	// Run 3 subscriptions, only one should be added
+	state.HandleManualSubscriptions([]Subscription{sub1, sub1, sub1})
+
+	require.Equal(t, state.Validators[33], &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(2000), // Second and third collateral are returned to the user
+		PendingRewardsWei:       big.NewInt(1000),
+		CollateralWei:           big.NewInt(1000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          33,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	})
+	require.Equal(t, 1, len(state.Validators))
+}
+
+func Test_HandleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) {
+	// Test a subscription to an already subscribed validator, that already
+	// has some balance. Assert that the existing balance is not touched and the
+	// collateral is returned
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	sub1 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           33,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	// Validator is subscribed
+	state.HandleManualSubscriptions([]Subscription{sub1})
+
+	// And has some rewards
+	state.IncreaseValidatorAccumulatedRewards(33, big.NewInt(9000))
+	state.IncreaseValidatorPendingRewards(33, big.NewInt(44000))
+
+	// Due to some mistake, the user subscribes again and again
+	state.HandleManualSubscriptions([]Subscription{sub1, sub1})
+
+	require.Equal(t, state.Validators[33], &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(9000 + 1000*2),
+		PendingRewardsWei:       big.NewInt(44000 + 1000),
+		CollateralWei:           big.NewInt(1000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          33,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	})
+	require.Equal(t, 1, len(state.Validators))
+}
+
+func Test_HandleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
+	// A validator with wrong withdrawal address (bls) tries to subscribe. The validator
+	// is nos subscribed and the collateral is given to the pool, since we dont have a way
+	// to return it to its owner.
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	sub1 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           33,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// bls address, not supported
+				WithdrawalCredentials: []byte{0, 120, 22, 197, 153, 67, 183, 29, 244, 168, 13, 66, 101, 227, 165, 250, 41, 86, 97, 10, 40, 91, 140, 65, 154, 102, 143, 67, 117, 255, 140, 254},
+			},
+		},
+	}
+
+	state.HandleManualSubscriptions([]Subscription{sub1})
+	require.Equal(t, 0, len(state.Validators))
+	require.Equal(t, big.NewInt(1000), state.PoolAccumulatedFees)
+}
+
+func Test_HandleManualSubscriptions_NonExistent(t *testing.T) {
+	// Test a subscription of a non-existent validator. Someone subscribes a validator
+	// index that doesnt exist. Nothing happens, and the pool gets this collateral.
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	sub1 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           33,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: nil,
+	}
+
+	state.HandleManualSubscriptions([]Subscription{sub1})
+	require.Equal(t, 0, len(state.Validators))
+	require.Equal(t, big.NewInt(1000), state.PoolAccumulatedFees)
+}
+
+func Test_HandleManualSubscriptions_WrongStateValidator(t *testing.T) {
+	// Test a subscription of a validator in a wrong state (eg slashed validator or exited)
+	// Nothing happens, and the pool gets this collateral.
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	// Was slashed and exited
+	sub1 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           33,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateExitedSlashed,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+		},
+	}
+
+	// Its active but its exiting
+	sub2 := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           34,
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x2}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  34,
+			Status: v1.ValidatorStateActiveExiting,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+		},
+	}
+
+	state.HandleManualSubscriptions([]Subscription{sub1, sub2})
+
+	require.Equal(t, 0, len(state.Validators))
+	require.Equal(t, big.NewInt(1000*2), state.PoolAccumulatedFees)
+}
+
+func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
+	// Test a subscription of a banned validator. Check that the validator is not subscribed
+	// and its kept in Banned state. Since we track this validator, we return the collateral
+	// to the owner in good faith.
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	bannedIndex := uint64(300000)
+	state.Validators[bannedIndex] = &ValidatorInfo{
+		ValidatorStatus:         Banned,
+		AccumulatedRewardsWei:   big.NewInt(0),
+		PendingRewardsWei:       big.NewInt(0),
+		CollateralWei:           big.NewInt(1000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          bannedIndex,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}
+
+	sub := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           uint32(bannedIndex), // TODO: remove cast when smart contract ok
+			SuscriptionCollateral: big.NewInt(1000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  phase0.ValidatorIndex(bannedIndex),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+		},
+	}
+	state.HandleManualSubscriptions([]Subscription{sub})
+
+	// Banned validator stays banned
+	require.Equal(t, 1, len(state.Validators))
+
+	// Note that since we track it, we return the collateral as accumulated rewards
+	require.Equal(t, &ValidatorInfo{
+		ValidatorStatus:         Banned,
+		AccumulatedRewardsWei:   big.NewInt(1000),
+		PendingRewardsWei:       big.NewInt(0),
+		CollateralWei:           big.NewInt(1000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          bannedIndex,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}, state.Validators[bannedIndex])
+}
+
+func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
+	// Unsubscribe an existing subscribed validator correctly, checking that the event is
+	// sent from the withdrawal address of the validator. Check also that when unsubscribing
+	// the pending validator rewards are shared among the rest of the validators.
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(500000),
+	})
+
+	for _, valIdx := range []uint64{6, 9, 10, 15} {
+		sub := Subscription{
+			Event: &contract.ContractSuscribeValidator{
+				ValidatorID:           uint32(valIdx), // TODO: Remove cast once smart contract fixed
+				SuscriptionCollateral: big.NewInt(500000),
+				Raw:                   types.Log{TxHash: [32]byte{0x1}},
+				// TODO: Add sender address once smart contract is modified
+			},
+			Validator: &v1.Validator{
+				Index:  phase0.ValidatorIndex(valIdx),
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// byte(valIdx) just to have different key/withdrawal addresses
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+				},
+			},
+		}
+		state.HandleManualSubscriptions([]Subscription{sub})
+
+		// Simulate some proposals increasing the rewards
+		state.IncreaseValidatorAccumulatedRewards(valIdx, big.NewInt(3000))
+		state.IncreaseValidatorPendingRewards(valIdx, big.NewInt(300000000000000000-500000))
+	}
+
+	require.Equal(t, 4, len(state.Validators))
+
+	// Receive valid unsubscription event for index 6
+	unsub := Unsubscription{
+		Event: &contract.ContractUnsuscribeValidator{
+			ValidatorID: 6, // TODO: Set to uint64 when smart contract is fixed
+			// Same as withdrawal credential without the prefix
+			Sender: common.Address{byte(6), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			Raw:    types.Log{TxHash: [32]byte{0x1}},
+		},
+		Validator: &v1.Validator{
+			Index:  phase0.ValidatorIndex(6),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key/withdrawal addresses
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(6), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(6), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+	state.HandleManualUnsubscriptions([]Unsubscription{unsub})
+
+	require.Equal(t, state.Validators[6], &ValidatorInfo{
+		ValidatorStatus:         NotSubscribed,    // Validator is still tracked but not subscribed
+		AccumulatedRewardsWei:   big.NewInt(3000), // Accumulated rewards are kept
+		PendingRewardsWei:       big.NewInt(0),    // Pending rewards are cleared
+		CollateralWei:           big.NewInt(500000),
+		DepositAddress:          "0x0627a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          6,
+		ValidatorKey:            "0x06aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	})
+	require.Equal(t, 4, len(state.Validators))
+
+	// The rest get the pending of valIndex=6
+	require.Equal(t, state.Validators[9].PendingRewardsWei, big.NewInt(300000000000000000+300000000000000000/3))
+	require.Equal(t, state.Validators[10].PendingRewardsWei, big.NewInt(300000000000000000+300000000000000000/3))
+	require.Equal(t, state.Validators[15].PendingRewardsWei, big.NewInt(300000000000000000+300000000000000000/3))
+
+	// And accumulated do not change
+	require.Equal(t, state.Validators[9].AccumulatedRewardsWei, big.NewInt(3000))
+	require.Equal(t, state.Validators[10].AccumulatedRewardsWei, big.NewInt(3000))
+	require.Equal(t, state.Validators[15].AccumulatedRewardsWei, big.NewInt(3000))
+
+	// And state of the rest is not changed
+	require.Equal(t, state.Validators[9].ValidatorStatus, Active)
+	require.Equal(t, state.Validators[10].ValidatorStatus, Active)
+	require.Equal(t, state.Validators[15].ValidatorStatus, Active)
+
+	// Unsubscribe all remaining validators
+	unsubs := make([]Unsubscription, 0)
+	for _, valIdx := range []uint64{ /*6*/ 9, 10, 15} {
+		unsub := Unsubscription{
+			Event: &contract.ContractUnsuscribeValidator{
+				ValidatorID: uint32(valIdx), // TODO: Set to uint64 when smart contract is fixed
+				// Same as withdrawal credential without the prefix
+				Sender: common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				Raw:    types.Log{TxHash: [32]byte{0x1}},
+			},
+			Validator: &v1.Validator{
+				Index:  phase0.ValidatorIndex(valIdx),
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// byte(valIdx) just to have different key/withdrawal addresses
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+				},
+			},
+		}
+		unsubs = append(unsubs, unsub)
+	}
+
+	// Unsubscribe all at once
+	state.HandleManualUnsubscriptions(unsubs)
+
+	require.Equal(t, 4, len(state.Validators))
+	require.Equal(t, state.Validators[6].ValidatorStatus, NotSubscribed)
+	require.Equal(t, state.Validators[9].ValidatorStatus, NotSubscribed)
+	require.Equal(t, state.Validators[10].ValidatorStatus, NotSubscribed)
+	require.Equal(t, state.Validators[15].ValidatorStatus, NotSubscribed)
+
+	require.Equal(t, state.Validators[6].PendingRewardsWei, big.NewInt(0))
+	require.Equal(t, state.Validators[9].PendingRewardsWei, big.NewInt(0))
+	require.Equal(t, state.Validators[10].PendingRewardsWei, big.NewInt(0))
+	require.Equal(t, state.Validators[15].PendingRewardsWei, big.NewInt(0))
+}
+
+func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
+	// We receive an unsubscription for a validator that does not exist in the beacon
+	// chain. Nothing happens to existing subscribed validators.
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	// Simulate subscription of validator 33
+	state.Validators[33] = &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(9000 + 1000*2), // Second and third collateral are added to accumulated rewards (returned)
+		PendingRewardsWei:       big.NewInt(44000 + 1000),  // First collateral is added to pending (claimable in next block)
+		CollateralWei:           big.NewInt(1000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          33,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}
+
+	// Receive event of a validator index that doesnt exist in the beacon chain
+	unsub := Unsubscription{
+		Event: &contract.ContractUnsuscribeValidator{
+			ValidatorID: uint32(900300), // TODO: Set to uint64 when smart contract is fixed
+			// Same as withdrawal credential without the prefix
+			Sender: common.Address{byte(50), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			Raw:    types.Log{TxHash: [32]byte{0x1}},
+		},
+		Validator: nil,
+	}
+	state.HandleManualUnsubscriptions([]Unsubscription{unsub})
+
+	// Check that the existing validator is not affected
+	require.Equal(t, 1, len(state.Validators))
+	require.Equal(t, &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(9000 + 1000*2), // Second and third collateral are added to accumulated rewards (returned)
+		PendingRewardsWei:       big.NewInt(44000 + 1000),  // First collateral is added to pending (claimable in next block)
+		CollateralWei:           big.NewInt(1000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          33,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}, state.Validators[33])
+}
+
+func Test_HandleUnsubscriptions_NotSubscribedValidator(t *testing.T) {
+	// We receive an unsubscription for a validator that is not subscribed but exists in
+	// the beacon chain. Nothing happens, and no subscriptions are added.
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	// Unsubscribe event of a validator index that BUT is not subscribed
+	valIdx := uint64(730100)
+	unsub := Unsubscription{
+		Event: &contract.ContractUnsuscribeValidator{
+			ValidatorID: uint32(valIdx), // TODO: Set to uint64 when smart contract is fixed
+			// Same as withdrawal credential without the prefix
+			Sender: common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			Raw:    types.Log{TxHash: [32]byte{0x1}},
+		},
+		Validator: &v1.Validator{
+			Index:  phase0.ValidatorIndex(valIdx),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key/withdrawal addresses
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+	state.HandleManualUnsubscriptions([]Unsubscription{unsub})
+	require.Equal(t, 0, len(state.Validators))
+}
+
+func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
+	// An unsubscription for a subscribed validator is received, but the sender is not the
+	// withdrawal address of that validator. Nothing happens to this validator
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	// Simulate subscription of validator 750100
+	valIndex := uint64(750100)
+	state.Validators[valIndex] = &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(5000000000000000000),
+		PendingRewardsWei:       big.NewInt(3000000000000000000),
+		CollateralWei:           big.NewInt(1000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          valIndex,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}
+
+	unsub := Unsubscription{
+		Event: &contract.ContractUnsuscribeValidator{
+			ValidatorID: uint32(valIndex), // TODO: Set to uint64 when smart contract is fixed
+			// Wrong sender address (see WithdrawalCredentials)
+			Sender: common.Address{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			Raw:    types.Log{TxHash: [32]byte{0x1}},
+		},
+		Validator: &v1.Validator{
+			Index:  phase0.ValidatorIndex(valIndex),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key/withdrawal addresses
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+	state.HandleManualUnsubscriptions([]Unsubscription{unsub})
+
+	// Validator remains intact, since unsubscription event was wrong
+	require.Equal(t, &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(5000000000000000000),
+		PendingRewardsWei:       big.NewInt(3000000000000000000),
+		CollateralWei:           big.NewInt(1000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          valIndex,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}, state.Validators[valIndex])
+}
+
+func Test_Unsubscribe_AndRejoin(t *testing.T) {
+	// A validator subscribes, the unsubscribes and the rejoins. Check that its accumulated balances
+	// are kept, and that it can rejoin succesfully.
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(500000),
+	})
+
+	// Simulate subscription of validator 750100
+	valIndex := uint64(750100)
+	state.Validators[valIndex] = &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(0),
+		PendingRewardsWei:       big.NewInt(0),
+		CollateralWei:           big.NewInt(500000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          valIndex,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}
+
+	// Add some rewards
+	state.IncreaseValidatorAccumulatedRewards(valIndex, big.NewInt(1000000000000000000))
+	state.IncreaseValidatorPendingRewards(valIndex, big.NewInt(5000000000000000000))
+
+	// Now it unsubscribes ok
+	unsub := Unsubscription{
+		Event: &contract.ContractUnsuscribeValidator{
+			ValidatorID: uint32(valIndex), // TODO: Set to uint64 when smart contract is fixed
+			// Wrong sender address (see WithdrawalCredentials)
+			Sender: common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			Raw:    types.Log{TxHash: [32]byte{0x1}},
+		},
+		Validator: &v1.Validator{
+			Index:  phase0.ValidatorIndex(valIndex),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key addresses
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+	state.HandleManualUnsubscriptions([]Unsubscription{unsub})
+
+	// Unsubscription is ok
+	require.Equal(t, &ValidatorInfo{
+		ValidatorStatus:         NotSubscribed,
+		AccumulatedRewardsWei:   big.NewInt(1000000000000000000),
+		PendingRewardsWei:       big.NewInt(0),
+		CollateralWei:           big.NewInt(500000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          valIndex,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}, state.Validators[valIndex])
+
+	// Now the same validator tries to rejoin
+	sub := Subscription{
+		Event: &contract.ContractSuscribeValidator{
+			ValidatorID:           uint32(valIndex), // TODO: Remove cast once smart contract fixed
+			SuscriptionCollateral: big.NewInt(500000),
+			Raw:                   types.Log{TxHash: [32]byte{0x1}},
+			// TODO: Add sender address once smart contract is modified
+		},
+		Validator: &v1.Validator{
+			Index:  phase0.ValidatorIndex(valIndex),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+	state.HandleManualSubscriptions([]Subscription{sub})
+
+	// Its subscribed again with its old accumulated rewards
+	require.Equal(t, &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(1000000000000000000),
+		PendingRewardsWei:       big.NewInt(500000),
+		CollateralWei:           big.NewInt(500000),
+		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:          valIndex,
+		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}, state.Validators[valIndex])
+}
+
 func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 
 	state := NewOracleState(&config.Config{
@@ -64,87 +726,6 @@ func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 	require.Equal(t, big.NewInt(3333), state.Validators[2].PendingRewardsWei)
 	require.Equal(t, big.NewInt(3333), state.Validators[3].PendingRewardsWei)
 	require.Equal(t, big.NewInt(1), state.PoolAccumulatedFees)
-}
-
-func Test_HandleManualSubscriptions_Valid(t *testing.T) {
-	state := NewOracleState(&config.Config{
-		CollateralInWei: big.NewInt(1000),
-	})
-
-	sub1 := Subscription{
-		Event: &contract.ContractSuscribeValidator{
-			ValidatorID:           33,
-			SuscriptionCollateral: big.NewInt(1000),
-			Raw:                   types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
-		},
-		Validator: &v1.Validator{
-			Index:  33,
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// Valid eth1 address
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-		},
-	}
-
-	state.HandleManualSubscriptions([]Subscription{sub1})
-
-	// TODO: Asserts
-}
-
-func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
-	state := NewOracleState(&config.Config{
-		CollateralInWei: big.NewInt(1000),
-	})
-
-	sub1 := Subscription{
-		Event: &contract.ContractSuscribeValidator{
-			ValidatorID:           33,
-			SuscriptionCollateral: big.NewInt(1000),
-			Raw:                   types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
-		},
-		Validator: &v1.Validator{
-			Index:  33,
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// Valid eth1 address
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-		},
-	}
-
-	state.HandleManualSubscriptions([]Subscription{sub1, sub1})
-
-	// TODO: Asserts
-}
-
-func Test_HandleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
-	state := NewOracleState(&config.Config{
-		CollateralInWei: big.NewInt(1000),
-	})
-
-	sub1 := Subscription{
-		Event: &contract.ContractSuscribeValidator{
-			ValidatorID:           33,
-			SuscriptionCollateral: big.NewInt(1000),
-			Raw:                   types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
-		},
-		Validator: &v1.Validator{
-			Index:  33,
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// Valid eth1 address
-				WithdrawalCredentials: []byte{0, 120, 22, 197, 153, 67, 183, 29, 244, 168, 13, 66, 101, 227, 165, 250, 41, 86, 97, 10, 40, 91, 140, 65, 154, 102, 143, 67, 117, 255, 140, 254},
-			},
-		},
-	}
-
-	state.HandleManualSubscriptions([]Subscription{sub1})
-
-	// TODO: Asserts
 }
 
 func Test_IncreaseAllPendingRewards_2(t *testing.T) {
@@ -259,101 +840,6 @@ func Test_ConsolidateBalance_Eligible(t *testing.T) {
 
 	require.Equal(t, big.NewInt(100), state.Validators[10].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(0), state.Validators[10].PendingRewardsWei)
-}
-
-func Test_HandleManualUnsubscriptions(t *testing.T) {
-	// TODO: unsubscribe and rejoin?
-	state := NewOracleState(&config.Config{})
-
-	// Two validators
-	state.AddSubscriptionIfNotAlready(10, "0x1000000000000000000000000000000000000000", "0x_key_10")
-	state.AddSubscriptionIfNotAlready(20, "0x2000000000000000000000000000000000000000", "0x_key_20")
-
-	// 10 proposes a block
-	block1 := Block{
-		Slot:           0,
-		ValidatorIndex: 10,
-		ValidatorKey:   "0x",
-		Reward:         big.NewInt(50000000),
-		RewardType:     VanilaBlock,
-		DepositAddress: "0x1000000000000000000000000000000000000000",
-	}
-	state.HandleCorrectBlockProposal(block1)
-
-	// 20 proposes a block
-	block2 := Block{
-		Slot:           0,
-		ValidatorIndex: 20,
-		ValidatorKey:   "0x",
-		Reward:         big.NewInt(90000000),
-		RewardType:     VanilaBlock,
-		DepositAddress: "0x2000000000000000000000000000000000000000",
-	}
-	state.HandleCorrectBlockProposal(block2)
-
-	require.Equal(t, big.NewInt(45000000), state.Validators[10].PendingRewardsWei)
-	require.Equal(t, big.NewInt(25000000), state.Validators[10].AccumulatedRewardsWei)
-
-	require.Equal(t, big.NewInt(0), state.Validators[20].PendingRewardsWei)
-	require.Equal(t, big.NewInt(70000000), state.Validators[20].AccumulatedRewardsWei)
-	/*
-
-		// 10 unsubscribed from the pool
-		state.HandleManualUnsubscriptions([]Unsubscription{
-			{
-				ValidatorIndex: 10,
-				ValidatorKey:   "0x_key_10",
-				Sender:         "0x1000000000000000000000000000000000000000",
-				BlockNumber:    0,
-				TxHash:         "",
-				DepositAddress: "0x1000000000000000000000000000000000000000",
-			},
-		})
-
-		// Pending are resetted, accumulated remains the same
-		require.Equal(t, big.NewInt(0), state.Validators[10].PendingRewardsWei)
-		require.Equal(t, big.NewInt(25000000), state.Validators[10].AccumulatedRewardsWei)
-
-		// The unsubscribed validator is still tracked
-		require.Equal(t, NotSubscribed, state.Validators[10].ValidatorStatus)
-
-		// The other validator gets all the pending rewards, acc remain unchanged.
-		require.Equal(t, big.NewInt(45000000), state.Validators[20].PendingRewardsWei)
-		require.Equal(t, big.NewInt(70000000), state.Validators[20].AccumulatedRewardsWei)
-
-		// Unsubscriptions that do not match and are not tracked
-		state.HandleManualUnsubscriptions([]Unsubscription{
-			{
-				ValidatorIndex: 50,
-				ValidatorKey:   "0x_key_10",
-				Sender:         "0xffffffffffffffffffffffffffffffffffffffff",
-				BlockNumber:    0,
-				TxHash:         "",
-				DepositAddress: "0x1000000000000000000000000000000000000000",
-			},
-			{
-				ValidatorIndex: 60,
-				ValidatorKey:   "0x_key_10",
-				Sender:         "0xffffffffffffffffffffffffffffffffffffffff",
-				BlockNumber:    0,
-				TxHash:         "",
-				DepositAddress: "0x1000000000000000000000000000000000000000",
-			},
-		})
-
-		// Nothing changed
-
-		// Pending are resetted, accumulated remains the same
-		require.Equal(t, big.NewInt(0), state.Validators[10].PendingRewardsWei)
-		require.Equal(t, big.NewInt(25000000), state.Validators[10].AccumulatedRewardsWei)
-
-		// The unsubscribed validator is still tracked
-		require.Equal(t, NotSubscribed, state.Validators[10].ValidatorStatus)
-
-		// The other validator gets all the pending rewards, acc remain unchanged.
-		require.Equal(t, big.NewInt(45000000), state.Validators[20].PendingRewardsWei)
-		require.Equal(t, big.NewInt(70000000), state.Validators[20].AccumulatedRewardsWei)
-	*/
 }
 
 func Test_StateMachine(t *testing.T) {

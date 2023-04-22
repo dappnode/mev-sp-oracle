@@ -380,11 +380,6 @@ func (state *OracleState) HandleManualSubscriptions(
 		sender := "0x" // TODO: Will be provided by contract
 		_ = sender
 
-		if valIdx != uint64(sub.Validator.Index) {
-			log.Fatal("Subscription event validator index doesnt match the validator index. ",
-				valIdx, " vs ", sub.Validator.Index)
-		}
-
 		// Subscription recevied for a validator index that doesnt exist
 		if sub.Validator == nil {
 			log.WithFields(log.Fields{
@@ -396,6 +391,11 @@ func (state *OracleState) HandleManualSubscriptions(
 			// Fees go to the pool, as we dont know who is the sender
 			state.SendRewardToPool(collateral)
 			continue
+		}
+
+		if valIdx != uint64(sub.Validator.Index) {
+			log.Fatal("Subscription event validator index doesnt match the validator index. ",
+				valIdx, " vs ", sub.Validator.Index)
 		}
 
 		// Subscription received for a validator that cannot subscribe (see states)
@@ -429,7 +429,7 @@ func (state *OracleState) HandleManualSubscriptions(
 
 		// TODO: Enable this when smart contract is changed
 		// Subscription received from an address that is not the validator withdrawal address
-		/*if AreAddressEqual(sender, validatorWithdrawal) {
+		/*if !AreAddressEqual(sender, validatorWithdrawal) {
 			log.WithFields(log.Fields{
 				"BlockNumber":         sub.Event.Raw.BlockNumber,
 				"Collateral":          sub.Event.SuscriptionCollateral,
@@ -555,11 +555,6 @@ func (state *OracleState) HandleManualUnsubscriptions(
 		valIdx := uint64(unsub.Event.ValidatorID) // TODO: should be uint64 in the contract
 		sender := unsub.Event.Sender.String()
 
-		if valIdx != uint64(unsub.Validator.Index) {
-			log.Fatal("Unsubscription event validator index doesnt match the validator index. ",
-				valIdx, " vs ", unsub.Validator.Index)
-		}
-
 		// Unsubscription but for a validator that doesnt exist
 		if unsub.Validator == nil {
 			log.WithFields(log.Fields{
@@ -569,6 +564,11 @@ func (state *OracleState) HandleManualUnsubscriptions(
 				"ValidatorIndex": valIdx,
 			}).Warn("[Unsubscription]: for validator index that does not exist, skipping")
 			continue
+		}
+
+		if valIdx != uint64(unsub.Validator.Index) {
+			log.Fatal("Unsubscription event validator index doesnt match the validator index. ",
+				valIdx, " vs ", unsub.Validator.Index)
 		}
 
 		// Unsubscription but for a validator that does not have an eth1 address. Should never happen
@@ -585,7 +585,7 @@ func (state *OracleState) HandleManualUnsubscriptions(
 
 		// Its very important to check that the unsubscription was made from the deposit address
 		// of the validator, otherwise anyone could call the unsubscription function.
-		if AreAddressEqual(sender, withdrawalAddress) {
+		if !AreAddressEqual(sender, withdrawalAddress) {
 			log.WithFields(log.Fields{
 				"BlockNumber":      unsub.Event.Raw.BlockNumber,
 				"TxHash":           unsub.Event.Raw.TxHash,
@@ -608,6 +608,17 @@ func (state *OracleState) HandleManualUnsubscriptions(
 				"WithdrawaAddress": withdrawalAddress,
 				"Sender":           sender,
 			}).Info("[Unsubscription] Validator unsubscribed ok")
+			continue
+		}
+
+		if !state.IsSubscribed(valIdx) {
+			log.WithFields(log.Fields{
+				"BlockNumber":      unsub.Event.Raw.BlockNumber,
+				"TxHash":           unsub.Event.Raw.TxHash,
+				"ValidatorIndex":   valIdx,
+				"WithdrawaAddress": withdrawalAddress,
+				"Sender":           sender,
+			}).Warn("[Unsubscription] but the validator is not subscribed, skipping")
 			continue
 		}
 
@@ -890,7 +901,7 @@ func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
 	// -ValidatorStatePendingInitialized
 	// -ValidatorStatePendingQueued
 	// -ValidatorStateActiveOngoing
-	return true
+	return false
 }
 
 // TODO: Remove this and get the merkle tree from somewhere else. See stored state
