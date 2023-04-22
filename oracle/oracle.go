@@ -33,6 +33,11 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	blockUnsubs []Unsubscription,
 	blockDonations []Donation) (uint64, error) {
 
+	if or.State.NextSlotToProcess != (or.State.LatestProcessedSlot + 1) {
+		log.Fatal("Next slot to process is not the last processed slot + 1",
+			or.State.NextSlotToProcess, " ", or.State.LatestProcessedSlot)
+	}
+
 	err := or.validateParameters(blockPool, blockSubs, blockUnsubs, blockDonations)
 	if err != nil {
 		return 0, err
@@ -73,8 +78,9 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	// Handle the donations from this block
 	or.State.HandleDonations(blockDonations)
 
-	processedSlot := or.State.LatestSlot
-	or.State.LatestSlot = or.State.LatestSlot + 1
+	processedSlot := or.State.NextSlotToProcess
+	or.State.LatestProcessedSlot = processedSlot
+	or.State.NextSlotToProcess++
 	return processedSlot, nil
 }
 
@@ -84,9 +90,9 @@ func (or *Oracle) validateParameters(
 	blockUnsubs []Unsubscription,
 	blockDonations []Donation) error {
 
-	if blockPool.Slot != or.State.LatestSlot {
+	if blockPool.Slot != or.State.NextSlotToProcess {
 		return errors.New(fmt.Sprint("Slot of blockPool is not the same as the latest slot of the oracle. BlockPool: ",
-			blockPool.Slot, " Oracle: ", or.State.LatestSlot))
+			blockPool.Slot, " Oracle: ", or.State.NextSlotToProcess))
 	}
 
 	// TODO: Add more validators to block subs unsubs, donations, etc

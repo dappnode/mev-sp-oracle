@@ -328,8 +328,8 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		TotalRedCard:               totalRedCard,
 		TotalBanned:                totalBanned,
 		TotalNotSubscribed:         totalNotSubscribed,
-		LatestCheckpointSlot:       m.oracle.State.LatestSlot,                                       // This is wrong. TODO: convert date
-		NextCheckpointSlot:         m.oracle.State.LatestSlot + m.Onchain.Cfg.CheckPointSizeInSlots, // TODO: Also wrong. convert to date
+		LatestCheckpointSlot:       m.oracle.State.LatestProcessedSlot,                                       // This is wrong. TODO: convert date
+		NextCheckpointSlot:         m.oracle.State.LatestProcessedSlot + m.Onchain.Cfg.CheckPointSizeInSlots, // TODO: Also wrong. convert to date
 		TotalAccumulatedRewardsWei: totalAccumulatedRewards,
 		TotalPendingRewaradsWei:    totalPendingRewards,
 		TotalRewardsSentWei:        totalRewardsSentWei,
@@ -386,9 +386,9 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	status := httpOkStatus{
 		IsConsensusInSync:         consInSync,
 		IsExecutionInSync:         execInSync,
-		OracleLatestProcessedSlot: m.oracle.State.LatestSlot,
+		OracleLatestProcessedSlot: m.oracle.State.LatestProcessedSlot,
 		ChainFinalizedSlot:        finalizedSlot,
-		OracleHeadDistance:        finalizedSlot - m.oracle.State.LatestSlot,
+		OracleHeadDistance:        finalizedSlot - m.oracle.State.LatestProcessedSlot,
 		ChainId:                   chainId.String(),
 		DepositContact:            depositContract.String(),
 	}

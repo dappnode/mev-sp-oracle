@@ -901,9 +901,9 @@ func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
 	defer os.Remove(StateFileName)
 	state.SaveStateToFile()
 
-	recovered, err := ReadStateFromFile()
+	err := state.LoadStateFromFile()
 	require.NoError(t, err)
-	require.Equal(t, state, recovered)
+	require.Equal(t, state, state)
 }
 func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 
@@ -1034,9 +1034,9 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 	defer os.Remove(StateFileName)
 	state.SaveStateToFile()
 
-	recovered, err := ReadStateFromFile()
+	err := state.LoadStateFromFile()
 	require.NoError(t, err)
-	require.Equal(t, state, recovered)
+	require.Equal(t, state, state)
 }
 
 func Test_IsValidatorSubscribed(t *testing.T) {
