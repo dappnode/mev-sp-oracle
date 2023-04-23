@@ -3,6 +3,7 @@ package oracle
 import (
 	"math/big"
 	"os"
+	"path/filepath"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -88,6 +89,8 @@ func Test_HandleManualSubscriptions_Valid(t *testing.T) {
 		ValidatorWrongFeeBlocks: []Block{},
 	})
 	require.Equal(t, 1, len(state.Validators))
+	require.Equal(t, 1, len(state.Subscriptions))
+	require.Equal(t, sub1, state.Subscriptions[0])
 }
 
 func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
@@ -419,6 +422,8 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 		ValidatorWrongFeeBlocks: []Block{},
 	})
 	require.Equal(t, 4, len(state.Validators))
+	require.Equal(t, 1, len(state.Unsubscriptions))
+	require.Equal(t, unsub, state.Unsubscriptions[0])
 
 	// The rest get the pending of valIndex=6
 	require.Equal(t, state.Validators[9].PendingRewardsWei, big.NewInt(300000000000000000+300000000000000000/3))
@@ -951,9 +956,9 @@ func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
 		Network:         "mainnet",
 	})
 
-	StateFileName = "test_state.gob"
-	defer os.Remove(StateFileName)
 	state.SaveStateToFile()
+	defer os.Remove(filepath.Join(StateFileName, StateFolder))
+	defer os.RemoveAll(StateFolder)
 
 	err := state.LoadStateFromFile()
 	require.NoError(t, err)
@@ -1084,8 +1089,8 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 		}},
 	}
 
-	StateFileName = "test_state.gob"
-	defer os.Remove(StateFileName)
+	defer os.Remove(filepath.Join(StateFileName, StateFolder))
+	defer os.RemoveAll(StateFolder)
 	state.SaveStateToFile()
 
 	err := state.LoadStateFromFile()

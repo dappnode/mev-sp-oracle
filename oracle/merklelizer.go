@@ -176,7 +176,6 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 			"AccumulatedBalance": leaf.AccumulatedBalance,
 			"LeafHash":           hex.EncodeToString(leafHash),
 		}).Info("Leaf information")
-
 	}
 
 	if len(blocks) < 2 {

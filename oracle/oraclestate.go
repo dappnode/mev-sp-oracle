@@ -147,8 +147,8 @@ type OracleState struct {
 	PoolFeesAddress     string
 	PoolAccumulatedFees *big.Int
 
-	Subscriptions   []Subscription   // TODO: Populate (unsure if needed). Perhaps add just the event here
-	Unsubscriptions []Unsubscription // TODO: Populate (unsure if needed). Perhaps add just the event here
+	Subscriptions   []Subscription
+	Unsubscriptions []Unsubscription
 	Donations       []Donation
 	ProposedBlocks  []Block
 	MissedBlocks    []Block
@@ -170,8 +170,8 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		PoolFeesAddress:     cfg.PoolFeesAddress,
 		PoolAccumulatedFees: big.NewInt(0),
 
-		Subscriptions:   make([]Subscription, 0),   // TODO: Populate
-		Unsubscriptions: make([]Unsubscription, 0), // TODO: Populate
+		Subscriptions:   make([]Subscription, 0),
+		Unsubscriptions: make([]Unsubscription, 0),
 		Donations:       make([]Donation, 0),
 		ProposedBlocks:  make([]Block, 0),
 		MissedBlocks:    make([]Block, 0),
@@ -289,8 +289,6 @@ func (state *OracleState) LoadStateFromFile() error {
 // Returns false if there wasnt enough data to create a merkle tree
 func (state *OracleState) StoreLatestOnchainState() bool {
 
-	log.Info("Freezing Validators state")
-
 	// Quick way of coping the whole state
 	validatorsCopy := make(map[uint64]*ValidatorInfo)
 	for k2, v2 := range state.Validators {
@@ -304,7 +302,11 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 		return false
 	}
 	merkleRootStr := hex.EncodeToString(tree.Root)
-	log.Info("Merkle root: ", merkleRootStr)
+
+	log.WithFields(log.Fields{
+		"LatestProcessedSlot": state.LatestProcessedSlot,
+		"MerkleRoot":          merkleRootStr,
+	}).Info("Freezing state")
 
 	// Merkle proofs for each deposit address
 	proofs := make(map[string][]string)
@@ -545,6 +547,7 @@ func (state *OracleState) HandleManualSubscriptions(
 			}).Info("[Subscription]: Validator subscribed ok")
 			state.IncreaseValidatorPendingRewards(valIdx, collateral)
 			state.AdvanceStateMachine(valIdx, ManualSubscription)
+			state.Subscriptions = append(state.Subscriptions, sub)
 			continue
 		}
 
@@ -634,6 +637,7 @@ func (state *OracleState) HandleManualUnsubscriptions(
 			state.AdvanceStateMachine(valIdx, Unsubscribe)
 			state.IncreaseAllPendingRewards(state.Validators[valIdx].PendingRewardsWei)
 			state.ResetPendingRewards(valIdx)
+			state.Unsubscriptions = append(state.Unsubscriptions, unsub)
 			log.WithFields(log.Fields{
 				"BlockNumber":      unsub.Event.Raw.BlockNumber,
 				"TxHash":           unsub.Event.Raw.TxHash,
@@ -944,7 +948,6 @@ func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 		return "", enoughData
 	}
 	merkleRootStr := hex.EncodeToString(tree.Root)
-	log.Info("Merkle root: ", merkleRootStr)
 
 	return merkleRootStr, true
 }
