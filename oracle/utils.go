@@ -175,3 +175,27 @@ func AreAddressEqual(address1 string, address2 string) bool {
 	}
 	return false
 }
+
+// TODO: Rename withdrawal
+func GetUniqueDepositFromState(state *OracleState) []string {
+	var uniqueDepositAdd []string
+
+	// Iterate all validators
+	for _, validator := range state.Validators {
+		skip := false
+		// Iterate all unique deposit addresses processed before
+		for _, u := range uniqueDepositAdd {
+			// If the deposit address is already in the list, skip it
+			if validator.DepositAddress == u {
+				skip = true
+				break
+			}
+		}
+		// Not found, add it
+		if !skip {
+			uniqueDepositAdd = append(uniqueDepositAdd, validator.DepositAddress)
+		}
+	}
+
+	return uniqueDepositAdd
+}

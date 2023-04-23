@@ -72,6 +72,7 @@ const (
 
 // Represents a block with information relevant for the pool
 type Block struct {
+	Block          uint64     `json:"block"`
 	Slot           uint64     `json:"slot"`
 	ValidatorIndex uint64     `json:"validator_index"`
 	ValidatorKey   string     `json:"validator_key"`
@@ -937,6 +938,54 @@ func (state *OracleState) LogBalances() {
 			"AccumulatedRewards":  validator.AccumulatedRewardsWei,
 		}).Info("Validator balances")
 	}
+}
+
+// Asserts that the amount the oracle owes to validators and fee address, matches
+// with the amount the oracle has in its balance (smart contract)
+func (state *OracleState) RunReconciliaton(
+	prevClaimsDepAdd map[string]*big.Int,
+	poolBalance *big.Int) {
+
+	// We calculate:
+	// 1. what we owe: total pending + accumulated rewards for all vlaidators + pool fees.
+	// to this we have to substract the amount that each deposit address alredy claimed
+	// 2. what we have: the amount in the smart contract
+
+	// both amount have to match at any time, asssuming we run this on finalized
+	// on the same slots (finalized epochs)
+
+	// What we owe (1/2)
+	totalCumulativeRewards := big.NewInt(0)
+	for _, val := range state.Validators {
+		totalCumulativeRewards.Add(totalCumulativeRewards, val.AccumulatedRewardsWei)
+		totalCumulativeRewards.Add(totalCumulativeRewards, val.PendingRewardsWei)
+	}
+	totalCumulativeRewards.Add(totalCumulativeRewards, state.PoolAccumulatedFees)
+
+	log.Info("[Reconciliation] Total amount of accumulated + pending rewards: ", totalCumulativeRewards)
+
+	// What we owe (2/2)
+	totalAlreadyClaimed := big.NewInt(0)
+	for _, claimed := range prevClaimsDepAdd {
+		totalAlreadyClaimed.Add(totalAlreadyClaimed, claimed)
+	}
+
+	log.Info("[Reconciliation] Total amount already claimed by all addresses: ", totalAlreadyClaimed)
+
+	// What we really owe (total - already_claimed)
+	totalLiabilities := big.NewInt(0).Sub(totalCumulativeRewards, totalAlreadyClaimed)
+
+	log.Info("[Reconciliation] Total net liabilities (what we owe): ", totalLiabilities)
+
+	log.Info("[Reconciliation] Total pool balance (what we have): ", poolBalance)
+
+	if totalLiabilities.Cmp(poolBalance) != 0 {
+		log.Fatal("[Reconciliation] Liabilities and balance dont match: ",
+			totalLiabilities, " vs ", poolBalance)
+	}
+
+	log.Info("[Reconciliation] Success! Liabilities and balance match: ", totalLiabilities, " vs ", poolBalance)
+
 }
 
 // TODO: Remove this and get the merkle tree from somewhere else. See stored state

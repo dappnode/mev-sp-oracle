@@ -420,14 +420,17 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 	return blockUnsubscriptions, nil
 }
 
+// TODO: Only in finalized slots!
 func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	var rewardsRootStr string
+	var err error
+	var rewardsRoot [32]byte
 
 	// Retries multiple times before errorings
-	err := retry.Do(
+	err = retry.Do(
 		func() error {
 			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
-			rewardsRoot, err := o.Contract.RewardsRoot(callOpts)
+			rewardsRoot, err = o.Contract.RewardsRoot(callOpts)
 			if err != nil {
 				log.Warn("Failed attempt to get merkle root from contract: ", err.Error(), " Retrying...")
 				return errors.New("could not get rewards root from contract: " + err.Error())
@@ -443,8 +446,7 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	return rewardsRootStr, nil
 }
 
-// TODO: Only in finalized slots!
-func (o *Onchain) GetContractClaimedBalance(depositAddress string, opts ...retry.Option) (*big.Int, error) {
+func (o *Onchain) GetContractClaimedBalance(depositAddress string, finalizedBlock uint64, opts ...retry.Option) (*big.Int, error) {
 	var claimedBalance *big.Int
 	var err error
 
@@ -457,12 +459,11 @@ func (o *Onchain) GetContractClaimedBalance(depositAddress string, opts ...retry
 	// Retries multiple times before errorings
 	err = retry.Do(
 		func() error {
-			// TODO: This should be performed in the last finalized slot for consistency
-			// Otherwise our local view and remote view can be different. See if it applies to other functions, like merkle tree.
-			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			// Important to use finalized blocks. Otherwise our local oracle view and onchain view may differ
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false, BlockNumber: big.NewInt(0).SetUint64(finalizedBlock)}
 			claimedBalance, err = o.Contract.ClaimedBalance(callOpts, hexDepAddres)
 			if err != nil {
-				log.Warn("Failed attempt to get claimed balance from contract: ", err.Error(), " Retrying...")
+				log.Warn("Failed attempt to get claimed balance from contract at block ", finalizedBlock, err.Error(), " Retrying...")
 				return errors.New("could not get claimed balance from contract: " + err.Error())
 			}
 			return nil
@@ -475,25 +476,26 @@ func (o *Onchain) GetContractClaimedBalance(depositAddress string, opts ...retry
 	return claimedBalance, nil
 }
 
-func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int, error) {
+func (o *Onchain) GetEthBalance(address string, finalizedBlock uint64, opts ...retry.Option) *big.Int {
 	account := common.HexToAddress(address)
 	var err error
 	var balanceWei *big.Int
 
 	err = retry.Do(func() error {
-		balanceWei, err = o.ExecutionClient.BalanceAt(context.Background(), account, nil)
+		balanceWei, err = o.ExecutionClient.BalanceAt(context.Background(), account, big.NewInt(0).SetUint64(finalizedBlock))
 		if err != nil {
-			log.Warn("Failed attempt to get balance for address ", address, ": ", err.Error(), " Retrying...")
+			log.Warn("Failed attempt to get balance for address ", address, " at block:", finalizedBlock,
+				" ", err.Error(), " Retrying...")
 			return errors.New("could not get balance for address " + address + ": " + err.Error())
 		}
 		return nil
 	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
-		return nil, errors.New("could not get balance for address " + address + ": " + err.Error())
+		log.Fatal("could not get balance for address " + address + ": " + err.Error())
 	}
 
-	return balanceWei, nil
+	return balanceWei
 }
 
 // Given a slot number, this function fetches all the information that the oracle need to process
@@ -548,6 +550,7 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 		// We populate the parameters of the pool block
 		poolBlock.Reward = reward
 		poolBlock.RewardType = rewardType
+		poolBlock.Block = extendedBlock.GetBlockNumber()
 
 		// And check if it contained a reward for the pool or not
 		if correctFeeRec {
@@ -586,6 +589,26 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 	blockDonations := extendedBlock.GetDonations(o.Cfg.PoolAddress)
 
 	return poolBlock, blockSubs, blockUnsubs, blockDonations
+}
+
+// Returns the claimed balance per deposit address for all tracked validators
+func (o *Onchain) GetClaimedPerWithdrawalAddress(state *OracleState, finalizedBlock uint64) map[string]*big.Int {
+	uniqueDepositAddresses := GetUniqueWithdrawalFromState(state)
+	claimedMap := make(map[string]*big.Int)
+
+	for _, depositAddress := range uniqueDepositAddresses {
+		// Important to use finalized blocks. Otherwise our local oracle view and onchain view may differ
+		claimed, err := o.GetContractClaimedBalance(depositAddress, finalizedBlock)
+		if err != nil {
+			log.Fatal("Could not get claimed balance for deposit address ", depositAddress, ": ", err.Error())
+		}
+		_, found := claimedMap[depositAddress]
+		if found {
+			log.Fatal("Duplicate deposit address found: ", depositAddress)
+		}
+		claimedMap[depositAddress] = claimed
+	}
+	return claimedMap
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {

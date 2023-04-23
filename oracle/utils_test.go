@@ -6,6 +6,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -160,4 +161,59 @@ func Test_WithdrawalCredentials(t *testing.T) {
 
 func Test_AreAddressEqual(t *testing.T) {
 	require.Equal(t, true, AreAddressEqual("0x0000", "0x0000"))
+}
+
+func Test_GetUniqueDepositFromState(t *testing.T) {
+	state1 := NewOracleState(&config.Config{
+		PoolFeesPercent: 0,
+		PoolFeesAddress: "0x",
+	})
+
+	// Subscribe 3 validators with no balance
+	state1.AddSubscriptionIfNotAlready(1, "0xa", "0x")
+	state1.AddSubscriptionIfNotAlready(2, "0xa", "0x")
+	state1.AddSubscriptionIfNotAlready(3, "0xa", "0x")
+	state1.AddSubscriptionIfNotAlready(4, "0xb", "0x")
+	state1.AddSubscriptionIfNotAlready(5, "0xc", "0x")
+
+	unique1 := GetUniqueDepositFromState(state1)
+	require.Equal(t, 3, len(unique1))
+	require.ElementsMatch(t, []string{"0xa", "0xb", "0xc"}, unique1)
+
+	state2 := NewOracleState(&config.Config{
+		PoolFeesPercent: 0,
+		PoolFeesAddress: "0x",
+	})
+
+	// Subscribe 3 validators with no balance
+	state2.AddSubscriptionIfNotAlready(1, "0xa", "0x")
+	state2.AddSubscriptionIfNotAlready(2, "0xa", "0x")
+	state2.AddSubscriptionIfNotAlready(3, "0xa", "0x")
+	state2.AddSubscriptionIfNotAlready(4, "0xb", "0x")
+	state2.AddSubscriptionIfNotAlready(5, "0xb", "0x")
+	state2.AddSubscriptionIfNotAlready(6, "0x", "0x")
+	state2.AddSubscriptionIfNotAlready(7, "0x", "0x")
+	state2.AddSubscriptionIfNotAlready(8, "0xabcde", "0x")
+	state2.AddSubscriptionIfNotAlready(9, "0xabcde", "0x")
+	state2.AddSubscriptionIfNotAlready(9, "0x", "0x")
+
+	unique2 := GetUniqueDepositFromState(state2)
+	require.Equal(t, 4, len(unique2))
+	require.ElementsMatch(t, []string{"0xa", "0xb", "0x", "0xabcde"}, unique2)
+
+	state3 := NewOracleState(&config.Config{
+		PoolFeesPercent: 0,
+		PoolFeesAddress: "0x",
+	})
+
+	// Subscribe 3 validators with no balance
+	state3.AddSubscriptionIfNotAlready(1, "0x1", "0x")
+	state3.AddSubscriptionIfNotAlready(2, "0x1", "0x")
+	state3.AddSubscriptionIfNotAlready(3, "0x1", "0x")
+	state3.AddSubscriptionIfNotAlready(4, "0x1", "0x")
+	state3.AddSubscriptionIfNotAlready(5, "0x1", "0x")
+
+	unique3 := GetUniqueDepositFromState(state3)
+	require.Equal(t, 1, len(unique3))
+	require.ElementsMatch(t, []string{"0x1"}, unique3)
 }

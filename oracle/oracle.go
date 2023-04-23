@@ -70,6 +70,7 @@ func (or *Oracle) AdvanceStateToNextSlot(
 		if blockPool.BlockType == WrongFeeRecipient && or.State.IsSubscribed(blockPool.ValidatorIndex) {
 			or.State.HandleBanValidator(blockPool)
 		}
+		or.State.LatestProcessedBlock = blockPool.Block
 	}
 
 	// Handle unsubscriptions the last thing after distributing rewards
@@ -95,6 +96,24 @@ func (or *Oracle) validateParameters(
 			blockPool.Slot, " Oracle: ", or.State.NextSlotToProcess))
 	}
 
-	// TODO: Add more validators to block subs unsubs, donations, etc
+	if blockPool.BlockType != MissedProposal {
+		block := blockPool.Block
+		for _, sub := range blockSubs {
+			if sub.Event.Raw.BlockNumber != block {
+				log.Fatal("block number from block does not match block number from subscription: ", block, " ", sub.Event.Raw.BlockNumber)
+			}
+		}
+		for _, unsub := range blockUnsubs {
+			if unsub.Event.Raw.BlockNumber != block {
+				log.Fatal("block number from block does not match block number from unsubscription: ", block, " ", unsub.Event.Raw.BlockNumber)
+			}
+		}
+		for _, don := range blockDonations {
+			if don.Block != block {
+				log.Fatal("block number from block does not match block number from donation: ", block, " ", don.Block)
+			}
+		}
+	}
+
 	return nil
 }

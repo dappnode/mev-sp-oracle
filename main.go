@@ -120,8 +120,26 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			_ = processedSlot
 			_ = slotToLatestFinalized
 
+			RunReconciliationIntervalBlocks := uint64(5)
+
+			// Run reconciliation every x blocks (finalized)
+			if poolBlock.BlockType != oracle.MissedProposal {
+				if poolBlock.Block%RunReconciliationIntervalBlocks == 0 {
+
+					// Get onchain data
+					poolBalance := onchain.GetEthBalance(cfg.PoolAddress, poolBlock.Block)
+					previousClaimsPerDeposit := onchain.GetClaimedPerDepositAddress(oracleInstance.State, poolBlock.Block) // TODO: Rename withdrawal
+
+					// Run reconciliation
+					oracleInstance.State.RunReconciliaton(previousClaimsPerDeposit, poolBalance)
+				}
+
+			}
+
 			// Do not log progress every slot, it is too much. See api for progress
 			// Log progress every x slots when syncing
+			//log.Info("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
+			//	slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
 			/*logEverySlots := uint64(300)
 			if finalizedSlot%logEverySlots == 0 {
 				log.Info("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
