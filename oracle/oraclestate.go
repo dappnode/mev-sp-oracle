@@ -136,7 +136,8 @@ type OnchainState struct {
 }
 
 type OracleState struct {
-	LatestSlot          uint64
+	LatestProcessedSlot uint64
+	NextSlotToProcess   uint64
 	Network             string
 	PoolAddress         string
 	Validators          map[uint64]*ValidatorInfo
@@ -146,8 +147,8 @@ type OracleState struct {
 	PoolFeesAddress     string
 	PoolAccumulatedFees *big.Int
 
-	Subscriptions   []Subscription   // TODO: Populate (unsure if needed)
-	Unsubscriptions []Unsubscription // TODO: Populate (unsure if needed)
+	Subscriptions   []Subscription
+	Unsubscriptions []Unsubscription
 	Donations       []Donation
 	ProposedBlocks  []Block
 	MissedBlocks    []Block
@@ -156,7 +157,30 @@ type OracleState struct {
 	Config *config.Config
 }
 
-func (p *OracleState) SaveStateToFile() {
+func NewOracleState(cfg *config.Config) *OracleState {
+	return &OracleState{
+		LatestProcessedSlot: cfg.DeployedSlot - 1,
+		NextSlotToProcess:   cfg.DeployedSlot,
+		Network:             cfg.Network,
+		PoolAddress:         cfg.PoolAddress,
+
+		Validators: make(map[uint64]*ValidatorInfo, 0),
+
+		PoolFeesPercent:     cfg.PoolFeesPercent,
+		PoolFeesAddress:     cfg.PoolFeesAddress,
+		PoolAccumulatedFees: big.NewInt(0),
+
+		Subscriptions:   make([]Subscription, 0),
+		Unsubscriptions: make([]Unsubscription, 0),
+		Donations:       make([]Donation, 0),
+		ProposedBlocks:  make([]Block, 0),
+		MissedBlocks:    make([]Block, 0),
+		WrongFeeBlocks:  make([]Block, 0),
+		Config:          cfg,
+	}
+}
+
+func (state *OracleState) SaveStateToFile() {
 	path := filepath.Join(StateFolder, StateFileName)
 	err := os.MkdirAll(StateFolder, os.ModePerm)
 	if err != nil {
@@ -174,20 +198,21 @@ func (p *OracleState) SaveStateToFile() {
 
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
-		"LatestSlot":      p.LatestSlot,
-		"TotalValidators": len(p.Validators),
-		"Network":         p.Network,
-		"PoolAddress":     p.PoolAddress,
-		"Path":            path,
+		"LatestProcessedSlot": state.LatestProcessedSlot,
+		"NextSlotToProcess":   state.NextSlotToProcess,
+		"TotalValidators":     len(state.Validators),
+		"Network":             state.Network,
+		"PoolAddress":         state.PoolAddress,
+		"Path":                path,
 		//"MerkleRoot":      mRoot,
 		//"EnoughData":      enoughData,
 	}).Info("Saving state to file")
-	encoder.Encode(p)
+	encoder.Encode(state)
 }
 
-func ReadStateFromFile() (*OracleState, error) {
+func (state *OracleState) LoadStateFromFile() error {
 	// Init all fields in case any was stored empty in the file
-	state := OracleState{
+	readState := OracleState{
 		Validators:          make(map[uint64]*ValidatorInfo, 0),
 		PoolAccumulatedFees: big.NewInt(0),
 		Subscriptions:       make([]Subscription, 0),
@@ -196,6 +221,7 @@ func ReadStateFromFile() (*OracleState, error) {
 		ProposedBlocks:      make([]Block, 0),
 		MissedBlocks:        make([]Block, 0),
 		WrongFeeBlocks:      make([]Block, 0),
+		Config:              &config.Config{},
 	}
 
 	// TODO: Run reconciliation here to ensure the state is correct
@@ -204,59 +230,64 @@ func ReadStateFromFile() (*OracleState, error) {
 	file, err := os.Open(path)
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	decoder := gob.NewDecoder(file)
-	err = decoder.Decode(&state)
+	err = decoder.Decode(&readState)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	mRoot, enoughData := state.GetMerkleRootIfAny()
+	if readState.Config.Network != state.Config.Network {
+		log.Fatal("Network mismatch. Expected: ", state.Config.Network, " Got: ", readState.Config.Network)
+	}
+
+	if readState.Config.PoolAddress != state.Config.PoolAddress {
+		log.Fatal("PoolAddress mismatch. Expected: ", state.Config.PoolAddress, " Got: ", readState.Config.PoolAddress)
+	}
+
+	if readState.Config.PoolFeesAddress != state.Config.PoolFeesAddress {
+		log.Fatal("PoolFeesAddress mismatch. Expected: ", state.Config.PoolFeesAddress, " Got: ", readState.Config.PoolFeesAddress)
+	}
+
+	if readState.Config.PoolFeesPercent != state.Config.PoolFeesPercent {
+		log.Fatal("PoolFeesPercent mismatch. Expected: ", state.Config.PoolFeesPercent, " Got: ", readState.Config.PoolFeesPercent)
+	}
+
+	mRoot, enoughData := readState.GetMerkleRootIfAny()
 
 	log.WithFields(log.Fields{
-		"Path":            path,
-		"LatestSlot":      state.LatestSlot,
-		"TotalValidators": len(state.Validators),
-		"Network":         state.Network,
-		"PoolAddress":     state.PoolAddress,
-		"MerkleRoot":      mRoot,
-		"EnoughData":      enoughData,
+		"Path":                path,
+		"LatestProcessedSlot": readState.LatestProcessedSlot,
+		"NextSlotToProcess":   readState.NextSlotToProcess,
+		"Network":             readState.Network,
+		"PoolAddress":         readState.PoolAddress,
+		"MerkleRoot":          mRoot,
+		"EnoughData":          enoughData,
 	}).Info("Loaded state from file")
 
-	return &state, nil
-}
+	state.LatestProcessedSlot = readState.LatestProcessedSlot
+	state.NextSlotToProcess = readState.NextSlotToProcess
+	//state.Network = readState.Network
+	//state.PoolAddress = readState.PoolAddress
+	state.Validators = readState.Validators
+	state.LatestCommitedState = readState.LatestCommitedState
+	state.PoolFeesPercent = readState.PoolFeesPercent
+	state.PoolFeesAddress = readState.PoolFeesAddress
+	state.PoolAccumulatedFees = readState.PoolAccumulatedFees
+	state.Subscriptions = readState.Subscriptions
+	state.Unsubscriptions = readState.Unsubscriptions
+	state.Donations = readState.Donations
+	state.ProposedBlocks = readState.ProposedBlocks
+	state.MissedBlocks = readState.MissedBlocks
+	state.WrongFeeBlocks = readState.WrongFeeBlocks
 
-func NewOracleState(cfg *config.Config) *OracleState {
-	return &OracleState{
-		// Start by default at the first slot when the oracle was deployed
-		LatestSlot: cfg.DeployedSlot, // TODO: Not sure if -1
-
-		// Onchain oracle info
-		Network:     cfg.Network,
-		PoolAddress: cfg.PoolAddress,
-
-		Validators: make(map[uint64]*ValidatorInfo, 0),
-
-		PoolFeesPercent:     cfg.PoolFeesPercent,
-		PoolFeesAddress:     cfg.PoolFeesAddress,
-		PoolAccumulatedFees: big.NewInt(0),
-
-		Subscriptions:   make([]Subscription, 0),   // TODO: Populate
-		Unsubscriptions: make([]Unsubscription, 0), // TODO: Populate
-		Donations:       make([]Donation, 0),
-		ProposedBlocks:  make([]Block, 0),
-		MissedBlocks:    make([]Block, 0),
-		WrongFeeBlocks:  make([]Block, 0),
-		Config:          cfg,
-	}
+	return nil
 }
 
 // Returns false if there wasnt enough data to create a merkle tree
 func (state *OracleState) StoreLatestOnchainState() bool {
-
-	log.Info("Freezing Validators state")
 
 	// Quick way of coping the whole state
 	validatorsCopy := make(map[uint64]*ValidatorInfo)
@@ -271,7 +302,11 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 		return false
 	}
 	merkleRootStr := hex.EncodeToString(tree.Root)
-	log.Info("Merkle root: ", merkleRootStr)
+
+	log.WithFields(log.Fields{
+		"LatestProcessedSlot": state.LatestProcessedSlot,
+		"MerkleRoot":          merkleRootStr,
+	}).Info("Freezing state")
 
 	// Merkle proofs for each deposit address
 	proofs := make(map[string][]string)
@@ -301,7 +336,7 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 		Validators: validatorsCopy,
 		//TxHash:     txHash, // TODO: Not sure if to store it
 		MerkleRoot: merkleRootStr,
-		Slot:       state.LatestSlot,
+		Slot:       state.LatestProcessedSlot,
 		Proofs:     proofs,
 		Leafs:      leafs,
 	}
@@ -512,6 +547,7 @@ func (state *OracleState) HandleManualSubscriptions(
 			}).Info("[Subscription]: Validator subscribed ok")
 			state.IncreaseValidatorPendingRewards(valIdx, collateral)
 			state.AdvanceStateMachine(valIdx, ManualSubscription)
+			state.Subscriptions = append(state.Subscriptions, sub)
 			continue
 		}
 
@@ -601,6 +637,7 @@ func (state *OracleState) HandleManualUnsubscriptions(
 			state.AdvanceStateMachine(valIdx, Unsubscribe)
 			state.IncreaseAllPendingRewards(state.Validators[valIdx].PendingRewardsWei)
 			state.ResetPendingRewards(valIdx)
+			state.Unsubscriptions = append(state.Unsubscriptions, unsub)
 			log.WithFields(log.Fields{
 				"BlockNumber":      unsub.Event.Raw.BlockNumber,
 				"TxHash":           unsub.Event.Raw.TxHash,
@@ -727,33 +764,20 @@ func (state *OracleState) IncreaseAllPendingRewards(
 	}
 }
 
-// TODO: unit test
 func (state *OracleState) IncreaseValidatorPendingRewards(valIndex uint64, reward *big.Int) {
 	state.Validators[valIndex].PendingRewardsWei.Add(state.Validators[valIndex].PendingRewardsWei, reward)
 }
 
-// TODO: unit test
 func (state *OracleState) IncreaseValidatorAccumulatedRewards(valIndex uint64, reward *big.Int) {
 	state.Validators[valIndex].AccumulatedRewardsWei.Add(state.Validators[valIndex].AccumulatedRewardsWei, reward)
 }
 
-// TODO: unit test
 func (state *OracleState) SendRewardToPool(reward *big.Int) {
 	state.PoolAccumulatedFees.Add(state.PoolAccumulatedFees, reward)
 }
 
 func (state *OracleState) ResetPendingRewards(valIndex uint64) {
 	state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
-}
-
-func (state *OracleState) LogBalances() {
-	for valIndex, validator := range state.Validators {
-		log.Info(
-			"SlotState: ", state.LatestSlot,
-			" ValIndex: ", valIndex,
-			" Pending: ", validator.PendingRewardsWei,
-			" Accumulated: ", validator.AccumulatedRewardsWei)
-	}
 }
 
 // See the spec for state diagram with states and transitions. This tracks all the different
@@ -767,7 +791,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalOk",
 				"StateChange":    "Active -> Active",
 				"ValidatorIndex": valIndex,
-				"Slot":           state.LatestSlot,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case ProposalWrongFee:
@@ -775,7 +799,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalWrongFee",
 				"StateChange":    "Active -> Banned",
 				"ValidatorIndex": valIndex,
-				"Slot":           state.LatestSlot,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
@@ -783,7 +807,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalMissed",
 				"StateChange":    "Active -> YellowCard",
 				"ValidatorIndex": valIndex,
-				"Slot":           state.LatestSlot,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case Unsubscribe:
@@ -791,7 +815,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "Unsubscribe",
 				"StateChange":    "Active -> NotSubscribed",
 				"ValidatorIndex": valIndex,
-				"Slot":           state.LatestSlot,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -799,34 +823,34 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 		switch event {
 		case ProposalOk:
 			log.WithFields(log.Fields{
-				"Event":           "ProposalOk",
-				"StateChange":     "YellowCard -> Active",
-				"ValidatorIndex:": valIndex,
-				"Slot":            state.LatestSlot,
+				"Event":          "ProposalOk",
+				"StateChange":    "YellowCard -> Active",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case ProposalWrongFee:
 			log.WithFields(log.Fields{
-				"Event":           "ProposalWrongFee",
-				"StateChange":     "YellowCard -> Banned",
-				"ValidatorIndex:": valIndex,
-				"Slot":            state.LatestSlot,
+				"Event":          "ProposalWrongFee",
+				"StateChange":    "YellowCard -> Banned",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
 			log.WithFields(log.Fields{
-				"Event":           "ProposalMissed",
-				"StateChange":     "YellowCard -> RedCard",
-				"ValidatorIndex:": valIndex,
-				"Slot":            state.LatestSlot,
+				"Event":          "ProposalMissed",
+				"StateChange":    "YellowCard -> RedCard",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
 			log.WithFields(log.Fields{
-				"Event":           "Unsubscribe",
-				"StateChange":     "YellowCard -> NotSubscribed",
-				"ValidatorIndex:": valIndex,
-				"Slot":            state.LatestSlot,
+				"Event":          "Unsubscribe",
+				"StateChange":    "YellowCard -> NotSubscribed",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -834,34 +858,34 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 		switch event {
 		case ProposalOk:
 			log.WithFields(log.Fields{
-				"Event":           "ProposalOk",
-				"StateChange":     "RedCard -> YellowCard",
-				"ValidatorIndex:": valIndex,
-				"Slot":            state.LatestSlot,
+				"Event":          "ProposalOk",
+				"StateChange":    "RedCard -> YellowCard",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case ProposalWrongFee:
 			log.WithFields(log.Fields{
-				"Event":           "ProposalWrongFee",
-				"StateChange":     "RedCard -> Banned",
-				"ValidatorIndex:": valIndex,
-				"Slot":            state.LatestSlot,
+				"Event":          "ProposalWrongFee",
+				"StateChange":    "RedCard -> Banned",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
 			log.WithFields(log.Fields{
-				"Event":           "ProposalMissed",
-				"StateChange":     "RedCard -> RedCard",
-				"ValidatorIndex:": valIndex,
-				"Slot":            state.LatestSlot,
+				"Event":          "ProposalMissed",
+				"StateChange":    "RedCard -> RedCard",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
 			log.WithFields(log.Fields{
-				"Event":           "Unsubscribe",
-				"StateChange":     "RedCard -> NotSubscribed",
-				"ValidatorIndex:": valIndex,
-				"Slot":            state.LatestSlot,
+				"Event":          "Unsubscribe",
+				"StateChange":    "RedCard -> NotSubscribed",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -869,18 +893,18 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 		switch event {
 		case ManualSubscription:
 			log.WithFields(log.Fields{
-				"Event":           "ManualSubscription",
-				"StateChange":     "NotSubscribed -> Active",
-				"ValidatorIndex:": valIndex,
-				"Slot":            state.LatestSlot,
+				"Event":          "ManualSubscription",
+				"StateChange":    "NotSubscribed -> Active",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case AutoSubscription:
 			log.WithFields(log.Fields{
-				"Event":           "AutoSubscription",
-				"StateChange":     "NotSubscribed -> Active",
-				"ValidatorIndex:": valIndex,
-				"Slot/Block":      state.LatestSlot,
+				"Event":          "AutoSubscription",
+				"StateChange":    "NotSubscribed -> Active",
+				"ValidatorIndex": valIndex,
+				"ProcessedSlot":  state.LatestProcessedSlot,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		}
@@ -904,6 +928,17 @@ func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
 	return false
 }
 
+func (state *OracleState) LogBalances() {
+	for valIndex, validator := range state.Validators {
+		log.WithFields(log.Fields{
+			"LatestProcessedSlot": state.LatestProcessedSlot,
+			"ValIndex":            valIndex,
+			"PendingRewards":      validator.PendingRewardsWei,
+			"AccumulatedRewards":  validator.AccumulatedRewardsWei,
+		}).Info("Validator balances")
+	}
+}
+
 // TODO: Remove this and get the merkle tree from somewhere else. See stored state
 func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 	mk := NewMerklelizer()
@@ -913,7 +948,6 @@ func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 		return "", enoughData
 	}
 	merkleRootStr := hex.EncodeToString(tree.Root)
-	log.Info("Merkle root: ", merkleRootStr)
 
 	return merkleRootStr, true
 }

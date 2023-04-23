@@ -3,6 +3,7 @@ package oracle
 import (
 	"math/big"
 	"os"
+	"path/filepath"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -88,6 +89,8 @@ func Test_HandleManualSubscriptions_Valid(t *testing.T) {
 		ValidatorWrongFeeBlocks: []Block{},
 	})
 	require.Equal(t, 1, len(state.Validators))
+	require.Equal(t, 1, len(state.Subscriptions))
+	require.Equal(t, sub1, state.Subscriptions[0])
 }
 
 func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
@@ -419,6 +422,8 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 		ValidatorWrongFeeBlocks: []Block{},
 	})
 	require.Equal(t, 4, len(state.Validators))
+	require.Equal(t, 1, len(state.Unsubscriptions))
+	require.Equal(t, unsub, state.Unsubscriptions[0])
 
 	// The rest get the pending of valIndex=6
 	require.Equal(t, state.Validators[9].PendingRewardsWei, big.NewInt(300000000000000000+300000000000000000/3))
@@ -800,6 +805,60 @@ func Test_IncreaseAllPendingRewards_3(t *testing.T) {
 	}
 }
 
+func Test_IncreaseValidatorPendingRewards(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.Validators[12] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(100),
+		AccumulatedRewardsWei: big.NewInt(0),
+	}
+	state.Validators[200] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(100),
+		AccumulatedRewardsWei: big.NewInt(0),
+	}
+
+	state.IncreaseValidatorPendingRewards(12, big.NewInt(8765432))
+	require.Equal(t, big.NewInt(8765432+100), state.Validators[12].PendingRewardsWei)
+	require.Equal(t, big.NewInt(0), state.Validators[12].AccumulatedRewardsWei)
+
+	state.IncreaseValidatorPendingRewards(200, big.NewInt(0))
+	require.Equal(t, big.NewInt(100), state.Validators[200].PendingRewardsWei)
+
+	state.IncreaseValidatorPendingRewards(12, big.NewInt(1))
+	require.Equal(t, big.NewInt(8765432+100+1), state.Validators[12].PendingRewardsWei)
+}
+
+func Test_IncreaseValidatorAccumulatedRewards(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.Validators[9999999] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(100),
+		AccumulatedRewardsWei: big.NewInt(99999999999999),
+	}
+	state.IncreaseValidatorAccumulatedRewards(9999999, big.NewInt(87676545432))
+	require.Equal(t, big.NewInt(87676545432+99999999999999), state.Validators[9999999].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(100), state.Validators[9999999].PendingRewardsWei)
+}
+
+func Test_SendRewardToPool(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.SendRewardToPool(big.NewInt(10456543212340))
+	require.Equal(t, big.NewInt(10456543212340), state.PoolAccumulatedFees)
+
+	state.SendRewardToPool(big.NewInt(99999))
+	require.Equal(t, big.NewInt(10456543212340+99999), state.PoolAccumulatedFees)
+}
+
+func Test_ResetPendingRewards(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.Validators[1] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(99999999999999),
+		AccumulatedRewardsWei: big.NewInt(99999999999999),
+	}
+	state.ResetPendingRewards(1)
+
+	require.Equal(t, big.NewInt(0), state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99999999999999), state.Validators[1].AccumulatedRewardsWei)
+}
+
 func Test_IncreasePendingRewards(t *testing.T) {
 	state := NewOracleState(&config.Config{})
 	state.Validators[12] = &ValidatorInfo{
@@ -897,13 +956,13 @@ func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
 		Network:         "mainnet",
 	})
 
-	StateFileName = "test_state.gob"
-	defer os.Remove(StateFileName)
 	state.SaveStateToFile()
+	defer os.Remove(filepath.Join(StateFileName, StateFolder))
+	defer os.RemoveAll(StateFolder)
 
-	recovered, err := ReadStateFromFile()
+	err := state.LoadStateFromFile()
 	require.NoError(t, err)
-	require.Equal(t, state, recovered)
+	require.Equal(t, state, state)
 }
 func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 
@@ -1030,13 +1089,13 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 		}},
 	}
 
-	StateFileName = "test_state.gob"
-	defer os.Remove(StateFileName)
+	defer os.Remove(filepath.Join(StateFileName, StateFolder))
+	defer os.RemoveAll(StateFolder)
 	state.SaveStateToFile()
 
-	recovered, err := ReadStateFromFile()
+	err := state.LoadStateFromFile()
 	require.NoError(t, err)
-	require.Equal(t, state, recovered)
+	require.Equal(t, state, state)
 }
 
 func Test_IsValidatorSubscribed(t *testing.T) {

@@ -44,11 +44,9 @@ func main() {
 		"BalanceWei": balance,
 	}).Info("Pool Address Balance")
 
-	// TODO Enabled, but requires further testing
-	recoveredState, err := oracle.ReadStateFromFile()
+	err = oracleInstance.State.LoadStateFromFile()
 	if err == nil {
 		log.Info("Found previous state to continue syncing")
-		oracleInstance.State = recoveredState
 	} else {
 		log.Info("Previous state not found or could not be loaded, syncing from the begining: ", err)
 	}
@@ -63,10 +61,15 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	for {
 		sig := <-sigCh
+
+		// Save state in SIGINT or SIGTERM
+		if sig == syscall.SIGINT || sig == syscall.SIGTERM {
+			oracleInstance.State.SaveStateToFile()
+		}
+
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM || sig == os.Interrupt || sig == os.Kill {
 			break
 		}
-		// TODO: Save state in SIGINT or SIGTERM
 	}
 
 	log.Info("Oracle gracefully stopped")
@@ -77,7 +80,10 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 	// Load all the validators from the beacon chain
 	onchain.RefreshBeaconValidators()
 
-	log.Info("Starting to process from slot (see api for progress): ", oracleInstance.State.LatestSlot)
+	log.WithFields(log.Fields{
+		"LatestProcessedSlot": oracleInstance.State.LatestProcessedSlot,
+		"NextSlotToProcess":   oracleInstance.State.NextSlotToProcess,
+	}).Info("Processing, see api for progress")
 
 	for {
 		// Ensure that the nodes we are using are in sync with the blockchain (consensus + execution)
@@ -101,15 +107,15 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		finalizedEpoch := uint64(finality.Finalized.Epoch)
 		finalizedSlot := finalizedEpoch * SlotsInEpoch
 
-		if finalizedSlot > oracleInstance.State.LatestSlot {
+		if finalizedSlot > oracleInstance.State.NextSlotToProcess {
 
 			// Get all the information of the block that was proposed in this slot
-			poolBlock, blockSubs, blockUnsubs, blockDonations := onchain.GetAllBlockInfo(oracleInstance.State.LatestSlot)
+			poolBlock, blockSubs, blockUnsubs, blockDonations := onchain.GetAllBlockInfo(oracleInstance.State.NextSlotToProcess)
 			processedSlot, err := oracleInstance.AdvanceStateToNextSlot(poolBlock, blockSubs, blockUnsubs, blockDonations)
 			if err != nil {
 				log.Fatal(err)
 			}
-			slotToLatestFinalized := finalizedSlot - oracleInstance.State.LatestSlot
+			slotToLatestFinalized := finalizedSlot - oracleInstance.State.LatestProcessedSlot
 
 			_ = processedSlot
 			_ = slotToLatestFinalized
@@ -132,30 +138,20 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			continue
 		}
 
-		// How often we store data in the database in slots
-		UpdateDbIntervalSlots := uint64(1)
-		if oracleInstance.State.LatestSlot%UpdateDbIntervalSlots == 0 {
-			// TODO: Unused. As a nice to have we can store
-			// the intermediate validator balances in db
-			// So a valaidator can see it balance over time.
-			// Not feasible to store this in memory
-		}
-
 		// 300 slots is 1 hour
 		UpdateValidatorsIntervalSlots := uint64(3000)
-		if oracleInstance.State.LatestSlot%UpdateValidatorsIntervalSlots == 0 {
+		if oracleInstance.State.LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
 			onchain.RefreshBeaconValidators()
 		}
 
 		// Every CheckPointSizeInSlots we commit the state
-		if oracleInstance.State.LatestSlot%cfg.CheckPointSizeInSlots == 0 {
-			log.Info("Checkpoint reached, slot: ", oracleInstance.State.LatestSlot)
+		if oracleInstance.State.LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 {
+			log.Info("Checkpoint reached, latest processed slot: ", oracleInstance.State.LatestProcessedSlot)
 
 			// mRoot, enoughData := oracle.State.GetMerkleRootIfAny()
 			enoughData := oracleInstance.State.StoreLatestOnchainState()
 
 			oracleInstance.State.SaveStateToFile()
-			oracleInstance.State.LogBalances()
 
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
