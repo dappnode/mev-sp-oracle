@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/api"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
@@ -138,10 +139,16 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			continue
 		}
 
-		// 300 slots is 1 hour
-		UpdateValidatorsIntervalSlots := uint64(3000)
+		// 1200 slots is 4 hour
+		UpdateValidatorsIntervalSlots := uint64(1200)
 		if oracleInstance.State.LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
-			onchain.RefreshBeaconValidators()
+			validators := onchain.Validators()
+			lastValidator := validators[phase0.ValidatorIndex(len(validators)-1)]
+
+			// Update only if the oracle advances beyond the last validator we have
+			if lastValidator.Validator.ActivationEligibilityEpoch <= phase0.Epoch(oracleInstance.State.LatestProcessedSlot/SlotsInEpoch) {
+				onchain.RefreshBeaconValidators()
+			}
 		}
 
 		// Every CheckPointSizeInSlots we commit the state
