@@ -23,6 +23,6 @@ go build ./cmd/abigen
 And now from the root of this repo, generate the contract.
 
 ```console
-/path/to/abigen --abi=contract/abi.abi --pkg=contract --out=contract/contract.go
+./abigen --abi=../mev-sp-oracle/contract/abi.abi --pkg=contract --out=../mev-sp-oracle/contract/contract.go
 ```
 

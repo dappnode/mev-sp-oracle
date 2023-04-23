@@ -97,13 +97,13 @@ type Donation struct {
 
 // Subscription event and the associated validator (if any)
 type Subscription struct {
-	Event     *contract.ContractSuscribeValidator
+	Event     *contract.ContractSubscribeValidator
 	Validator *v1.Validator
 }
 
 // Unsubscription event and the associated validator (if any)
 type Unsubscription struct {
-	Event     *contract.ContractUnsuscribeValidator
+	Event     *contract.ContractUnsubscribeValidator
 	Validator *v1.Validator
 }
 
@@ -411,7 +411,7 @@ func (state *OracleState) HandleManualSubscriptions(
 	for _, sub := range subscriptions {
 
 		valIdx := uint64(sub.Event.ValidatorID) // TODO: Contract should be uint64
-		collateral := sub.Event.SuscriptionCollateral
+		collateral := sub.Event.SubscriptionCollateral
 		sender := "0x" // TODO: Will be provided by contract
 		_ = sender
 
@@ -419,7 +419,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		if sub.Validator == nil {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SuscriptionCollateral,
+				"Collateral":     sub.Event.SubscriptionCollateral,
 				"TxHash":         sub.Event.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for non existing validator, skipping")
@@ -437,7 +437,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		if !CanValidatorSubscribeToPool(sub.Validator) {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SuscriptionCollateral,
+				"Collateral":     sub.Event.SubscriptionCollateral,
 				"TxHash":         sub.Event.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 				"ValidatorState": sub.Validator.Status,
@@ -452,7 +452,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		if err != nil {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SuscriptionCollateral,
+				"Collateral":     sub.Event.SubscriptionCollateral,
 				"TxHash":         sub.Event.Raw.TxHash,
 				"WithdrawalAddr": "0x" + hex.EncodeToString(sub.Validator.Validator.WithdrawalCredentials[:]),
 				"ValidatorIndex": valIdx,
@@ -482,7 +482,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		if state.IsBanned(valIdx) {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SuscriptionCollateral,
+				"Collateral":     sub.Event.SubscriptionCollateral,
 				"TxHash":         sub.Event.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for banned validator, skipping")
@@ -495,7 +495,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		if state.IsSubscribed(valIdx) {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SuscriptionCollateral,
+				"Collateral":     sub.Event.SubscriptionCollateral,
 				"TxHash":         sub.Event.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for an already subscribed validator, skipping")
@@ -508,7 +508,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		if !state.IsCollateralEnough(collateral) {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SuscriptionCollateral,
+				"Collateral":     sub.Event.SubscriptionCollateral,
 				"TxHash":         sub.Event.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for a validator with not enough collateral, skipping")
@@ -540,7 +540,7 @@ func (state *OracleState) HandleManualSubscriptions(
 			}
 			log.WithFields(log.Fields{
 				"BlockNumber":      sub.Event.Raw.BlockNumber,
-				"Collateral":       sub.Event.SuscriptionCollateral,
+				"Collateral":       sub.Event.SubscriptionCollateral,
 				"TxHash":           sub.Event.Raw.TxHash,
 				"ValidatorIndex":   valIdx,
 				"WithdrawaAddress": validatorWithdrawal,
@@ -554,7 +554,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		// If we reach this point, its a case we havent considered, but its not valid
 		log.WithFields(log.Fields{
 			"BlockNumber":      sub.Event.Raw.BlockNumber,
-			"Collateral":       sub.Event.SuscriptionCollateral,
+			"Collateral":       sub.Event.SubscriptionCollateral,
 			"TxHash":           sub.Event.Raw.TxHash,
 			"ValidatorIndex":   valIdx,
 			"WithdrawaAddress": validatorWithdrawal,

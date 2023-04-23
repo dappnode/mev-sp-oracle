@@ -31,7 +31,7 @@ var (
 
 // ContractMetaData contains all meta data concerning the Contract contract.
 var ContractMetaData = &bind.MetaData{
-	ABI: "[{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"depositAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"rewardAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"claimableBalance\",\"type\":\"uint256\"}],\"name\":\"ClaimRewards\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"donationAmount\",\"type\":\"uint256\"}],\"name\":\"EtherReceived\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"depositAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"poolRecipient\",\"type\":\"address\"}],\"name\":\"SetRewardRecipient\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"suscriptionCollateral\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"validatorID\",\"type\":\"uint32\"}],\"name\":\"SuscribeValidator\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"validatorID\",\"type\":\"uint32\"}],\"name\":\"UnsuscribeValidator\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newOracle\",\"type\":\"address\"}],\"name\":\"UpdateOracle\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"newRewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"UpdateRewardsRoot\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newSuscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"UpdateSuscriptionCollateral\",\"type\":\"event\"},{\"stateMutability\":\"payable\",\"type\":\"fallback\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"depositAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"accumulatedBalance\",\"type\":\"uint256\"},{\"internalType\":\"bytes32[]\",\"name\":\"merkleProof\",\"type\":\"bytes32[]\"}],\"name\":\"claimRewards\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"claimedBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_oracle\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_suscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"oracle\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"rewardRecipient\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"rewardsRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"rewardAddress\",\"type\":\"address\"}],\"name\":\"setRewardRecipient\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint32\",\"name\":\"validatorID\",\"type\":\"uint32\"}],\"name\":\"suscribeValidator\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"suscriptionCollateral\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint32\",\"name\":\"validatorID\",\"type\":\"uint32\"}],\"name\":\"unsuscribeValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newSuscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"updateCollateral\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOracle\",\"type\":\"address\"}],\"name\":\"updateOracle\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"updateRewardsRoot\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"withdrawalAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"rewardAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"claimableBalance\",\"type\":\"uint256\"}],\"name\":\"ClaimRewards\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"donationAmount\",\"type\":\"uint256\"}],\"name\":\"EtherReceived\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"withdrawalAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"poolRecipient\",\"type\":\"address\"}],\"name\":\"SetRewardRecipient\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"subscriptionCollateral\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"SubscribeValidator\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"UnsubscribeValidator\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newOracle\",\"type\":\"address\"}],\"name\":\"UpdateOracle\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"newRewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"UpdateRewardsRoot\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newSubscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"UpdateSubscriptionCollateral\",\"type\":\"event\"},{\"stateMutability\":\"payable\",\"type\":\"fallback\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"withdrawalAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"accumulatedBalance\",\"type\":\"uint256\"},{\"internalType\":\"bytes32[]\",\"name\":\"merkleProof\",\"type\":\"bytes32[]\"}],\"name\":\"claimRewards\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"claimedBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_oracle\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_subscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"oracle\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"rewardRecipient\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"rewardsRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"rewardAddress\",\"type\":\"address\"}],\"name\":\"setRewardRecipient\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"subscribeValidator\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subscriptionCollateral\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"unsubscribeValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newSubscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"updateCollateral\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOracle\",\"type\":\"address\"}],\"name\":\"updateOracle\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"newRewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"updateRewardsRoot\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 }
 
 // ContractABI is the input ABI used to generate the binding from.
@@ -335,12 +335,12 @@ func (_Contract *ContractCallerSession) RewardsRoot() ([32]byte, error) {
 	return _Contract.Contract.RewardsRoot(&_Contract.CallOpts)
 }
 
-// SuscriptionCollateral is a free data retrieval call binding the contract method 0x341c7ca3.
+// SubscriptionCollateral is a free data retrieval call binding the contract method 0xf93558e3.
 //
-// Solidity: function suscriptionCollateral() view returns(uint256)
-func (_Contract *ContractCaller) SuscriptionCollateral(opts *bind.CallOpts) (*big.Int, error) {
+// Solidity: function subscriptionCollateral() view returns(uint256)
+func (_Contract *ContractCaller) SubscriptionCollateral(opts *bind.CallOpts) (*big.Int, error) {
 	var out []interface{}
-	err := _Contract.contract.Call(opts, &out, "suscriptionCollateral")
+	err := _Contract.contract.Call(opts, &out, "subscriptionCollateral")
 
 	if err != nil {
 		return *new(*big.Int), err
@@ -352,60 +352,60 @@ func (_Contract *ContractCaller) SuscriptionCollateral(opts *bind.CallOpts) (*bi
 
 }
 
-// SuscriptionCollateral is a free data retrieval call binding the contract method 0x341c7ca3.
+// SubscriptionCollateral is a free data retrieval call binding the contract method 0xf93558e3.
 //
-// Solidity: function suscriptionCollateral() view returns(uint256)
-func (_Contract *ContractSession) SuscriptionCollateral() (*big.Int, error) {
-	return _Contract.Contract.SuscriptionCollateral(&_Contract.CallOpts)
+// Solidity: function subscriptionCollateral() view returns(uint256)
+func (_Contract *ContractSession) SubscriptionCollateral() (*big.Int, error) {
+	return _Contract.Contract.SubscriptionCollateral(&_Contract.CallOpts)
 }
 
-// SuscriptionCollateral is a free data retrieval call binding the contract method 0x341c7ca3.
+// SubscriptionCollateral is a free data retrieval call binding the contract method 0xf93558e3.
 //
-// Solidity: function suscriptionCollateral() view returns(uint256)
-func (_Contract *ContractCallerSession) SuscriptionCollateral() (*big.Int, error) {
-	return _Contract.Contract.SuscriptionCollateral(&_Contract.CallOpts)
-}
-
-// ClaimRewards is a paid mutator transaction binding the contract method 0xd64bc331.
-//
-// Solidity: function claimRewards(address depositAddress, uint256 accumulatedBalance, bytes32[] merkleProof) returns()
-func (_Contract *ContractTransactor) ClaimRewards(opts *bind.TransactOpts, depositAddress common.Address, accumulatedBalance *big.Int, merkleProof [][32]byte) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "claimRewards", depositAddress, accumulatedBalance, merkleProof)
+// Solidity: function subscriptionCollateral() view returns(uint256)
+func (_Contract *ContractCallerSession) SubscriptionCollateral() (*big.Int, error) {
+	return _Contract.Contract.SubscriptionCollateral(&_Contract.CallOpts)
 }
 
 // ClaimRewards is a paid mutator transaction binding the contract method 0xd64bc331.
 //
-// Solidity: function claimRewards(address depositAddress, uint256 accumulatedBalance, bytes32[] merkleProof) returns()
-func (_Contract *ContractSession) ClaimRewards(depositAddress common.Address, accumulatedBalance *big.Int, merkleProof [][32]byte) (*types.Transaction, error) {
-	return _Contract.Contract.ClaimRewards(&_Contract.TransactOpts, depositAddress, accumulatedBalance, merkleProof)
+// Solidity: function claimRewards(address withdrawalAddress, uint256 accumulatedBalance, bytes32[] merkleProof) returns()
+func (_Contract *ContractTransactor) ClaimRewards(opts *bind.TransactOpts, withdrawalAddress common.Address, accumulatedBalance *big.Int, merkleProof [][32]byte) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "claimRewards", withdrawalAddress, accumulatedBalance, merkleProof)
 }
 
 // ClaimRewards is a paid mutator transaction binding the contract method 0xd64bc331.
 //
-// Solidity: function claimRewards(address depositAddress, uint256 accumulatedBalance, bytes32[] merkleProof) returns()
-func (_Contract *ContractTransactorSession) ClaimRewards(depositAddress common.Address, accumulatedBalance *big.Int, merkleProof [][32]byte) (*types.Transaction, error) {
-	return _Contract.Contract.ClaimRewards(&_Contract.TransactOpts, depositAddress, accumulatedBalance, merkleProof)
+// Solidity: function claimRewards(address withdrawalAddress, uint256 accumulatedBalance, bytes32[] merkleProof) returns()
+func (_Contract *ContractSession) ClaimRewards(withdrawalAddress common.Address, accumulatedBalance *big.Int, merkleProof [][32]byte) (*types.Transaction, error) {
+	return _Contract.Contract.ClaimRewards(&_Contract.TransactOpts, withdrawalAddress, accumulatedBalance, merkleProof)
+}
+
+// ClaimRewards is a paid mutator transaction binding the contract method 0xd64bc331.
+//
+// Solidity: function claimRewards(address withdrawalAddress, uint256 accumulatedBalance, bytes32[] merkleProof) returns()
+func (_Contract *ContractTransactorSession) ClaimRewards(withdrawalAddress common.Address, accumulatedBalance *big.Int, merkleProof [][32]byte) (*types.Transaction, error) {
+	return _Contract.Contract.ClaimRewards(&_Contract.TransactOpts, withdrawalAddress, accumulatedBalance, merkleProof)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0xcd6dc687.
 //
-// Solidity: function initialize(address _oracle, uint256 _suscriptionCollateral) returns()
-func (_Contract *ContractTransactor) Initialize(opts *bind.TransactOpts, _oracle common.Address, _suscriptionCollateral *big.Int) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "initialize", _oracle, _suscriptionCollateral)
+// Solidity: function initialize(address _oracle, uint256 _subscriptionCollateral) returns()
+func (_Contract *ContractTransactor) Initialize(opts *bind.TransactOpts, _oracle common.Address, _subscriptionCollateral *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "initialize", _oracle, _subscriptionCollateral)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0xcd6dc687.
 //
-// Solidity: function initialize(address _oracle, uint256 _suscriptionCollateral) returns()
-func (_Contract *ContractSession) Initialize(_oracle common.Address, _suscriptionCollateral *big.Int) (*types.Transaction, error) {
-	return _Contract.Contract.Initialize(&_Contract.TransactOpts, _oracle, _suscriptionCollateral)
+// Solidity: function initialize(address _oracle, uint256 _subscriptionCollateral) returns()
+func (_Contract *ContractSession) Initialize(_oracle common.Address, _subscriptionCollateral *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.Initialize(&_Contract.TransactOpts, _oracle, _subscriptionCollateral)
 }
 
 // Initialize is a paid mutator transaction binding the contract method 0xcd6dc687.
 //
-// Solidity: function initialize(address _oracle, uint256 _suscriptionCollateral) returns()
-func (_Contract *ContractTransactorSession) Initialize(_oracle common.Address, _suscriptionCollateral *big.Int) (*types.Transaction, error) {
-	return _Contract.Contract.Initialize(&_Contract.TransactOpts, _oracle, _suscriptionCollateral)
+// Solidity: function initialize(address _oracle, uint256 _subscriptionCollateral) returns()
+func (_Contract *ContractTransactorSession) Initialize(_oracle common.Address, _subscriptionCollateral *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.Initialize(&_Contract.TransactOpts, _oracle, _subscriptionCollateral)
 }
 
 // RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
@@ -450,25 +450,25 @@ func (_Contract *ContractTransactorSession) SetRewardRecipient(rewardAddress com
 	return _Contract.Contract.SetRewardRecipient(&_Contract.TransactOpts, rewardAddress)
 }
 
-// SuscribeValidator is a paid mutator transaction binding the contract method 0x4e54afbb.
+// SubscribeValidator is a paid mutator transaction binding the contract method 0xb9cd552e.
 //
-// Solidity: function suscribeValidator(uint32 validatorID) payable returns()
-func (_Contract *ContractTransactor) SuscribeValidator(opts *bind.TransactOpts, validatorID uint32) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "suscribeValidator", validatorID)
+// Solidity: function subscribeValidator(uint64 validatorID) payable returns()
+func (_Contract *ContractTransactor) SubscribeValidator(opts *bind.TransactOpts, validatorID uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "subscribeValidator", validatorID)
 }
 
-// SuscribeValidator is a paid mutator transaction binding the contract method 0x4e54afbb.
+// SubscribeValidator is a paid mutator transaction binding the contract method 0xb9cd552e.
 //
-// Solidity: function suscribeValidator(uint32 validatorID) payable returns()
-func (_Contract *ContractSession) SuscribeValidator(validatorID uint32) (*types.Transaction, error) {
-	return _Contract.Contract.SuscribeValidator(&_Contract.TransactOpts, validatorID)
+// Solidity: function subscribeValidator(uint64 validatorID) payable returns()
+func (_Contract *ContractSession) SubscribeValidator(validatorID uint64) (*types.Transaction, error) {
+	return _Contract.Contract.SubscribeValidator(&_Contract.TransactOpts, validatorID)
 }
 
-// SuscribeValidator is a paid mutator transaction binding the contract method 0x4e54afbb.
+// SubscribeValidator is a paid mutator transaction binding the contract method 0xb9cd552e.
 //
-// Solidity: function suscribeValidator(uint32 validatorID) payable returns()
-func (_Contract *ContractTransactorSession) SuscribeValidator(validatorID uint32) (*types.Transaction, error) {
-	return _Contract.Contract.SuscribeValidator(&_Contract.TransactOpts, validatorID)
+// Solidity: function subscribeValidator(uint64 validatorID) payable returns()
+func (_Contract *ContractTransactorSession) SubscribeValidator(validatorID uint64) (*types.Transaction, error) {
+	return _Contract.Contract.SubscribeValidator(&_Contract.TransactOpts, validatorID)
 }
 
 // TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
@@ -492,46 +492,46 @@ func (_Contract *ContractTransactorSession) TransferOwnership(newOwner common.Ad
 	return _Contract.Contract.TransferOwnership(&_Contract.TransactOpts, newOwner)
 }
 
-// UnsuscribeValidator is a paid mutator transaction binding the contract method 0x2a59ed35.
+// UnsubscribeValidator is a paid mutator transaction binding the contract method 0xc1542c52.
 //
-// Solidity: function unsuscribeValidator(uint32 validatorID) returns()
-func (_Contract *ContractTransactor) UnsuscribeValidator(opts *bind.TransactOpts, validatorID uint32) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "unsuscribeValidator", validatorID)
+// Solidity: function unsubscribeValidator(uint64 validatorID) returns()
+func (_Contract *ContractTransactor) UnsubscribeValidator(opts *bind.TransactOpts, validatorID uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "unsubscribeValidator", validatorID)
 }
 
-// UnsuscribeValidator is a paid mutator transaction binding the contract method 0x2a59ed35.
+// UnsubscribeValidator is a paid mutator transaction binding the contract method 0xc1542c52.
 //
-// Solidity: function unsuscribeValidator(uint32 validatorID) returns()
-func (_Contract *ContractSession) UnsuscribeValidator(validatorID uint32) (*types.Transaction, error) {
-	return _Contract.Contract.UnsuscribeValidator(&_Contract.TransactOpts, validatorID)
+// Solidity: function unsubscribeValidator(uint64 validatorID) returns()
+func (_Contract *ContractSession) UnsubscribeValidator(validatorID uint64) (*types.Transaction, error) {
+	return _Contract.Contract.UnsubscribeValidator(&_Contract.TransactOpts, validatorID)
 }
 
-// UnsuscribeValidator is a paid mutator transaction binding the contract method 0x2a59ed35.
+// UnsubscribeValidator is a paid mutator transaction binding the contract method 0xc1542c52.
 //
-// Solidity: function unsuscribeValidator(uint32 validatorID) returns()
-func (_Contract *ContractTransactorSession) UnsuscribeValidator(validatorID uint32) (*types.Transaction, error) {
-	return _Contract.Contract.UnsuscribeValidator(&_Contract.TransactOpts, validatorID)
-}
-
-// UpdateCollateral is a paid mutator transaction binding the contract method 0x6721de26.
-//
-// Solidity: function updateCollateral(uint256 newSuscriptionCollateral) returns()
-func (_Contract *ContractTransactor) UpdateCollateral(opts *bind.TransactOpts, newSuscriptionCollateral *big.Int) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "updateCollateral", newSuscriptionCollateral)
+// Solidity: function unsubscribeValidator(uint64 validatorID) returns()
+func (_Contract *ContractTransactorSession) UnsubscribeValidator(validatorID uint64) (*types.Transaction, error) {
+	return _Contract.Contract.UnsubscribeValidator(&_Contract.TransactOpts, validatorID)
 }
 
 // UpdateCollateral is a paid mutator transaction binding the contract method 0x6721de26.
 //
-// Solidity: function updateCollateral(uint256 newSuscriptionCollateral) returns()
-func (_Contract *ContractSession) UpdateCollateral(newSuscriptionCollateral *big.Int) (*types.Transaction, error) {
-	return _Contract.Contract.UpdateCollateral(&_Contract.TransactOpts, newSuscriptionCollateral)
+// Solidity: function updateCollateral(uint256 newSubscriptionCollateral) returns()
+func (_Contract *ContractTransactor) UpdateCollateral(opts *bind.TransactOpts, newSubscriptionCollateral *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateCollateral", newSubscriptionCollateral)
 }
 
 // UpdateCollateral is a paid mutator transaction binding the contract method 0x6721de26.
 //
-// Solidity: function updateCollateral(uint256 newSuscriptionCollateral) returns()
-func (_Contract *ContractTransactorSession) UpdateCollateral(newSuscriptionCollateral *big.Int) (*types.Transaction, error) {
-	return _Contract.Contract.UpdateCollateral(&_Contract.TransactOpts, newSuscriptionCollateral)
+// Solidity: function updateCollateral(uint256 newSubscriptionCollateral) returns()
+func (_Contract *ContractSession) UpdateCollateral(newSubscriptionCollateral *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateCollateral(&_Contract.TransactOpts, newSubscriptionCollateral)
+}
+
+// UpdateCollateral is a paid mutator transaction binding the contract method 0x6721de26.
+//
+// Solidity: function updateCollateral(uint256 newSubscriptionCollateral) returns()
+func (_Contract *ContractTransactorSession) UpdateCollateral(newSubscriptionCollateral *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateCollateral(&_Contract.TransactOpts, newSubscriptionCollateral)
 }
 
 // UpdateOracle is a paid mutator transaction binding the contract method 0x1cb44dfc.
@@ -666,15 +666,15 @@ func (it *ContractClaimRewardsIterator) Close() error {
 
 // ContractClaimRewards represents a ClaimRewards event raised by the Contract contract.
 type ContractClaimRewards struct {
-	DepositAddress   common.Address
-	RewardAddress    common.Address
-	ClaimableBalance *big.Int
-	Raw              types.Log // Blockchain specific contextual infos
+	WithdrawalAddress common.Address
+	RewardAddress     common.Address
+	ClaimableBalance  *big.Int
+	Raw               types.Log // Blockchain specific contextual infos
 }
 
 // FilterClaimRewards is a free log retrieval operation binding the contract event 0x9aa05b3d70a9e3e2f004f039648839560576334fb45c81f91b6db03ad9e2efc9.
 //
-// Solidity: event ClaimRewards(address depositAddress, address rewardAddress, uint256 claimableBalance)
+// Solidity: event ClaimRewards(address withdrawalAddress, address rewardAddress, uint256 claimableBalance)
 func (_Contract *ContractFilterer) FilterClaimRewards(opts *bind.FilterOpts) (*ContractClaimRewardsIterator, error) {
 
 	logs, sub, err := _Contract.contract.FilterLogs(opts, "ClaimRewards")
@@ -686,7 +686,7 @@ func (_Contract *ContractFilterer) FilterClaimRewards(opts *bind.FilterOpts) (*C
 
 // WatchClaimRewards is a free log subscription operation binding the contract event 0x9aa05b3d70a9e3e2f004f039648839560576334fb45c81f91b6db03ad9e2efc9.
 //
-// Solidity: event ClaimRewards(address depositAddress, address rewardAddress, uint256 claimableBalance)
+// Solidity: event ClaimRewards(address withdrawalAddress, address rewardAddress, uint256 claimableBalance)
 func (_Contract *ContractFilterer) WatchClaimRewards(opts *bind.WatchOpts, sink chan<- *ContractClaimRewards) (event.Subscription, error) {
 
 	logs, sub, err := _Contract.contract.WatchLogs(opts, "ClaimRewards")
@@ -723,7 +723,7 @@ func (_Contract *ContractFilterer) WatchClaimRewards(opts *bind.WatchOpts, sink 
 
 // ParseClaimRewards is a log parse operation binding the contract event 0x9aa05b3d70a9e3e2f004f039648839560576334fb45c81f91b6db03ad9e2efc9.
 //
-// Solidity: event ClaimRewards(address depositAddress, address rewardAddress, uint256 claimableBalance)
+// Solidity: event ClaimRewards(address withdrawalAddress, address rewardAddress, uint256 claimableBalance)
 func (_Contract *ContractFilterer) ParseClaimRewards(log types.Log) (*ContractClaimRewards, error) {
 	event := new(ContractClaimRewards)
 	if err := _Contract.contract.UnpackLog(event, "ClaimRewards", log); err != nil {
@@ -1224,14 +1224,14 @@ func (it *ContractSetRewardRecipientIterator) Close() error {
 
 // ContractSetRewardRecipient represents a SetRewardRecipient event raised by the Contract contract.
 type ContractSetRewardRecipient struct {
-	DepositAddress common.Address
-	PoolRecipient  common.Address
-	Raw            types.Log // Blockchain specific contextual infos
+	WithdrawalAddress common.Address
+	PoolRecipient     common.Address
+	Raw               types.Log // Blockchain specific contextual infos
 }
 
 // FilterSetRewardRecipient is a free log retrieval operation binding the contract event 0xc6b66e0e282673c442421e1c6b89458b7631f26f5dcd0b2b216c45831ca1d7d5.
 //
-// Solidity: event SetRewardRecipient(address depositAddress, address poolRecipient)
+// Solidity: event SetRewardRecipient(address withdrawalAddress, address poolRecipient)
 func (_Contract *ContractFilterer) FilterSetRewardRecipient(opts *bind.FilterOpts) (*ContractSetRewardRecipientIterator, error) {
 
 	logs, sub, err := _Contract.contract.FilterLogs(opts, "SetRewardRecipient")
@@ -1243,7 +1243,7 @@ func (_Contract *ContractFilterer) FilterSetRewardRecipient(opts *bind.FilterOpt
 
 // WatchSetRewardRecipient is a free log subscription operation binding the contract event 0xc6b66e0e282673c442421e1c6b89458b7631f26f5dcd0b2b216c45831ca1d7d5.
 //
-// Solidity: event SetRewardRecipient(address depositAddress, address poolRecipient)
+// Solidity: event SetRewardRecipient(address withdrawalAddress, address poolRecipient)
 func (_Contract *ContractFilterer) WatchSetRewardRecipient(opts *bind.WatchOpts, sink chan<- *ContractSetRewardRecipient) (event.Subscription, error) {
 
 	logs, sub, err := _Contract.contract.WatchLogs(opts, "SetRewardRecipient")
@@ -1280,7 +1280,7 @@ func (_Contract *ContractFilterer) WatchSetRewardRecipient(opts *bind.WatchOpts,
 
 // ParseSetRewardRecipient is a log parse operation binding the contract event 0xc6b66e0e282673c442421e1c6b89458b7631f26f5dcd0b2b216c45831ca1d7d5.
 //
-// Solidity: event SetRewardRecipient(address depositAddress, address poolRecipient)
+// Solidity: event SetRewardRecipient(address withdrawalAddress, address poolRecipient)
 func (_Contract *ContractFilterer) ParseSetRewardRecipient(log types.Log) (*ContractSetRewardRecipient, error) {
 	event := new(ContractSetRewardRecipient)
 	if err := _Contract.contract.UnpackLog(event, "SetRewardRecipient", log); err != nil {
@@ -1290,9 +1290,9 @@ func (_Contract *ContractFilterer) ParseSetRewardRecipient(log types.Log) (*Cont
 	return event, nil
 }
 
-// ContractSuscribeValidatorIterator is returned from FilterSuscribeValidator and is used to iterate over the raw logs and unpacked data for SuscribeValidator events raised by the Contract contract.
-type ContractSuscribeValidatorIterator struct {
-	Event *ContractSuscribeValidator // Event containing the contract specifics and raw log
+// ContractSubscribeValidatorIterator is returned from FilterSubscribeValidator and is used to iterate over the raw logs and unpacked data for SubscribeValidator events raised by the Contract contract.
+type ContractSubscribeValidatorIterator struct {
+	Event *ContractSubscribeValidator // Event containing the contract specifics and raw log
 
 	contract *bind.BoundContract // Generic contract to use for unpacking event data
 	event    string              // Event name to use for unpacking event data
@@ -1306,7 +1306,7 @@ type ContractSuscribeValidatorIterator struct {
 // Next advances the iterator to the subsequent event, returning whether there
 // are any more events found. In case of a retrieval or parsing error, false is
 // returned and Error() can be queried for the exact failure.
-func (it *ContractSuscribeValidatorIterator) Next() bool {
+func (it *ContractSubscribeValidatorIterator) Next() bool {
 	// If the iterator failed, stop iterating
 	if it.fail != nil {
 		return false
@@ -1315,7 +1315,7 @@ func (it *ContractSuscribeValidatorIterator) Next() bool {
 	if it.done {
 		select {
 		case log := <-it.logs:
-			it.Event = new(ContractSuscribeValidator)
+			it.Event = new(ContractSubscribeValidator)
 			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 				it.fail = err
 				return false
@@ -1330,7 +1330,7 @@ func (it *ContractSuscribeValidatorIterator) Next() bool {
 	// Iterator still in progress, wait for either a data or an error event
 	select {
 	case log := <-it.logs:
-		it.Event = new(ContractSuscribeValidator)
+		it.Event = new(ContractSubscribeValidator)
 		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 			it.fail = err
 			return false
@@ -1346,42 +1346,43 @@ func (it *ContractSuscribeValidatorIterator) Next() bool {
 }
 
 // Error returns any retrieval or parsing error occurred during filtering.
-func (it *ContractSuscribeValidatorIterator) Error() error {
+func (it *ContractSubscribeValidatorIterator) Error() error {
 	return it.fail
 }
 
 // Close terminates the iteration process, releasing any pending underlying
 // resources.
-func (it *ContractSuscribeValidatorIterator) Close() error {
+func (it *ContractSubscribeValidatorIterator) Close() error {
 	it.sub.Unsubscribe()
 	return nil
 }
 
-// ContractSuscribeValidator represents a SuscribeValidator event raised by the Contract contract.
-type ContractSuscribeValidator struct {
-	SuscriptionCollateral *big.Int
-	ValidatorID           uint32
-	Raw                   types.Log // Blockchain specific contextual infos
+// ContractSubscribeValidator represents a SubscribeValidator event raised by the Contract contract.
+type ContractSubscribeValidator struct {
+	Sender                 common.Address
+	SubscriptionCollateral *big.Int
+	ValidatorID            uint64
+	Raw                    types.Log // Blockchain specific contextual infos
 }
 
-// FilterSuscribeValidator is a free log retrieval operation binding the contract event 0xa13e0f092606d35d8623aa0d400afea6ec212b23a50d7b1ed30050be9f395763.
+// FilterSubscribeValidator is a free log retrieval operation binding the contract event 0x1094f8cfeb6abd0fd67e4ce1e1d3999c0176a4d8c7f8325e3ecddb5a1249fde9.
 //
-// Solidity: event SuscribeValidator(uint256 suscriptionCollateral, uint32 validatorID)
-func (_Contract *ContractFilterer) FilterSuscribeValidator(opts *bind.FilterOpts) (*ContractSuscribeValidatorIterator, error) {
+// Solidity: event SubscribeValidator(address sender, uint256 subscriptionCollateral, uint64 validatorID)
+func (_Contract *ContractFilterer) FilterSubscribeValidator(opts *bind.FilterOpts) (*ContractSubscribeValidatorIterator, error) {
 
-	logs, sub, err := _Contract.contract.FilterLogs(opts, "SuscribeValidator")
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "SubscribeValidator")
 	if err != nil {
 		return nil, err
 	}
-	return &ContractSuscribeValidatorIterator{contract: _Contract.contract, event: "SuscribeValidator", logs: logs, sub: sub}, nil
+	return &ContractSubscribeValidatorIterator{contract: _Contract.contract, event: "SubscribeValidator", logs: logs, sub: sub}, nil
 }
 
-// WatchSuscribeValidator is a free log subscription operation binding the contract event 0xa13e0f092606d35d8623aa0d400afea6ec212b23a50d7b1ed30050be9f395763.
+// WatchSubscribeValidator is a free log subscription operation binding the contract event 0x1094f8cfeb6abd0fd67e4ce1e1d3999c0176a4d8c7f8325e3ecddb5a1249fde9.
 //
-// Solidity: event SuscribeValidator(uint256 suscriptionCollateral, uint32 validatorID)
-func (_Contract *ContractFilterer) WatchSuscribeValidator(opts *bind.WatchOpts, sink chan<- *ContractSuscribeValidator) (event.Subscription, error) {
+// Solidity: event SubscribeValidator(address sender, uint256 subscriptionCollateral, uint64 validatorID)
+func (_Contract *ContractFilterer) WatchSubscribeValidator(opts *bind.WatchOpts, sink chan<- *ContractSubscribeValidator) (event.Subscription, error) {
 
-	logs, sub, err := _Contract.contract.WatchLogs(opts, "SuscribeValidator")
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "SubscribeValidator")
 	if err != nil {
 		return nil, err
 	}
@@ -1391,8 +1392,8 @@ func (_Contract *ContractFilterer) WatchSuscribeValidator(opts *bind.WatchOpts, 
 			select {
 			case log := <-logs:
 				// New log arrived, parse the event and forward to the user
-				event := new(ContractSuscribeValidator)
-				if err := _Contract.contract.UnpackLog(event, "SuscribeValidator", log); err != nil {
+				event := new(ContractSubscribeValidator)
+				if err := _Contract.contract.UnpackLog(event, "SubscribeValidator", log); err != nil {
 					return err
 				}
 				event.Raw = log
@@ -1413,21 +1414,21 @@ func (_Contract *ContractFilterer) WatchSuscribeValidator(opts *bind.WatchOpts, 
 	}), nil
 }
 
-// ParseSuscribeValidator is a log parse operation binding the contract event 0xa13e0f092606d35d8623aa0d400afea6ec212b23a50d7b1ed30050be9f395763.
+// ParseSubscribeValidator is a log parse operation binding the contract event 0x1094f8cfeb6abd0fd67e4ce1e1d3999c0176a4d8c7f8325e3ecddb5a1249fde9.
 //
-// Solidity: event SuscribeValidator(uint256 suscriptionCollateral, uint32 validatorID)
-func (_Contract *ContractFilterer) ParseSuscribeValidator(log types.Log) (*ContractSuscribeValidator, error) {
-	event := new(ContractSuscribeValidator)
-	if err := _Contract.contract.UnpackLog(event, "SuscribeValidator", log); err != nil {
+// Solidity: event SubscribeValidator(address sender, uint256 subscriptionCollateral, uint64 validatorID)
+func (_Contract *ContractFilterer) ParseSubscribeValidator(log types.Log) (*ContractSubscribeValidator, error) {
+	event := new(ContractSubscribeValidator)
+	if err := _Contract.contract.UnpackLog(event, "SubscribeValidator", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
 	return event, nil
 }
 
-// ContractUnsuscribeValidatorIterator is returned from FilterUnsuscribeValidator and is used to iterate over the raw logs and unpacked data for UnsuscribeValidator events raised by the Contract contract.
-type ContractUnsuscribeValidatorIterator struct {
-	Event *ContractUnsuscribeValidator // Event containing the contract specifics and raw log
+// ContractUnsubscribeValidatorIterator is returned from FilterUnsubscribeValidator and is used to iterate over the raw logs and unpacked data for UnsubscribeValidator events raised by the Contract contract.
+type ContractUnsubscribeValidatorIterator struct {
+	Event *ContractUnsubscribeValidator // Event containing the contract specifics and raw log
 
 	contract *bind.BoundContract // Generic contract to use for unpacking event data
 	event    string              // Event name to use for unpacking event data
@@ -1441,7 +1442,7 @@ type ContractUnsuscribeValidatorIterator struct {
 // Next advances the iterator to the subsequent event, returning whether there
 // are any more events found. In case of a retrieval or parsing error, false is
 // returned and Error() can be queried for the exact failure.
-func (it *ContractUnsuscribeValidatorIterator) Next() bool {
+func (it *ContractUnsubscribeValidatorIterator) Next() bool {
 	// If the iterator failed, stop iterating
 	if it.fail != nil {
 		return false
@@ -1450,7 +1451,7 @@ func (it *ContractUnsuscribeValidatorIterator) Next() bool {
 	if it.done {
 		select {
 		case log := <-it.logs:
-			it.Event = new(ContractUnsuscribeValidator)
+			it.Event = new(ContractUnsubscribeValidator)
 			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 				it.fail = err
 				return false
@@ -1465,7 +1466,7 @@ func (it *ContractUnsuscribeValidatorIterator) Next() bool {
 	// Iterator still in progress, wait for either a data or an error event
 	select {
 	case log := <-it.logs:
-		it.Event = new(ContractUnsuscribeValidator)
+		it.Event = new(ContractUnsubscribeValidator)
 		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 			it.fail = err
 			return false
@@ -1481,42 +1482,42 @@ func (it *ContractUnsuscribeValidatorIterator) Next() bool {
 }
 
 // Error returns any retrieval or parsing error occurred during filtering.
-func (it *ContractUnsuscribeValidatorIterator) Error() error {
+func (it *ContractUnsubscribeValidatorIterator) Error() error {
 	return it.fail
 }
 
 // Close terminates the iteration process, releasing any pending underlying
 // resources.
-func (it *ContractUnsuscribeValidatorIterator) Close() error {
+func (it *ContractUnsubscribeValidatorIterator) Close() error {
 	it.sub.Unsubscribe()
 	return nil
 }
 
-// ContractUnsuscribeValidator represents a UnsuscribeValidator event raised by the Contract contract.
-type ContractUnsuscribeValidator struct {
+// ContractUnsubscribeValidator represents a UnsubscribeValidator event raised by the Contract contract.
+type ContractUnsubscribeValidator struct {
 	Sender      common.Address
-	ValidatorID uint32
+	ValidatorID uint64
 	Raw         types.Log // Blockchain specific contextual infos
 }
 
-// FilterUnsuscribeValidator is a free log retrieval operation binding the contract event 0xe3180ee8c794126375e09870dacb24cec3a2c0ead35e057da074ce5fcc9b3a40.
+// FilterUnsubscribeValidator is a free log retrieval operation binding the contract event 0x5a984d13ffecb21f69de43956dcd971abcff8e187fac09a0ce3209562da14e0a.
 //
-// Solidity: event UnsuscribeValidator(address sender, uint32 validatorID)
-func (_Contract *ContractFilterer) FilterUnsuscribeValidator(opts *bind.FilterOpts) (*ContractUnsuscribeValidatorIterator, error) {
+// Solidity: event UnsubscribeValidator(address sender, uint64 validatorID)
+func (_Contract *ContractFilterer) FilterUnsubscribeValidator(opts *bind.FilterOpts) (*ContractUnsubscribeValidatorIterator, error) {
 
-	logs, sub, err := _Contract.contract.FilterLogs(opts, "UnsuscribeValidator")
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "UnsubscribeValidator")
 	if err != nil {
 		return nil, err
 	}
-	return &ContractUnsuscribeValidatorIterator{contract: _Contract.contract, event: "UnsuscribeValidator", logs: logs, sub: sub}, nil
+	return &ContractUnsubscribeValidatorIterator{contract: _Contract.contract, event: "UnsubscribeValidator", logs: logs, sub: sub}, nil
 }
 
-// WatchUnsuscribeValidator is a free log subscription operation binding the contract event 0xe3180ee8c794126375e09870dacb24cec3a2c0ead35e057da074ce5fcc9b3a40.
+// WatchUnsubscribeValidator is a free log subscription operation binding the contract event 0x5a984d13ffecb21f69de43956dcd971abcff8e187fac09a0ce3209562da14e0a.
 //
-// Solidity: event UnsuscribeValidator(address sender, uint32 validatorID)
-func (_Contract *ContractFilterer) WatchUnsuscribeValidator(opts *bind.WatchOpts, sink chan<- *ContractUnsuscribeValidator) (event.Subscription, error) {
+// Solidity: event UnsubscribeValidator(address sender, uint64 validatorID)
+func (_Contract *ContractFilterer) WatchUnsubscribeValidator(opts *bind.WatchOpts, sink chan<- *ContractUnsubscribeValidator) (event.Subscription, error) {
 
-	logs, sub, err := _Contract.contract.WatchLogs(opts, "UnsuscribeValidator")
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "UnsubscribeValidator")
 	if err != nil {
 		return nil, err
 	}
@@ -1526,8 +1527,8 @@ func (_Contract *ContractFilterer) WatchUnsuscribeValidator(opts *bind.WatchOpts
 			select {
 			case log := <-logs:
 				// New log arrived, parse the event and forward to the user
-				event := new(ContractUnsuscribeValidator)
-				if err := _Contract.contract.UnpackLog(event, "UnsuscribeValidator", log); err != nil {
+				event := new(ContractUnsubscribeValidator)
+				if err := _Contract.contract.UnpackLog(event, "UnsubscribeValidator", log); err != nil {
 					return err
 				}
 				event.Raw = log
@@ -1548,12 +1549,12 @@ func (_Contract *ContractFilterer) WatchUnsuscribeValidator(opts *bind.WatchOpts
 	}), nil
 }
 
-// ParseUnsuscribeValidator is a log parse operation binding the contract event 0xe3180ee8c794126375e09870dacb24cec3a2c0ead35e057da074ce5fcc9b3a40.
+// ParseUnsubscribeValidator is a log parse operation binding the contract event 0x5a984d13ffecb21f69de43956dcd971abcff8e187fac09a0ce3209562da14e0a.
 //
-// Solidity: event UnsuscribeValidator(address sender, uint32 validatorID)
-func (_Contract *ContractFilterer) ParseUnsuscribeValidator(log types.Log) (*ContractUnsuscribeValidator, error) {
-	event := new(ContractUnsuscribeValidator)
-	if err := _Contract.contract.UnpackLog(event, "UnsuscribeValidator", log); err != nil {
+// Solidity: event UnsubscribeValidator(address sender, uint64 validatorID)
+func (_Contract *ContractFilterer) ParseUnsubscribeValidator(log types.Log) (*ContractUnsubscribeValidator, error) {
+	event := new(ContractUnsubscribeValidator)
+	if err := _Contract.contract.UnpackLog(event, "UnsubscribeValidator", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -1828,9 +1829,9 @@ func (_Contract *ContractFilterer) ParseUpdateRewardsRoot(log types.Log) (*Contr
 	return event, nil
 }
 
-// ContractUpdateSuscriptionCollateralIterator is returned from FilterUpdateSuscriptionCollateral and is used to iterate over the raw logs and unpacked data for UpdateSuscriptionCollateral events raised by the Contract contract.
-type ContractUpdateSuscriptionCollateralIterator struct {
-	Event *ContractUpdateSuscriptionCollateral // Event containing the contract specifics and raw log
+// ContractUpdateSubscriptionCollateralIterator is returned from FilterUpdateSubscriptionCollateral and is used to iterate over the raw logs and unpacked data for UpdateSubscriptionCollateral events raised by the Contract contract.
+type ContractUpdateSubscriptionCollateralIterator struct {
+	Event *ContractUpdateSubscriptionCollateral // Event containing the contract specifics and raw log
 
 	contract *bind.BoundContract // Generic contract to use for unpacking event data
 	event    string              // Event name to use for unpacking event data
@@ -1844,7 +1845,7 @@ type ContractUpdateSuscriptionCollateralIterator struct {
 // Next advances the iterator to the subsequent event, returning whether there
 // are any more events found. In case of a retrieval or parsing error, false is
 // returned and Error() can be queried for the exact failure.
-func (it *ContractUpdateSuscriptionCollateralIterator) Next() bool {
+func (it *ContractUpdateSubscriptionCollateralIterator) Next() bool {
 	// If the iterator failed, stop iterating
 	if it.fail != nil {
 		return false
@@ -1853,7 +1854,7 @@ func (it *ContractUpdateSuscriptionCollateralIterator) Next() bool {
 	if it.done {
 		select {
 		case log := <-it.logs:
-			it.Event = new(ContractUpdateSuscriptionCollateral)
+			it.Event = new(ContractUpdateSubscriptionCollateral)
 			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 				it.fail = err
 				return false
@@ -1868,7 +1869,7 @@ func (it *ContractUpdateSuscriptionCollateralIterator) Next() bool {
 	// Iterator still in progress, wait for either a data or an error event
 	select {
 	case log := <-it.logs:
-		it.Event = new(ContractUpdateSuscriptionCollateral)
+		it.Event = new(ContractUpdateSubscriptionCollateral)
 		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
 			it.fail = err
 			return false
@@ -1884,41 +1885,41 @@ func (it *ContractUpdateSuscriptionCollateralIterator) Next() bool {
 }
 
 // Error returns any retrieval or parsing error occurred during filtering.
-func (it *ContractUpdateSuscriptionCollateralIterator) Error() error {
+func (it *ContractUpdateSubscriptionCollateralIterator) Error() error {
 	return it.fail
 }
 
 // Close terminates the iteration process, releasing any pending underlying
 // resources.
-func (it *ContractUpdateSuscriptionCollateralIterator) Close() error {
+func (it *ContractUpdateSubscriptionCollateralIterator) Close() error {
 	it.sub.Unsubscribe()
 	return nil
 }
 
-// ContractUpdateSuscriptionCollateral represents a UpdateSuscriptionCollateral event raised by the Contract contract.
-type ContractUpdateSuscriptionCollateral struct {
-	NewSuscriptionCollateral *big.Int
-	Raw                      types.Log // Blockchain specific contextual infos
+// ContractUpdateSubscriptionCollateral represents a UpdateSubscriptionCollateral event raised by the Contract contract.
+type ContractUpdateSubscriptionCollateral struct {
+	NewSubscriptionCollateral *big.Int
+	Raw                       types.Log // Blockchain specific contextual infos
 }
 
-// FilterUpdateSuscriptionCollateral is a free log retrieval operation binding the contract event 0xd206298458e3452cdcfb29008b2a769fdacc6fb60fd2ee96deb1338faa98154a.
+// FilterUpdateSubscriptionCollateral is a free log retrieval operation binding the contract event 0xdb50d3f51ff6294ba829f0d7f6b99b5b606a52807d5106ef44151d9297720217.
 //
-// Solidity: event UpdateSuscriptionCollateral(uint256 newSuscriptionCollateral)
-func (_Contract *ContractFilterer) FilterUpdateSuscriptionCollateral(opts *bind.FilterOpts) (*ContractUpdateSuscriptionCollateralIterator, error) {
+// Solidity: event UpdateSubscriptionCollateral(uint256 newSubscriptionCollateral)
+func (_Contract *ContractFilterer) FilterUpdateSubscriptionCollateral(opts *bind.FilterOpts) (*ContractUpdateSubscriptionCollateralIterator, error) {
 
-	logs, sub, err := _Contract.contract.FilterLogs(opts, "UpdateSuscriptionCollateral")
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "UpdateSubscriptionCollateral")
 	if err != nil {
 		return nil, err
 	}
-	return &ContractUpdateSuscriptionCollateralIterator{contract: _Contract.contract, event: "UpdateSuscriptionCollateral", logs: logs, sub: sub}, nil
+	return &ContractUpdateSubscriptionCollateralIterator{contract: _Contract.contract, event: "UpdateSubscriptionCollateral", logs: logs, sub: sub}, nil
 }
 
-// WatchUpdateSuscriptionCollateral is a free log subscription operation binding the contract event 0xd206298458e3452cdcfb29008b2a769fdacc6fb60fd2ee96deb1338faa98154a.
+// WatchUpdateSubscriptionCollateral is a free log subscription operation binding the contract event 0xdb50d3f51ff6294ba829f0d7f6b99b5b606a52807d5106ef44151d9297720217.
 //
-// Solidity: event UpdateSuscriptionCollateral(uint256 newSuscriptionCollateral)
-func (_Contract *ContractFilterer) WatchUpdateSuscriptionCollateral(opts *bind.WatchOpts, sink chan<- *ContractUpdateSuscriptionCollateral) (event.Subscription, error) {
+// Solidity: event UpdateSubscriptionCollateral(uint256 newSubscriptionCollateral)
+func (_Contract *ContractFilterer) WatchUpdateSubscriptionCollateral(opts *bind.WatchOpts, sink chan<- *ContractUpdateSubscriptionCollateral) (event.Subscription, error) {
 
-	logs, sub, err := _Contract.contract.WatchLogs(opts, "UpdateSuscriptionCollateral")
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "UpdateSubscriptionCollateral")
 	if err != nil {
 		return nil, err
 	}
@@ -1928,8 +1929,8 @@ func (_Contract *ContractFilterer) WatchUpdateSuscriptionCollateral(opts *bind.W
 			select {
 			case log := <-logs:
 				// New log arrived, parse the event and forward to the user
-				event := new(ContractUpdateSuscriptionCollateral)
-				if err := _Contract.contract.UnpackLog(event, "UpdateSuscriptionCollateral", log); err != nil {
+				event := new(ContractUpdateSubscriptionCollateral)
+				if err := _Contract.contract.UnpackLog(event, "UpdateSubscriptionCollateral", log); err != nil {
 					return err
 				}
 				event.Raw = log
@@ -1950,12 +1951,12 @@ func (_Contract *ContractFilterer) WatchUpdateSuscriptionCollateral(opts *bind.W
 	}), nil
 }
 
-// ParseUpdateSuscriptionCollateral is a log parse operation binding the contract event 0xd206298458e3452cdcfb29008b2a769fdacc6fb60fd2ee96deb1338faa98154a.
+// ParseUpdateSubscriptionCollateral is a log parse operation binding the contract event 0xdb50d3f51ff6294ba829f0d7f6b99b5b606a52807d5106ef44151d9297720217.
 //
-// Solidity: event UpdateSuscriptionCollateral(uint256 newSuscriptionCollateral)
-func (_Contract *ContractFilterer) ParseUpdateSuscriptionCollateral(log types.Log) (*ContractUpdateSuscriptionCollateral, error) {
-	event := new(ContractUpdateSuscriptionCollateral)
-	if err := _Contract.contract.UnpackLog(event, "UpdateSuscriptionCollateral", log); err != nil {
+// Solidity: event UpdateSubscriptionCollateral(uint256 newSubscriptionCollateral)
+func (_Contract *ContractFilterer) ParseUpdateSubscriptionCollateral(log types.Log) (*ContractUpdateSubscriptionCollateral, error) {
+	event := new(ContractUpdateSubscriptionCollateral)
+	if err := _Contract.contract.UnpackLog(event, "UpdateSubscriptionCollateral", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
