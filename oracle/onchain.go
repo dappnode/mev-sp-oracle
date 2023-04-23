@@ -350,11 +350,11 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
 
 	var err error
-	var itr *contract.ContractSuscribeValidatorIterator
+	var itr *contract.ContractSubscribeValidatorIterator
 
 	err = retry.Do(func() error {
 		// Note that this event can be both donations and mev rewards
-		itr, err = o.Contract.FilterSuscribeValidator(filterOpts)
+		itr, err = o.Contract.FilterSubscribeValidator(filterOpts)
 		if err != nil {
 			log.Warn("Failed attempt to filter subscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
 			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
@@ -389,11 +389,11 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
 
 	var err error
-	var itr *contract.ContractUnsuscribeValidatorIterator
+	var itr *contract.ContractUnsubscribeValidatorIterator
 
 	err = retry.Do(func() error {
 		// Note that this event can be both donations and mev rewards
-		itr, err = o.Contract.FilterUnsuscribeValidator(filterOpts)
+		itr, err = o.Contract.FilterUnsubscribeValidator(filterOpts)
 		if err != nil {
 			log.Warn("Failed attempt to filter unsubscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
 			return errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
