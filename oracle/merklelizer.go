@@ -37,21 +37,21 @@ func NewMerklelizer() *Merklelizer {
 }
 
 type RawLeaf struct {
-	DepositAddress     string
+	WithdrawalAddress  string
 	AccumulatedBalance *big.Int
 }
 
 // TODO: Add checks:
 // -New balance to claim matches what was sent to the pool, etc.
 
-// Aggregates all validators indexes that belong to the same deposit address. This
+// Aggregates all validators indexes that belong to the same withdrawal address. This
 // allows the merkle tree to hold all validators balance belonging to the same set
 // of validators, that makes claiming cheaper since only one proof is needed for n validators
-// belonging to the same deposit address
+// belonging to the same withdrawal address
 func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) []RawLeaf {
 
-	// Creates an array of leaf. Each leaf contains the deposit address and the accumulated balance
-	// for all the validators belonging to the same deposit address
+	// Creates an array of leaf. Each leaf contains the withdrawal address and the accumulated balance
+	// for all the validators belonging to the same withdrawal address
 	allLeafs := make([]RawLeaf, 0)
 
 	// Iterate all validators
@@ -60,9 +60,9 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 		// That match some criteria
 		found := false
 
-		// If the leaf already exists, add the balance to the existing leaf (by deposit address)
+		// If the leaf already exists, add the balance to the existing leaf (by withdrawal address)
 		for _, leaf := range allLeafs {
-			if leaf.DepositAddress == validator.DepositAddress {
+			if leaf.WithdrawalAddress == validator.WithdrawalAddress {
 				leaf.AccumulatedBalance.Add(leaf.AccumulatedBalance, validator.AccumulatedRewardsWei)
 				found = true
 				continue
@@ -73,7 +73,7 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 		if !found {
 			allLeafs = append(allLeafs, RawLeaf{
 				// In lowercase to avoid confusion when claiming
-				DepositAddress: strings.ToLower(validator.DepositAddress),
+				WithdrawalAddress: strings.ToLower(validator.WithdrawalAddress),
 				// Copy the value
 				AccumulatedBalance: new(big.Int).Set(validator.AccumulatedRewardsWei),
 			})
@@ -87,65 +87,65 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 		allAccumulatedFromValidators.Add(allAccumulatedFromValidators, validator.AccumulatedRewardsWei)
 	}
 
-	allAccumulatedFromDeposits := big.NewInt(0)
-	for _, depositAddressAccumulated := range allLeafs {
-		allAccumulatedFromDeposits.Add(allAccumulatedFromDeposits, depositAddressAccumulated.AccumulatedBalance)
+	allAccumulatedFromwithdrawals := big.NewInt(0)
+	for _, WithdrawalAddressAccumulated := range allLeafs {
+		allAccumulatedFromwithdrawals.Add(allAccumulatedFromwithdrawals, WithdrawalAddressAccumulated.AccumulatedBalance)
 	}
 
-	if allAccumulatedFromValidators.Cmp(allAccumulatedFromDeposits) != 0 {
-		log.Fatal("rewards calculation per validator and per deposit address does not match: ",
-			allAccumulatedFromValidators, " vs ", allAccumulatedFromDeposits)
+	if allAccumulatedFromValidators.Cmp(allAccumulatedFromwithdrawals) != 0 {
+		log.Fatal("rewards calculation per validator and per withdrawal address does not match: ",
+			allAccumulatedFromValidators, " vs ", allAccumulatedFromwithdrawals)
 	}
 
-	// Order the leafs by deposit address
-	orderedByDepositAddress := merklelizer.OrderByDepositAddress(allLeafs)
+	// Order the leafs by withdrawal address
+	orderedByWithdrawalAddress := merklelizer.OrderByWithdrawalAddress(allLeafs)
 
-	// Sanity check to ensure the PoolAddress is not already in the link of DepositAddress
+	// Sanity check to ensure the PoolAddress is not already in the link of WithdrawalAddress
 	// This should never happen and would be a weird missconfiguration
-	for _, leaf := range orderedByDepositAddress {
-		if strings.ToLower(leaf.DepositAddress) == strings.ToLower(state.PoolAddress) {
-			log.Fatal("the PoolAddress is equal to one of the DepositAddress. ",
-				"PoolAddress: ", state.PoolAddress, " DepositAddress: ", leaf.DepositAddress)
+	for _, leaf := range orderedByWithdrawalAddress {
+		if strings.ToLower(leaf.WithdrawalAddress) == strings.ToLower(state.PoolAddress) {
+			log.Fatal("the PoolAddress is equal to one of the WithdrawalAddress. ",
+				"PoolAddress: ", state.PoolAddress, " WithdrawalAddress: ", leaf.WithdrawalAddress)
 		}
 
 	}
 
 	// Prepend the leaf with the pool fees to the list of leafs. Always the first
 	poolFeesLeaf := RawLeaf{
-		DepositAddress:     strings.ToLower(state.PoolFeesAddress),
+		WithdrawalAddress:  strings.ToLower(state.PoolFeesAddress),
 		AccumulatedBalance: new(big.Int).Set(state.PoolAccumulatedFees),
 	}
 
-	// Pool rewards leaf (address + balance) is the first. Note that the DepositAddress name is reused
+	// Pool rewards leaf (address + balance) is the first. Note that the WithdrawalAddress name is reused
 	// which could be missleading
-	orderedByDepositAddress = append([]RawLeaf{poolFeesLeaf}, orderedByDepositAddress...)
+	orderedByWithdrawalAddress = append([]RawLeaf{poolFeesLeaf}, orderedByWithdrawalAddress...)
 
 	// Before returning the leaf, ensure all of them are valid addresses
-	for _, leaf := range orderedByDepositAddress {
-		if !common.IsHexAddress(leaf.DepositAddress) {
-			log.Fatal("leaf contained a wrong deposit address: ", leaf.DepositAddress)
+	for _, leaf := range orderedByWithdrawalAddress {
+		if !common.IsHexAddress(leaf.WithdrawalAddress) {
+			log.Fatal("leaf contained a wrong withdrawal address: ", leaf.WithdrawalAddress)
 		}
 
-		// To avoid compatibility problems, all DepositAddress should be in lowercase
-		if strings.ToLower(leaf.DepositAddress) != leaf.DepositAddress {
-			log.Fatal("all deposit address should be in lowercase: ", leaf.DepositAddress)
+		// To avoid compatibility problems, all WithdrawalAddress should be in lowercase
+		if strings.ToLower(leaf.WithdrawalAddress) != leaf.WithdrawalAddress {
+			log.Fatal("all withdrawal address should be in lowercase: ", leaf.WithdrawalAddress)
 		}
 	}
 
-	return orderedByDepositAddress
+	return orderedByWithdrawalAddress
 }
 
-// Sort by deposit address
-func (merklelizer *Merklelizer) OrderByDepositAddress(leafs []RawLeaf) []RawLeaf {
+// Sort by withdrawal address
+func (merklelizer *Merklelizer) OrderByWithdrawalAddress(leafs []RawLeaf) []RawLeaf {
 	sortedLeafs := make([]RawLeaf, len(leafs))
 	copy(sortedLeafs, leafs)
 	sort.Slice(sortedLeafs, func(i, j int) bool {
-		return sortedLeafs[i].DepositAddress < sortedLeafs[j].DepositAddress
+		return sortedLeafs[i].WithdrawalAddress < sortedLeafs[j].WithdrawalAddress
 	})
 	return sortedLeafs
 }
 
-// return map of deposit address -> and its hashed leaf. rethink this
+// return map of withdrawal address -> and its hashed leaf. rethink this
 func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[string]mt.DataBlock, map[string]RawLeaf, *mt.MerkleTree, bool) {
 
 	blocks := make([]mt.DataBlock, 0)
@@ -157,22 +157,22 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 	}).Info("Generating tree")
 
 	// TODO: refactor this.
-	// Stores the deposit address -> hashed leaf
-	depositToLeaf := make(map[string]mt.DataBlock, 0)
-	// Stores te deposit address -> raw leaf
-	depositToRawLeaf := make(map[string]RawLeaf, 0)
+	// Stores the withdrawal address -> hashed leaf
+	withdrawalToLeaf := make(map[string]mt.DataBlock, 0)
+	// Stores te withdrawal address -> raw leaf
+	withdrawalToRawLeaf := make(map[string]RawLeaf, 0)
 
 	for _, leaf := range orderedRawLeafs {
 		leafHash := solsha3.SoliditySHA3(
-			solsha3.Address(leaf.DepositAddress),
+			solsha3.Address(leaf.WithdrawalAddress),
 			solsha3.Uint256(leaf.AccumulatedBalance),
 		)
 		blocks = append(blocks, &testData{data: leafHash})
-		depositToLeaf[leaf.DepositAddress] = &testData{data: leafHash}
-		depositToRawLeaf[leaf.DepositAddress] = leaf
+		withdrawalToLeaf[leaf.WithdrawalAddress] = &testData{data: leafHash}
+		withdrawalToRawLeaf[leaf.WithdrawalAddress] = leaf
 
 		log.WithFields(log.Fields{
-			"DepositAddress":     leaf.DepositAddress,
+			"WithdrawalAddress":  leaf.WithdrawalAddress,
 			"AccumulatedBalance": leaf.AccumulatedBalance,
 			"LeafHash":           hex.EncodeToString(leafHash),
 		}).Info("Leaf information")
@@ -214,5 +214,5 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		}
 	}
 
-	return depositToLeaf, depositToRawLeaf, tree, true
+	return withdrawalToLeaf, withdrawalToRawLeaf, tree, true
 }

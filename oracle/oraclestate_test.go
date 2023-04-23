@@ -81,7 +81,7 @@ func Test_HandleManualSubscriptions_Valid(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(0),
 		PendingRewardsWei:       big.NewInt(1000),
 		CollateralWei:           big.NewInt(1000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          33,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -127,7 +127,7 @@ func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(2000), // Second and third collateral are returned to the user
 		PendingRewardsWei:       big.NewInt(1000),
 		CollateralWei:           big.NewInt(1000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          33,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -180,7 +180,7 @@ func Test_HandleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 		AccumulatedRewardsWei:   big.NewInt(9000 + 1000*2),
 		PendingRewardsWei:       big.NewInt(44000 + 1000),
 		CollateralWei:           big.NewInt(1000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          33,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -309,7 +309,7 @@ func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(0),
 		PendingRewardsWei:       big.NewInt(0),
 		CollateralWei:           big.NewInt(1000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          bannedIndex,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -344,7 +344,7 @@ func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(1000),
 		PendingRewardsWei:       big.NewInt(0),
 		CollateralWei:           big.NewInt(1000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          bannedIndex,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -414,7 +414,7 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(3000), // Accumulated rewards are kept
 		PendingRewardsWei:       big.NewInt(0),    // Pending rewards are cleared
 		CollateralWei:           big.NewInt(500000),
-		DepositAddress:          "0x0627a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x0627a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          6,
 		ValidatorKey:            "0x06aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -492,7 +492,7 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(9000 + 1000*2), // Second and third collateral are added to accumulated rewards (returned)
 		PendingRewardsWei:       big.NewInt(44000 + 1000),  // First collateral is added to pending (claimable in next block)
 		CollateralWei:           big.NewInt(1000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          33,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -519,7 +519,7 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(9000 + 1000*2), // Second and third collateral are added to accumulated rewards (returned)
 		PendingRewardsWei:       big.NewInt(44000 + 1000),  // First collateral is added to pending (claimable in next block)
 		CollateralWei:           big.NewInt(1000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          33,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -574,7 +574,7 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(5000000000000000000),
 		PendingRewardsWei:       big.NewInt(3000000000000000000),
 		CollateralWei:           big.NewInt(1000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          valIndex,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -607,7 +607,7 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(5000000000000000000),
 		PendingRewardsWei:       big.NewInt(3000000000000000000),
 		CollateralWei:           big.NewInt(1000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          valIndex,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -631,7 +631,7 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(0),
 		PendingRewardsWei:       big.NewInt(0),
 		CollateralWei:           big.NewInt(500000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          valIndex,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -669,7 +669,7 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(1000000000000000000),
 		PendingRewardsWei:       big.NewInt(0),
 		CollateralWei:           big.NewInt(500000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          valIndex,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -703,7 +703,7 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 		AccumulatedRewardsWei:   big.NewInt(1000000000000000000),
 		PendingRewardsWei:       big.NewInt(500000),
 		CollateralWei:           big.NewInt(500000),
-		DepositAddress:          "0x9427a30991170f917d7b83def6e44d26577871ed",
+		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          valIndex,
 		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 		ValidatorProposedBlocks: []Block{},
@@ -862,7 +862,7 @@ func Test_ResetPendingRewards(t *testing.T) {
 func Test_IncreasePendingRewards(t *testing.T) {
 	state := NewOracleState(&config.Config{})
 	state.Validators[12] = &ValidatorInfo{
-		DepositAddress:    "0xaa",
+		WithdrawalAddress: "0xaa",
 		ValidatorStatus:   Active,
 		PendingRewardsWei: big.NewInt(100),
 	}
@@ -985,7 +985,7 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 		AccumulatedRewardsWei: big.NewInt(1000),
 		PendingRewardsWei:     big.NewInt(1000),
 		CollateralWei:         big.NewInt(1000),
-		DepositAddress:        "0xa000000000000000000000000000000000000000",
+		WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        10,
 		ValidatorKey:          "0xc", // TODO: Fix this, should be uint64
 		ValidatorProposedBlocks: []Block{
@@ -1027,7 +1027,7 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 		AccumulatedRewardsWei: big.NewInt(13000),
 		PendingRewardsWei:     big.NewInt(100),
 		CollateralWei:         big.NewInt(1000000),
-		DepositAddress:        "0xa000000000000000000000000000000000000000",
+		WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        20,
 		ValidatorKey:          "0xc",
 		ValidatorProposedBlocks: []Block{
@@ -1069,7 +1069,7 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 		AccumulatedRewardsWei: big.NewInt(53000),
 		PendingRewardsWei:     big.NewInt(000),
 		CollateralWei:         big.NewInt(4000000),
-		DepositAddress:        "0xa000000000000000000000000000000000000000",
+		WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        30,
 		ValidatorKey:          "0xc",
 		// Empty Proposed blocks
@@ -1205,7 +1205,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 					Collateral:     big.NewInt(1000000), // Enough
 					BlockNumber:    0,
 					TxHash:         "0xab",
-					DepositAddress: "0xac",
+					WithdrawalAddress: "0xac",
 				},
 				{
 					ValidatorIndex: 2,
@@ -1213,7 +1213,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 					Collateral:     big.NewInt(1000000), // Enough
 					BlockNumber:    0,
 					TxHash:         "0xbb",
-					DepositAddress: "0xbc",
+					WithdrawalAddress: "0xbc",
 				},
 				{
 					ValidatorIndex: 3,
@@ -1221,7 +1221,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 					Collateral:     big.NewInt(50), // Not enough
 					BlockNumber:    0,
 					TxHash:         "0xbb",
-					DepositAddress: "0xbc",
+					WithdrawalAddress: "0xbc",
 				},
 			}
 			state.HandleManualSubscriptions(cfg.CollateralInWei, subs)
@@ -1256,7 +1256,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 					Collateral:     big.NewInt(5000000), // Too much + already subscribed
 					BlockNumber:    5,
 					TxHash:         "0xab",
-					DepositAddress: "0xac",
+					WithdrawalAddress: "0xac",
 				},
 				{
 					ValidatorIndex: 2,
@@ -1264,7 +1264,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 					Collateral:     big.NewInt(5000000), // Too much + already subscribed
 					BlockNumber:    5,
 					TxHash:         "0xbb",
-					DepositAddress: "0xbc",
+					WithdrawalAddress: "0xbc",
 				},
 			}
 
@@ -1295,7 +1295,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 					Collateral:     big.NewInt(1000070), // More than enough
 					BlockNumber:    0,
 					TxHash:         "0xcb",
-					DepositAddress: "0xcc",
+					WithdrawalAddress: "0xcc",
 				},
 			}
 			state.HandleManualSubscriptions(cfg.CollateralInWei, subs3)
@@ -1345,7 +1345,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 					Collateral:     big.NewInt(2500000), // More than enough
 					BlockNumber:    0,
 					TxHash:         "0xcb",
-					DepositAddress: "0xcc",
+					WithdrawalAddress: "0xcc",
 				},
 			}
 			state.HandleManualSubscriptions(cfg.CollateralInWei, subs4)
@@ -1379,7 +1379,7 @@ func Test_Handle_TODO(t *testing.T) {
 					Collateral:     big.NewInt(1000000), // Enough
 					BlockNumber:    0,
 					TxHash:         "0xab",
-					DepositAddress: "0xac",
+					WithdrawalAddress: "0xac",
 				},
 				{
 					ValidatorIndex: 20,
@@ -1387,7 +1387,7 @@ func Test_Handle_TODO(t *testing.T) {
 					Collateral:     big.NewInt(1000000), // Enough
 					BlockNumber:    0,
 					TxHash:         "0xbb",
-					DepositAddress: "0xbc",
+					WithdrawalAddress: "0xbc",
 				},
 				{
 					ValidatorIndex: 30,
@@ -1395,7 +1395,7 @@ func Test_Handle_TODO(t *testing.T) {
 					Collateral:     big.NewInt(50), // Not enough
 					BlockNumber:    0,
 					TxHash:         "0xbb",
-					DepositAddress: "0xbc",
+					WithdrawalAddress: "0xbc",
 				},
 			}
 			state.HandleManualSubscriptions(cfg.CollateralInWei, subs)
@@ -1407,7 +1407,7 @@ func Test_Handle_TODO(t *testing.T) {
 				ValidatorKey:   "0x",
 				Reward:         big.NewInt(50000000),
 				RewardType:     VanilaBlock,
-				DepositAddress: "0ac",
+				WithdrawalAddress: "0ac",
 			}
 			state.HandleCorrectBlockProposal(block1)
 
@@ -1418,7 +1418,7 @@ func Test_Handle_TODO(t *testing.T) {
 				ValidatorKey:   "0x",
 				Reward:         big.NewInt(3333333),
 				RewardType:     VanilaBlock,
-				DepositAddress: "0ac",
+				WithdrawalAddress: "0ac",
 			}
 			state.HandleCorrectBlockProposal(block2)
 

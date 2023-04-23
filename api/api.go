@@ -46,7 +46,7 @@ const (
 	// Memory endpoints: what the oracle knows
 	pathMemoryValidators             = "/memory/validators"
 	pathMemoryValidatorByIndex       = "/memory/validator/{valindex}"
-	pathMemoryValidatorsByWithdrawal = "/memory/validators/{withdrawaladdress}"
+	pathMemoryValidatorsByWithdrawal = "/memory/validators/{withdrawalAddress}"
 	pathMemoryFeesInfo               = "/memory/feesinfo"
 	pathMemorySubscriptions          = "/memory/subscriptions"   // TODO
 	pathMemoryUnsubscriptions        = "/memory/unsubscriptions" // TODO
@@ -58,13 +58,13 @@ const (
 	pathMemoryPoolStatistics         = "/memory/statistics"
 
 	// Onchain endpoints: what is submitted to the contract
-	pathOnchainValidators          = "/onchain/validators"                  // TODO
-	pathOnchainValidatorByIndex    = "/onchain/validator/{valindex}"        // TODO
-	pathOnchainValidatorsByDeposit = "/onchain/validators/{depositaddress}" // TODO
-	pathOnchainFeesInfo            = "/onchain/proof/fees"
-	pathOnchainMerkleRoot          = "/onchain/merkleroot" // TODO:
-	pathOnchainMerkleProof         = "/onchain/proof/{depositaddress}"
-	pathOnchainLatestCheckpoint    = "/onchain/latestcheckpoint" // TODO: needed?
+	pathOnchainValidators             = "/onchain/validators"                     // TODO
+	pathOnchainValidatorByIndex       = "/onchain/validator/{valindex}"           // TODO
+	pathOnchainValidatorsByWithdrawal = "/onchain/validators/{withdrawalAddress}" // TODO
+	pathOnchainFeesInfo               = "/onchain/proof/fees"
+	pathOnchainMerkleRoot             = "/onchain/merkleroot" // TODO:
+	pathOnchainMerkleProof            = "/onchain/proof/{withdrawalAddress}"
+	pathOnchainLatestCheckpoint       = "/onchain/latestcheckpoint" // TODO: needed?
 )
 
 type httpErrorResp struct {
@@ -95,10 +95,10 @@ type httpRelay struct {
 	Timestamp    string `json:"timestamp"`
 }
 
-type httpOkDepositAddress struct {
-	DepositAddress   string `json:"deposit_address"`
-	ValidatorIndex   uint64 `json:"validator_index"`
-	ValidatorAddress string `json:"validator_address"`
+type httpOkWithdrawalAddress struct {
+	WithdrawalAddress string `json:"withdrawal_address"`
+	ValidatorIndex    uint64 `json:"validator_index"`
+	ValidatorAddress  string `json:"validator_address"`
 }
 
 type httpOkLatestCheckpoint struct {
@@ -140,7 +140,7 @@ type httpOkValidatorState struct {
 	AccumulatedRewardsWei *big.Int `json:"accumulated_rewards_wei"`
 	PendingRewardsWei     *big.Int `json:"pending_rewards_wei"`
 	CollateralWei         *big.Int `json:"collateral_rewards_wei"`
-	DepositAddress        string   `json:"deposit_address"`
+	WithdrawalAddress     string   `json:"withdrawal_address"`
 	ValidatorIndex        uint64   `json:"validator_index"`
 	ValidatorKey          string   `json:"validator_key"`
 	//ValidatorProposedBlocks   []BlockState
@@ -151,7 +151,7 @@ type httpOkValidatorState struct {
 }
 
 type httpOkProofs struct {
-	LeafDepositAddress         string   `json:"leaf_deposit_address"`
+	LeafWithdrawalAddress      string   `json:"leaf_withdrawal_address"`
 	LeafAccumulatedBalance     *big.Int `json:"leaf_accumulated_balance"`
 	MerkleRoot                 string   `json:"merkleroot"`
 	CheckpointSlot             uint64   `json:"checkpoint_slot"`
@@ -430,7 +430,7 @@ func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.
 
 func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
-	withdrawalAddress := vars["withdrawaladdress"]
+	withdrawalAddress := vars["withdrawalAddress"]
 
 	// Use always lowercase
 	withdrawalAddress = strings.ToLower(withdrawalAddress)
@@ -445,15 +445,15 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		return
 	}
 
-	// 1) Get all tracked validators for that deposit address (tracked)
+	// 1) Get all tracked validators for that withdrawal address (tracked)
 	trackedValidators := make([]*oracle.ValidatorInfo, 0)
 	for _, validator := range m.oracle.State.Validators {
-		if strings.ToLower(validator.DepositAddress) == strings.ToLower(withdrawalAddress) {
+		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
 			trackedValidators = append(trackedValidators, validator)
 		}
 	}
 
-	// 2) Get all onchain validators for that deposit address (untracked)
+	// 2) Get all onchain validators for that withdrawal address (untracked)
 	notTracked := make([]*oracle.ValidatorInfo, 0)
 	for _, validator := range m.Onchain.Validators() {
 
@@ -488,10 +488,10 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		// If not tracked, add it
 		if !found {
 			notTracked = append(notTracked, &oracle.ValidatorInfo{
-				ValidatorIndex:  uint64(validator.Index),
-				DepositAddress:  eth1Add,
-				ValidatorStatus: oracle.Untracked,
-				ValidatorKey:    "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
+				ValidatorIndex:    uint64(validator.Index),
+				WithdrawalAddress: eth1Add,
+				ValidatorStatus:   oracle.Untracked,
+				ValidatorKey:      "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
 			})
 		}
 	}
@@ -586,14 +586,14 @@ func (m *ApiService) handleOnchainFeesInfo(w http.ResponseWriter, req *http.Requ
 	}
 
 	type httpOkProofsFee struct {
-		LeafDepositAddress     string   `json:"leaf_deposit_address"`
+		LeafWithdrawalAddress  string   `json:"leaf_withdrawal_address"`
 		LeafAccumulatedBalance *big.Int `json:"leaf_accumulated_balance"`
 		MerkleRoot             string   `json:"merkleroot"`
 		Proofs                 []string `json:"merkle_proofs"`
 	}
 
 	m.respondOK(w, httpOkProofsFee{
-		LeafDepositAddress:     leaf.DepositAddress,
+		LeafWithdrawalAddress:  leaf.WithdrawalAddress,
 		LeafAccumulatedBalance: leaf.AccumulatedBalance,
 		MerkleRoot:             m.oracle.State.LatestCommitedState.MerkleRoot,
 		Proofs:                 proofs,
@@ -602,15 +602,15 @@ func (m *ApiService) handleOnchainFeesInfo(w http.ResponseWriter, req *http.Requ
 
 func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
-	depositAddress := vars["depositaddress"]
+	withdrawalAddress := vars["withdrawalAddress"]
 
-	if !IsValidAddress(depositAddress) {
-		m.respondError(w, http.StatusBadRequest, "invalid depositAddress: "+depositAddress)
+	if !IsValidAddress(withdrawalAddress) {
+		m.respondError(w, http.StatusBadRequest, "invalid WithdrawalAddress: "+withdrawalAddress)
 		return
 	}
 
 	// Use always lowercase
-	depositAddress = strings.ToLower(depositAddress)
+	withdrawalAddress = strings.ToLower(withdrawalAddress)
 
 	// Get the merkle root stored onchain
 	// TODO: Temporally disabled until we enable submitting state to chain
@@ -632,29 +632,29 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 		return
 	}*/
 
-	// Get the proofs of this deposit address (to be used onchain to claim rewards)
-	proofs, proofFound := m.oracle.State.LatestCommitedState.Proofs[depositAddress]
+	// Get the proofs of this withdrawal address (to be used onchain to claim rewards)
+	proofs, proofFound := m.oracle.State.LatestCommitedState.Proofs[withdrawalAddress]
 	if !proofFound {
-		m.respondError(w, http.StatusBadRequest, "could not find proof for depositAddress: "+depositAddress)
+		m.respondError(w, http.StatusBadRequest, "could not find proof for WithdrawalAddress: "+withdrawalAddress)
 		return
 	}
 
-	// Get the leafs of this deposit address (to be used onchain to claim rewards)
-	leafs, leafsFound := m.oracle.State.LatestCommitedState.Leafs[depositAddress]
+	// Get the leafs of this withdrawal address (to be used onchain to claim rewards)
+	leafs, leafsFound := m.oracle.State.LatestCommitedState.Leafs[withdrawalAddress]
 	if !leafsFound {
-		m.respondError(w, http.StatusBadRequest, "could not find leafs for depositAddress: "+depositAddress)
+		m.respondError(w, http.StatusBadRequest, "could not find leafs for WithdrawalAddress: "+withdrawalAddress)
 		return
 	}
 
-	// Get validators that are registered to this deposit address in the pool
+	// Get validators that are registered to this withdrawal address in the pool
 	registeredValidators := make([]uint64, 0)
 	for valIndex, validator := range m.oracle.State.LatestCommitedState.Validators {
-		if strings.ToLower(validator.DepositAddress) == strings.ToLower(depositAddress) {
+		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
 			registeredValidators = append(registeredValidators, valIndex)
 		}
 	}
 
-	claimed, err := m.Onchain.GetContractClaimedBalance(depositAddress, apiRetryOpts...)
+	claimed, err := m.Onchain.GetContractClaimedBalance(withdrawalAddress, apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get claimed balance so far from contract: "+err.Error())
 		return
@@ -663,13 +663,13 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 	totalPending := big.NewInt(0)
 
 	for _, validator := range m.oracle.State.LatestCommitedState.Validators {
-		if strings.ToLower(validator.DepositAddress) == strings.ToLower(depositAddress) {
+		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
 			totalPending.Add(totalPending, validator.PendingRewardsWei)
 		}
 	}
 
 	m.respondOK(w, httpOkProofs{
-		LeafDepositAddress:         leafs.DepositAddress,
+		LeafWithdrawalAddress:      leafs.WithdrawalAddress,
 		LeafAccumulatedBalance:     leafs.AccumulatedBalance,
 		MerkleRoot:                 m.oracle.State.LatestCommitedState.MerkleRoot,
 		CheckpointSlot:             m.oracle.State.LatestCommitedState.Slot,
@@ -715,7 +715,7 @@ func (m *ApiService) handleValidatorOnchainStateByIndex(w http.ResponseWriter, r
 		AccumulatedRewardsWei: valState.AccumulatedRewardsWei,
 		PendingRewardsWei:     valState.PendingRewardsWei,
 		CollateralWei:         valState.CollateralWei,
-		DepositAddress:        valState.DepositAddress,
+		WithdrawalAddress:     valState.WithdrawalAddress,
 		ValidatorIndex:        valState.ValidatorIndex,
 		ValidatorKey:          valState.ValidatorKey,
 		// TODO: Missing blocks fields
