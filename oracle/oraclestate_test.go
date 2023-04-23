@@ -60,7 +60,7 @@ func Test_HandleManualSubscriptions_Valid(t *testing.T) {
 			ValidatorID:            33,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 		Validator: &v1.Validator{
 			Index:  33,
@@ -93,6 +93,39 @@ func Test_HandleManualSubscriptions_Valid(t *testing.T) {
 	require.Equal(t, sub1, state.Subscriptions[0])
 }
 
+func Test_HandleManualSubscriptions_FromWrongAddress(t *testing.T) {
+	// Tests a subscription sent from a wrong address, meaning that it doesnt
+	// match the validator's withdrawal address. No subscription is produced
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	sub1 := Subscription{
+		Event: &contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		},
+		Validator: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	// No subscriptions are produced
+	state.HandleManualSubscriptions([]Subscription{sub1})
+	require.Equal(t, 0, len(state.Validators))
+	require.Equal(t, 0, len(state.Subscriptions))
+}
+
 func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 	// Test a subscription to an already subscribed validator, we return the collateral
 
@@ -105,7 +138,7 @@ func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 			ValidatorID:            33,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 		Validator: &v1.Validator{
 			Index:  33,
@@ -151,7 +184,7 @@ func Test_HandleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 			ValidatorID:            33,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 		Validator: &v1.Validator{
 			Index:  33,
@@ -204,7 +237,7 @@ func Test_HandleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
 			ValidatorID:            33,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 		Validator: &v1.Validator{
 			Index:  33,
@@ -234,7 +267,7 @@ func Test_HandleManualSubscriptions_NonExistent(t *testing.T) {
 			ValidatorID:            33,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 		Validator: nil,
 	}
@@ -258,7 +291,7 @@ func Test_HandleManualSubscriptions_WrongStateValidator(t *testing.T) {
 			ValidatorID:            33,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 		Validator: &v1.Validator{
 			Index:  33,
@@ -276,7 +309,7 @@ func Test_HandleManualSubscriptions_WrongStateValidator(t *testing.T) {
 			ValidatorID:            34,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x2}},
-			// TODO: Add sender address once smart contract is modified
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 		Validator: &v1.Validator{
 			Index:  34,
@@ -322,7 +355,7 @@ func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
 			ValidatorID:            bannedIndex,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 		Validator: &v1.Validator{
 			Index:  phase0.ValidatorIndex(bannedIndex),
@@ -368,7 +401,7 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 				ValidatorID:            valIdx,
 				SubscriptionCollateral: big.NewInt(500000),
 				Raw:                    types.Log{TxHash: [32]byte{0x1}},
-				// TODO: Add sender address once smart contract is modified
+				Sender:                 common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			},
 			Validator: &v1.Validator{
 				Index:  phase0.ValidatorIndex(valIdx),
@@ -392,7 +425,7 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	// Receive valid unsubscription event for index 6
 	unsub := Unsubscription{
 		Event: &contract.ContractUnsubscribeValidator{
-			ValidatorID: 6, // TODO: Set to uint64 when smart contract is fixed
+			ValidatorID: 6,
 			// Same as withdrawal credential without the prefix
 			Sender: common.Address{byte(6), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
@@ -683,7 +716,7 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 			ValidatorID:            valIndex,
 			SubscriptionCollateral: big.NewInt(500000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			// TODO: Add sender address once smart contract is modified
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 		Validator: &v1.Validator{
 			Index:  phase0.ValidatorIndex(valIndex),
