@@ -412,8 +412,7 @@ func (state *OracleState) HandleManualSubscriptions(
 
 		valIdx := uint64(sub.Event.ValidatorID) // TODO: Contract should be uint64
 		collateral := sub.Event.SubscriptionCollateral
-		sender := "0x" // TODO: Will be provided by contract
-		_ = sender
+		sender := sub.Event.Sender.String()
 
 		// Subscription recevied for a validator index that doesnt exist
 		if sub.Validator == nil {
@@ -462,12 +461,11 @@ func (state *OracleState) HandleManualSubscriptions(
 			continue
 		}
 
-		// TODO: Enable this when smart contract is changed
 		// Subscription received from an address that is not the validator withdrawal address
-		/*if !AreAddressEqual(sender, validatorWithdrawal) {
+		if !AreAddressEqual(sender, validatorWithdrawal) {
 			log.WithFields(log.Fields{
 				"BlockNumber":         sub.Event.Raw.BlockNumber,
-				"Collateral":          sub.Event.SuscriptionCollateral,
+				"Collateral":          sub.Event.SubscriptionCollateral,
 				"TxHash":              sub.Event.Raw.TxHash,
 				"ValidatorIndex":      valIdx,
 				"Sender":              sender,
@@ -476,7 +474,7 @@ func (state *OracleState) HandleManualSubscriptions(
 			// Fees go to the pool, as we dont know who is the sender
 			state.SendRewardToPool(collateral)
 			continue
-		}*/
+		}
 
 		// Subscription received for a banned validator
 		if state.IsBanned(valIdx) {
