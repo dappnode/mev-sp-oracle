@@ -444,15 +444,15 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 }
 
 // TODO: Only in finalized slots!
-func (o *Onchain) GetContractClaimedBalance(depositAddress string, opts ...retry.Option) (*big.Int, error) {
+func (o *Onchain) GetContractClaimedBalance(WithdrawalAddress string, opts ...retry.Option) (*big.Int, error) {
 	var claimedBalance *big.Int
 	var err error
 
-	if !common.IsHexAddress(depositAddress) {
-		log.Fatal("Invalid deposit address: ", depositAddress)
+	if !common.IsHexAddress(WithdrawalAddress) {
+		log.Fatal("Invalid withdrawal address: ", WithdrawalAddress)
 	}
 
-	hexDepAddres := common.HexToAddress(depositAddress)
+	hexDepAddres := common.HexToAddress(WithdrawalAddress)
 
 	// Retries multiple times before errorings
 	err = retry.Do(
@@ -557,7 +557,7 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 				poolBlock.BlockType = OkPoolProposalBlsKeys
 			} else {
 				poolBlock.BlockType = OkPoolProposal
-				poolBlock.DepositAddress = withdrawalAddress
+				poolBlock.WithdrawalAddress = withdrawalAddress
 			}
 		} else {
 			poolBlock.BlockType = WrongFeeRecipient

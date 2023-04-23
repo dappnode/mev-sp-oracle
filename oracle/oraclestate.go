@@ -72,13 +72,13 @@ const (
 
 // Represents a block with information relevant for the pool
 type Block struct {
-	Slot           uint64     `json:"slot"`
-	ValidatorIndex uint64     `json:"validator_index"`
-	ValidatorKey   string     `json:"validator_key"`
-	BlockType      BlockType  `json:"block_type"`
-	Reward         *big.Int   `json:"reward_wei"`
-	RewardType     RewardType `json:"reward_type"`
-	DepositAddress string     `json:"deposit_address"`
+	Slot              uint64     `json:"slot"`
+	ValidatorIndex    uint64     `json:"validator_index"`
+	ValidatorKey      string     `json:"validator_key"`
+	BlockType         BlockType  `json:"block_type"`
+	Reward            *big.Int   `json:"reward_wei"`
+	RewardType        RewardType `json:"reward_type"`
+	WithdrawalAddress string     `json:"withdrawal_address"`
 
 	/* As a nice to have would be nice to refactor to this:
 	Duty     *api.ProposerDuty
@@ -113,7 +113,7 @@ type ValidatorInfo struct {
 	AccumulatedRewardsWei   *big.Int        `json:"accumulated_rewards_wei"`
 	PendingRewardsWei       *big.Int        `json:"pending_rewards_wei"`
 	CollateralWei           *big.Int        `json:"collateral_wei"`
-	DepositAddress          string          `json:"deposit_address"` // TODO: Rename to: withdrawal_address (keeping it for backwards compatibility by now)
+	WithdrawalAddress       string          `json:"withdrawal_address"` // TODO: Rename to: withdrawal_address (keeping it for backwards compatibility by now)
 	ValidatorIndex          uint64          `json:"validator_index"`
 	ValidatorKey            string          `json:"validator_key"`
 	ValidatorProposedBlocks []Block         `json:"proposed_block"`
@@ -297,7 +297,7 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 
 	mk := NewMerklelizer()
 	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
-	depositToLeaf, depositToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(state)
+	withdrawalToLeaf, withdrawalToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(state)
 	if !enoughData {
 		return false
 	}
@@ -308,28 +308,28 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 		"MerkleRoot":          merkleRootStr,
 	}).Info("Freezing state")
 
-	// Merkle proofs for each deposit address
+	// Merkle proofs for each withdrawal address
 	proofs := make(map[string][]string)
 	leafs := make(map[string]RawLeaf)
-	for depositAddress, rawLeaf := range depositToRawLeaf {
+	for WithdrawalAddress, rawLeaf := range withdrawalToRawLeaf {
 
-		// Extra sanity check to make sure the deposit address is the same as the key
-		if depositAddress != rawLeaf.DepositAddress {
-			log.Fatal("Deposit address in raw leaf doesnt match the key")
+		// Extra sanity check to make sure the withdrawal address is the same as the key
+		if WithdrawalAddress != rawLeaf.WithdrawalAddress {
+			log.Fatal("withdrawal address in raw leaf doesnt match the key")
 		}
 
-		block := depositToLeaf[depositAddress]
+		block := withdrawalToLeaf[WithdrawalAddress]
 		proof, err := tree.GenerateProof(block)
 
 		if err != nil {
 			log.Fatal("could not generate proof for block: ", err)
 		}
 
-		// Store the proofs of the deposit address (to be used onchain)
-		proofs[depositAddress] = ByteArrayToArray(proof.Siblings)
+		// Store the proofs of the withdrawal address (to be used onchain)
+		proofs[WithdrawalAddress] = ByteArrayToArray(proof.Siblings)
 
 		// Store the leafs (to be used onchain)
-		leafs[depositAddress] = rawLeaf
+		leafs[WithdrawalAddress] = rawLeaf
 	}
 
 	state.LatestCommitedState = OnchainState{
@@ -397,7 +397,7 @@ func (state *OracleState) HandleDonations(donations []Donation) {
 }
 
 func (state *OracleState) HandleCorrectBlockProposal(block Block) {
-	state.AddSubscriptionIfNotAlready(block.ValidatorIndex, block.DepositAddress, block.ValidatorKey)
+	state.AddSubscriptionIfNotAlready(block.ValidatorIndex, block.WithdrawalAddress, block.ValidatorKey)
 	state.AdvanceStateMachine(block.ValidatorIndex, ProposalOk)
 	state.IncreaseAllPendingRewards(block.Reward)
 	state.ConsolidateBalance(block.ValidatorIndex)
@@ -530,7 +530,7 @@ func (state *OracleState) HandleManualSubscriptions(
 					AccumulatedRewardsWei:   big.NewInt(0),
 					PendingRewardsWei:       big.NewInt(0),
 					CollateralWei:           collateral,
-					DepositAddress:          validatorWithdrawal, // TODO: Rename withdrawal Address
+					WithdrawalAddress:       validatorWithdrawal, // TODO: Rename withdrawal Address
 					ValidatorIndex:          valIdx,
 					ValidatorKey:            "0x" + hex.EncodeToString(sub.Validator.Validator.PublicKey[:]),
 					ValidatorProposedBlocks: make([]Block, 0),
@@ -619,7 +619,7 @@ func (state *OracleState) HandleManualUnsubscriptions(
 			continue
 		}
 
-		// Its very important to check that the unsubscription was made from the deposit address
+		// Its very important to check that the unsubscription was made from the withdrawal address
 		// of the validator, otherwise anyone could call the unsubscription function.
 		if !AreAddressEqual(sender, withdrawalAddress) {
 			log.WithFields(log.Fields{
@@ -671,7 +671,7 @@ func (state *OracleState) HandleManualUnsubscriptions(
 }
 
 // TODO: This is more related to automatic subscriptions. Rename and refactor accordingly
-func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAddress string, validatorKey string) {
+func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, WithdrawalAddress string, validatorKey string) {
 	validator, found := state.Validators[valIndex]
 	if !found {
 		// If not found and not manually subscribed, we trigger the AutoSubscription event
@@ -680,7 +680,7 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, depositAd
 			ValidatorStatus:         NotSubscribed,
 			AccumulatedRewardsWei:   big.NewInt(0),
 			PendingRewardsWei:       big.NewInt(0),
-			DepositAddress:          depositAddress,
+			WithdrawalAddress:       WithdrawalAddress,
 			ValidatorKey:            validatorKey,
 			ValidatorProposedBlocks: make([]Block, 0),
 			ValidatorMissedBlocks:   make([]Block, 0),

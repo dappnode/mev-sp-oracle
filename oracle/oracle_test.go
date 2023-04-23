@@ -46,7 +46,7 @@ func Test_Oracle_ManualSubscription(t *testing.T) {
 		block1 := Block{
 			Slot: uint64(50011), ValidatorIndex: uint64(400000),
 			ValidatorKey: "0xval_400000", BlockType: OkPoolProposal,
-			Reward: big.NewInt(245579896737171752), RewardType: MevBlock, DepositAddress: "0xaaa0000000000000000000000000000000000000",
+			Reward: big.NewInt(245579896737171752), RewardType: MevBlock, WithdrawalAddress: "0xaaa0000000000000000000000000000000000000",
 		}
 
 		processedSlot, err = oracle.AdvanceStateToNextSlot(block1, []Subscription{}, []Unsubscription{}, []Donation{})
@@ -57,7 +57,7 @@ func Test_Oracle_ManualSubscription(t *testing.T) {
 		block2 := Block{
 			Slot: uint64(50012), ValidatorIndex: uint64(500000),
 			ValidatorKey: "0xval_500000", BlockType: OkPoolProposal,
-			Reward: big.NewInt(945579196337171700), RewardType: MevBlock, DepositAddress: "0xaaa0000000000000000000000000000000000000",
+			Reward: big.NewInt(945579196337171700), RewardType: MevBlock, WithdrawalAddress: "0xaaa0000000000000000000000000000000000000",
 		}
 
 		processedSlot, err = oracle.AdvanceStateToNextSlot(block2, []Subscription{}, []Unsubscription{}, []Donation{})
@@ -188,7 +188,7 @@ func Test_100_slots_test(t *testing.T) {
 					"ValidatorIndex":  sub.ValidatorIndex,
 					"ValidatorKey":    sub.ValidatorKey,
 					"Collateral":      sub.Collateral,
-					"Deposit Address": sub.DepositAddress,
+					"withdrawal address": sub.WithdrawalAddress,
 					"Tx Hash":         sub.TxHash,
 				}).Info("Mocked Event: Subscription")
 			}
@@ -198,7 +198,7 @@ func Test_100_slots_test(t *testing.T) {
 					"ValidatorIndex":  unsub.ValidatorIndex,
 					"ValidatorKey":    unsub.ValidatorKey,
 					"Sender":          unsub.Sender,
-					"Deposit Address": unsub.DepositAddress,
+					"withdrawal address": unsub.WithdrawalAddress,
 					"Tx Hash":         unsub.TxHash,
 				}).Info("Mocked Event: Unsubscription")
 			}
@@ -322,7 +322,7 @@ func GenerateSubsctiptions(
 			Collateral:     collateral[i],
 			BlockNumber:    blockNum[i],
 			TxHash:         txHash[i],
-			DepositAddress: depAdd[i],
+			WithdrawalAddress: depAdd[i],
 		})
 	}
 	return subs
@@ -342,7 +342,7 @@ func GenerateUnsunscriptions(
 			Sender:         sender[i],
 			BlockNumber:    blockNum[i],
 			TxHash:         txHashes[i],
-			DepositAddress: depAdd[i],
+			WithdrawalAddress: depAdd[i],
 		})
 	}
 	return unsubs
@@ -366,14 +366,14 @@ func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) Block {
 	}
 }
 
-func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, depAddr string) Block {
+func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, withAddress string) Block {
 	return Block{
-		Slot:           slot,
-		ValidatorIndex: valIndex,
-		ValidatorKey:   pubKey,
-		BlockType:      OkPoolProposal,
-		Reward:         reward,
-		RewardType:     MevBlock,
-		DepositAddress: depAddr,
+		Slot:              slot,
+		ValidatorIndex:    valIndex,
+		ValidatorKey:      pubKey,
+		BlockType:         OkPoolProposal,
+		Reward:            reward,
+		RewardType:        MevBlock,
+		WithdrawalAddress: withAddress,
 	}
 }
