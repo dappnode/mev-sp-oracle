@@ -7,9 +7,11 @@ import (
 	"io/ioutil"
 	"math/big"
 	"os"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/hako/durafmt"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -202,5 +204,17 @@ func logConfig(cfg *Config) {
 		log.Warn("The pool contract will NOT be updated, running in dry-run mode")
 	} else {
 		log.Warn("Configured address to update the pool merkle root (ensure it has permissions): ", cfg.UpdaterAddress)
+		log.Info("The merkle root onchain will be updated every ", cfg.CheckPointSizeInSlots, " slots (", SlotsToTime(cfg.CheckPointSizeInSlots), ")")
 	}
+}
+
+// Converts from slots to readable time (eg 1 day 9 hours 20 minutes)
+func SlotsToTime(slots uint64) string {
+	// Hardcoded. Mainnet Ethereum configuration
+	SecondsInSlot := uint64(12)
+
+	timeduration := time.Duration(slots*SecondsInSlot) * time.Second
+	strDuration := durafmt.Parse(timeduration).String()
+
+	return strDuration
 }
