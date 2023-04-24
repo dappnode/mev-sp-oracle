@@ -604,15 +604,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
 	}
 
-	// TODO: Extract some of these things out of the function
-	// Load private key signing the tx. This address must hold enough Eth
-	// to pay for the tx fees, otherwise it will fail
-	privateKey, err := crypto.HexToECDSA(o.Cfg.DeployerPrivateKey)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	publicKey := privateKey.Public()
+	publicKey := o.Cfg.UpdaterKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
 		log.Fatal("error casting public key to ECDSA")
@@ -637,7 +629,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("could not get chaind: ", err)
 	}
 
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chaindId)
+	auth, err := bind.NewKeyedTransactorWithChainID(o.Cfg.UpdaterKey, chaindId)
 	if err != nil {
 		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
 	}
@@ -652,12 +644,9 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	auth.GasPrice = nil
 	auth.GasFeeCap = nil
 	auth.GasTipCap = nil
-
-	auth.Context = context.Background()
 	auth.NoSend = false
+	auth.Context = context.Background()
 
-	//address := common.HexToAddress(o.cfg.PoolAddress)
-	// TODO: hardcoding a different address for testing
 	address := common.HexToAddress(o.Cfg.PoolAddress)
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)

@@ -1,4 +1,5 @@
 **/.DS_Store
+**/keystore
 mev-sp-oracle
 **/jwtsecret
 deployments/goerli/geth

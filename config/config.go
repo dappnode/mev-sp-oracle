@@ -4,28 +4,30 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"flag"
+	"io/ioutil"
 	"math/big"
 	"os"
 
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	log "github.com/sirupsen/logrus"
 )
 
 type Config struct {
-	ConsensusEndpoint     string   `json:"consensus_endpoint"`
-	ExecutionEndpoint     string   `json:"execution_endpoint"`
-	Network               string   `json:"network"`
-	PoolAddress           string   `json:"pool_address"`
-	UpdaterAddress        string   `json:"updater_address"`
-	DeployedSlot          uint64   `json:"deployed_slot"`
-	CheckPointSizeInSlots uint64   `json:"checkpoint_size"`
-	DeployerPrivateKey    string   `json:"-"` // TODO: This will be a file protected by a password
-	PoolFeesPercent       int      `json:"pool_fees_percent"`
-	PoolFeesAddress       string   `json:"pool_fees_address"`
-	DryRun                bool     `json:"dry_run"`
-	NumRetries            int      `json:"num_retries"`
-	CollateralInWei       *big.Int `json:"collateral_in_wei"`
+	ConsensusEndpoint     string            `json:"consensus_endpoint"`
+	ExecutionEndpoint     string            `json:"execution_endpoint"`
+	Network               string            `json:"network"`
+	PoolAddress           string            `json:"pool_address"`
+	DeployedSlot          uint64            `json:"deployed_slot"`
+	CheckPointSizeInSlots uint64            `json:"checkpoint_size"`
+	PoolFeesPercent       int               `json:"pool_fees_percent"`
+	PoolFeesAddress       string            `json:"pool_fees_address"`
+	DryRun                bool              `json:"dry_run"`
+	NumRetries            int               `json:"num_retries"`
+	CollateralInWei       *big.Int          `json:"collateral_in_wei"`
+	UpdaterAddress        string            `json:"updater_address"`
+	UpdaterKeyPath        string            `json:"-"`
+	UpdaterKey            *ecdsa.PrivateKey `json:"-"`
 }
 
 // By default the release is a custom build. CI takes care of upgrading it with
@@ -59,7 +61,8 @@ func NewCliConfig() (*Config, error) {
 	// Optional flags TODO: Test!
 	var version = flag.Bool("version", false, "Prints the release version and exits")
 	var dryRun = flag.Bool("dry-run", false, "If enabled, the pool contract will not be updated")
-	var deployerPrivateKey = flag.String("deployer-private-key", "", "Private key of the deployer account")
+	var updaterKeystorePath = flag.String("updater-keystore-path", "", "Path to the password-protected keystore file of the updater")
+	var updaterKeystorePass = flag.String("updater-keystore-pass", "", "Password of the updater keystore file")
 	var numRetries = flag.Int("num-retries", 0, "Number of retries for each interaction (consensus, execution): 0 infinite")
 
 	// Mandatory flags TODO: Test!
@@ -105,35 +108,40 @@ func NewCliConfig() (*Config, error) {
 		return nil, errors.New("pool-fees-address and pool-address can't be equal")
 	}
 
-	if !*dryRun && *deployerPrivateKey == "" {
-		return nil, errors.New("you must provide a private key to update the contract root")
+	if !*dryRun && *updaterKeystorePath == "" {
+		return nil, errors.New("you must provide a keystore file to update the contract root")
 	}
 
-	if *dryRun && *deployerPrivateKey != "" {
-		return nil, errors.New("dry-run mode specified buy also provided a deployer-private-key")
+	if !*dryRun && *updaterKeystorePass == "" {
+		return nil, errors.New("you must provide a password for the keystore file")
+	}
+
+	if *dryRun && *updaterKeystorePath != "" {
+		return nil, errors.New("you can't provide a keystore file in dry run mode")
+	}
+
+	if *dryRun && *updaterKeystorePass != "" {
+		return nil, errors.New("you can't provide a password for the keystore file in dry run mode")
 	}
 
 	// Check deployerPrivateKey is valid
-	var pKey *ecdsa.PrivateKey
-	var err error
-	var publicKeyECDSA *ecdsa.PublicKey
-	var updaterAddress string
+	var privateKey *ecdsa.PrivateKey
+	var publicKey string
 
 	// Only parse it not in dry run mode
 	if !*dryRun {
-		pKey, err = crypto.HexToECDSA(*deployerPrivateKey)
+		jsonBytes, err := ioutil.ReadFile(*updaterKeystorePath)
 		if err != nil {
-			return nil, errors.New("wrong private key, couldn't parse it: " + err.Error())
+			log.Fatal(err)
 		}
-		publicKey := pKey.Public()
-		var ok bool
-		publicKeyECDSA, ok = publicKey.(*ecdsa.PublicKey)
-		if !ok {
-			return nil, errors.New("error casting public key to ECDSA: " + err.Error())
+
+		account, err := keystore.DecryptKey(jsonBytes, *updaterKeystorePass)
+		if err != nil {
+			log.Fatal(err)
 		}
-		updaterAddress = crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
-	} else {
-		updaterAddress = "NA"
+
+		privateKey = account.PrivateKey
+		publicKey = account.Address.String()
 	}
 
 	if !common.IsHexAddress(*poolAddress) {
@@ -154,15 +162,16 @@ func NewCliConfig() (*Config, error) {
 		ExecutionEndpoint:     *executionEndpoint,
 		Network:               *network,
 		PoolAddress:           *poolAddress,
-		UpdaterAddress:        updaterAddress,
 		DeployedSlot:          *deployedSlot,
 		CheckPointSizeInSlots: *checkPointSizeInSlots,
-		DeployerPrivateKey:    *deployerPrivateKey,
 		PoolFeesPercent:       *poolFeesPercent,
 		PoolFeesAddress:       *poolFeesAddress,
 		CollateralInWei:       ethCollateralInWei,
 		DryRun:                *dryRun,
 		NumRetries:            *numRetries,
+		UpdaterAddress:        publicKey,
+		UpdaterKey:            privateKey,
+		UpdaterKeyPath:        *updaterKeystorePath,
 	}
 	logConfig(conf)
 	return conf, nil
@@ -174,10 +183,10 @@ func logConfig(cfg *Config) {
 		"ExecutionEndpoint":     cfg.ExecutionEndpoint,
 		"Network":               cfg.Network,
 		"PoolAddress":           cfg.PoolAddress,
-		"UpdaterAddress":        cfg.UpdaterAddress,
 		"DeployedSlot":          cfg.DeployedSlot,
 		"CheckPointSizeInSlots": cfg.CheckPointSizeInSlots,
-		"DeployerPrivateKey":    "TODO: use a file with protected password",
+		"UpdaterAddress":        cfg.UpdaterAddress,
+		"UpdaterKeyPath":        cfg.UpdaterKeyPath,
 		"PoolFeesPercent":       cfg.PoolFeesPercent,
 		"PoolFeesAddress":       cfg.PoolFeesAddress,
 		"CollateralInWei":       cfg.CollateralInWei,
@@ -185,11 +194,13 @@ func logConfig(cfg *Config) {
 		"NumRetries":            cfg.NumRetries,
 	}).Info("Cli Config:")
 
-	log.Info("The smoothing pool at ", cfg.PoolAddress, " takes a cut of ", cfg.PoolFeesPercent, "% ensure you control the keys for ", cfg.PoolAddress, " to claim the fees")
+	log.Info("Configured smoothing pool address: ", cfg.PoolAddress)
+	log.Info("Configured fees for smoothing pool: ", cfg.PoolFeesPercent, " %")
+	log.Info("Configured address to claim fees (ensure you control its keys): ", cfg.PoolFeesAddress)
 
 	if cfg.DryRun {
 		log.Warn("The pool contract will NOT be updated, running in dry-run mode")
 	} else {
-		log.Warn("The pool contract will be updated. Make the account has balance to cover tx fees: ", cfg.UpdaterAddress)
+		log.Warn("Configured address to update the pool merkle root (ensure it has permissions): ", cfg.UpdaterAddress)
 	}
 }
