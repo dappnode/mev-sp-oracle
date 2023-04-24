@@ -75,7 +75,7 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 		http.WithLogLevel(zerolog.WarnLevel),
 	)
 	if err != nil {
-		return nil, errors.New("Error dialing consensus client: " + err.Error())
+		return nil, errors.New("Error dialing consensus client. " + err.Error())
 	}
 	consensusClient := client.(*http.Service)
 
@@ -84,7 +84,8 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 	if err != nil {
 		return nil, errors.New("Error fetching deposit contract from consensus client: " + err.Error())
 	}
-	log.Info("Connected succesfully to consensus client. Deposit contract: ", depositContract)
+	log.Info("Connected succesfully to consensus client. ChainId: ", depositContract.ChainID,
+		" DepositContract: ", hex.EncodeToString(depositContract.Address[:]))
 
 	if depositContract.ChainID != uint64(chainId.Int64()) {
 		return nil, fmt.Errorf("ChainId from consensus and execution client do not match: %d vs %d", depositContract.ChainID, uint64(chainId.Int64()))
@@ -96,14 +97,27 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 		return nil, errors.New("Error fetching execution client sync progress: " + err.Error())
 	}
 
-	log.Info("Execution client sync state (nil is synced): ", execSync)
+	// nil means synced
+	if execSync == nil {
+		header, err := executionClient.HeaderByNumber(context.Background(), nil)
+		if err != nil {
+			return nil, errors.New("Error fetching execution client sync progress: " + err.Error())
+		}
+		log.Info("Execution client is in sync, block number: ", header.Number)
+	} else {
+		log.Info("Execution client is NOT in sync, current block: ", execSync.CurrentBlock)
+	}
 
 	consSync, err := consensusClient.NodeSyncing(context.Background())
 	if err != nil {
 		return nil, errors.New("Error fetching consensus client sync progress: " + err.Error())
 	}
 
-	log.Info("Consensus client sync state: ", consSync)
+	if consSync.SyncDistance == 0 {
+		log.Info("Consensus client is in sync, head slot: ", consSync.HeadSlot)
+	} else {
+		log.Info("Consensus client is NOT in sync, slots behind: ", consSync.SyncDistance)
+	}
 
 	// TODO: Get this from Config.
 	// Instantiate the smoothing pool contract to run get/set operations on it
@@ -604,15 +618,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
 	}
 
-	// TODO: Extract some of these things out of the function
-	// Load private key signing the tx. This address must hold enough Eth
-	// to pay for the tx fees, otherwise it will fail
-	privateKey, err := crypto.HexToECDSA(o.Cfg.DeployerPrivateKey)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	publicKey := privateKey.Public()
+	publicKey := o.Cfg.UpdaterKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
 		log.Fatal("error casting public key to ECDSA")
@@ -637,7 +643,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("could not get chaind: ", err)
 	}
 
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chaindId)
+	auth, err := bind.NewKeyedTransactorWithChainID(o.Cfg.UpdaterKey, chaindId)
 	if err != nil {
 		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
 	}
@@ -652,12 +658,9 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	auth.GasPrice = nil
 	auth.GasFeeCap = nil
 	auth.GasTipCap = nil
-
-	auth.Context = context.Background()
 	auth.NoSend = false
+	auth.Context = context.Background()
 
-	//address := common.HexToAddress(o.cfg.PoolAddress)
-	// TODO: hardcoding a different address for testing
 	address := common.HexToAddress(o.Cfg.PoolAddress)
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)

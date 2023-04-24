@@ -30,19 +30,20 @@ services:
       - --checkpoint-size=${CHECKPOINT_SIZE}
       - --consensus-endpoint=http://teku:5051
       - --deployed-slot=${DEPLOYED_SLOT}
-      #- --deployer-private-key=${DEPLOYER_PRIVATE_KEY}
-      - --dry-run
       - --execution-endpoint=http://geth:8545
       - --network=${NETWORK}
       - --pool-address=${POOL_ADDRESS}
       - --pool-fees-address=${POOL_FEES_ADDRESS}
       - --pool-fees-percent=${POOL_FEES_PERCENT}
       - --collateral-in-wei=${COLLATERAL_IN_WEI}
-      #- --num-retries=5 #default infinite
+      - --updater-keystore-path=/keystore
+      - --updater-keystore-pass=${UPDATER_KEYSTORE_PASS}
+      #- --dry-run
     ports:
       - 7300:7300
     volumes:
       - ./oracle-data:/oracle-data
+      - ./keystore:/keystore
 
   geth:
     image: "ethereum/client-go:v1.11.4"
