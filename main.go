@@ -54,8 +54,9 @@ func main() {
 			"Defined Collateral":  cfg.CollateralInWei,
 			"Contract Collateral": contractCollateral,
 		}).Fatal("Defined collateral does not match contract collateral")
+	} else if contractCollateral.Cmp(cfg.CollateralInWei) == 0 {
+		log.Info("Defined Collateral matches Contract Collateral onchain")
 	}
-
 	// TODO Enabled, but requires further testing
 	err = oracleInstance.State.LoadStateFromFile()
 	if err == nil {
