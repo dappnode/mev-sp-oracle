@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/ecdsa"
+	"io/ioutil"
 	"math/big"
 	"os"
 	"os/signal"
@@ -12,6 +13,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/api"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/params"
 
 	log "github.com/sirupsen/logrus"
@@ -50,6 +52,36 @@ func main() {
 	onchain, err := oracle.NewOnchain(cliCfg, updaterKey)
 	if err != nil {
 		log.Fatal("Could not create new onchain object: ", err)
+	}
+	// Check if the configured oracle account matches the one onchain
+	if !cliCfg.DryRun {
+		oracleAddr, err := onchain.GetContractOracleAddr()
+		oracleAddrStr := oracleAddr.String()
+
+		//parse public key of keystore given to the oracle,
+		//needed to check if it matches the one onchain
+		jsonBytes, err := ioutil.ReadFile(cliCfg.UpdaterKeyPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		account, err := keystore.DecryptKey(jsonBytes, cliCfg.UpdaterKeyPass)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		//get public key of keystore given to the oracle
+		publicKey := account.Address.String()
+		if err != nil {
+			log.Fatal("Could not get oracle address onchain: " + err.Error())
+		} else if oracleAddrStr != publicKey {
+			log.WithFields(log.Fields{
+				"Oracle address onchain":          oracleAddrStr,
+				"Oracle local configured address": publicKey,
+			}).Fatal("Defined local oracle address does not match with oracle address onchain")
+		} else if oracleAddrStr == publicKey {
+			log.Info("Defined local oracle address matches oracle address onchain")
+		}
 	}
 
 	// Populate config, most of the parameters are loaded from the smart contract

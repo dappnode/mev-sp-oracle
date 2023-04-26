@@ -555,8 +555,30 @@ func (o *Onchain) GetPoolFeeAddress(opts ...retry.Option) (string, error) {
 	if err != nil {
 		return "", errors.New("could not get pool fee address from contract: " + err.Error())
 	}
-
 	return poolFeeAddress.Hex(), nil
+}
+
+// GetContractOracleAddr returns the oracle admin address of the oracle contract
+func (o *Onchain) GetContractOracleAddr(opts ...retry.Option) (common.Address, error) {
+	//By default, address is set to 0x00...0000
+	var address common.Address
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			var err error
+
+			address, err = o.Contract.Oracle(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get oracle address from contract ", err.Error(), " Retrying...")
+				return errors.New("could not get oracle address from contract " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return address, errors.New("could not get oracle address from contract " + err.Error())
+	}
+	return address, nil
 }
 
 func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
