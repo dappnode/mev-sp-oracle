@@ -73,6 +73,7 @@ const (
 // Represents a block with information relevant for the pool
 type Block struct {
 	Slot              uint64     `json:"slot"`
+	Block             uint64     `json:"block"`
 	ValidatorIndex    uint64     `json:"validator_index"`
 	ValidatorKey      string     `json:"validator_key"`
 	BlockType         BlockType  `json:"block_type"`
@@ -136,12 +137,13 @@ type OnchainState struct {
 }
 
 type OracleState struct {
-	LatestProcessedSlot uint64
-	NextSlotToProcess   uint64
-	Network             string
-	PoolAddress         string
-	Validators          map[uint64]*ValidatorInfo
-	LatestCommitedState OnchainState
+	LatestProcessedSlot  uint64
+	LatestProcessedBlock uint64
+	NextSlotToProcess    uint64
+	Network              string
+	PoolAddress          string
+	Validators           map[uint64]*ValidatorInfo
+	LatestCommitedState  OnchainState
 
 	PoolFeesPercent     int
 	PoolFeesAddress     string
@@ -159,10 +161,11 @@ type OracleState struct {
 
 func NewOracleState(cfg *config.Config) *OracleState {
 	return &OracleState{
-		LatestProcessedSlot: cfg.DeployedSlot - 1,
-		NextSlotToProcess:   cfg.DeployedSlot,
-		Network:             cfg.Network,
-		PoolAddress:         cfg.PoolAddress,
+		LatestProcessedSlot:  cfg.DeployedSlot - 1,
+		LatestProcessedBlock: 0,
+		NextSlotToProcess:    cfg.DeployedSlot,
+		Network:              cfg.Network,
+		PoolAddress:          cfg.PoolAddress,
 
 		Validators: make(map[uint64]*ValidatorInfo, 0),
 

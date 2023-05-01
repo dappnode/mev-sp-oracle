@@ -304,7 +304,7 @@ func (b *VersionedSignedBeaconBlock) GetFeeRecipient() string {
 	} else if b.Capella != nil {
 		feeRecipient = b.Capella.Message.Body.ExecutionPayload.FeeRecipient.String()
 	} else {
-		log.Fatal("Block was empty, no known fork version block was present")
+		log.Fatal("Block was empty, cant get fee recipient")
 	}
 	return feeRecipient
 }
@@ -320,7 +320,7 @@ func (b *VersionedSignedBeaconBlock) GetBlockTransactions() []bellatrix.Transact
 	} else if b.Capella != nil {
 		transactions = b.Capella.Message.Body.ExecutionPayload.Transactions
 	} else {
-		log.Fatal("Block was empty, no known fork version block was present")
+		log.Fatal("Block was empty, cant get transactions")
 	}
 	return transactions
 }
@@ -336,7 +336,7 @@ func (b *VersionedSignedBeaconBlock) GetBlockNumber() uint64 {
 	} else if b.Capella != nil {
 		blockNumber = b.Capella.Message.Body.ExecutionPayload.BlockNumber
 	} else {
-		log.Fatal("Block was empty, no known fork version block was present")
+		log.Fatal("Block was empty, cant get block number")
 	}
 	return blockNumber
 }
@@ -352,7 +352,7 @@ func (b *VersionedSignedBeaconBlock) GetSlot() phase0.Slot {
 	} else if b.Capella != nil {
 		slot = b.Capella.Message.Slot
 	} else {
-		log.Fatal("Block was empty, no known fork version block was present")
+		log.Fatal("Block was empty, cant get slot")
 	}
 	return slot
 }
@@ -368,7 +368,7 @@ func (b *VersionedSignedBeaconBlock) GetProposerIndex() phase0.ValidatorIndex {
 	} else if b.Capella != nil {
 		proposerIndex = b.Capella.Message.ProposerIndex
 	} else {
-		log.Fatal("Block was empty, no known fork version block was present")
+		log.Fatal("Block was empty, cant get proposer index")
 	}
 	return proposerIndex
 }
@@ -384,7 +384,7 @@ func (b *VersionedSignedBeaconBlock) GetGasUsed() uint64 {
 	} else if b.Capella != nil {
 		gasUsed = b.Capella.Message.Body.ExecutionPayload.GasUsed
 	} else {
-		log.Fatal("Block was empty, no known fork version block was present")
+		log.Fatal("Block was empty, cant get gas used")
 	}
 	return gasUsed
 }
@@ -400,7 +400,7 @@ func (b *VersionedSignedBeaconBlock) GetBaseFeePerGas() [32]byte {
 	} else if b.Capella != nil {
 		baseFeePerGas = b.Capella.Message.Body.ExecutionPayload.BaseFeePerGas
 	} else {
-		log.Fatal("Block was empty, no known fork version block was present")
+		log.Fatal("Block was empty, cant get base fee per gas")
 	}
 	return baseFeePerGas
 }

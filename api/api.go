@@ -1,23 +1,29 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/flashbots/go-boost-utils/types"
+	"github.com/hako/durafmt"
+	"github.com/pkg/errors"
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
@@ -73,13 +79,19 @@ type httpErrorResp struct {
 }
 
 type httpOkStatus struct {
-	IsConsensusInSync         bool   `json:"is_consensus_in_sync"`
-	IsExecutionInSync         bool   `json:"is_execution_in_sync"`
-	OracleLatestProcessedSlot uint64 `json:"oracle_latest_processed_slot"`
-	ChainFinalizedSlot        uint64 `json:"chain_head_slot"`
-	OracleHeadDistance        uint64 `json:"oracle_head_distance"`
-	ChainId                   string `json:"chainid"`
-	DepositContact            string `json:"depositcontract"`
+	IsConsensusInSync    bool   `json:"is_consensus_in_sync"`
+	IsExecutionInSync    bool   `json:"is_execution_in_sync"`
+	IsOracleInSync       bool   `json:"is_oracle_in_sync"`
+	LatestProcessedSlot  uint64 `json:"latest_processed_slot"`
+	LatestProcessedBlock uint64 `json:"latest_processed_block"`
+	LatestFinalizedEpoch uint64 `json:"latest_finalized_epoch"`
+	LatestFinalizedSlot  uint64 `json:"latest_finalized_slot"`
+	OracleHeadDistance   uint64 `json:"oracle_sync_distance_slots"`
+	NextCheckpointSlot   uint64 `json:"next_checkpoint_slot"`
+	NextCheckpointTime   string `json:"next_checkpoint_time"`
+	ConsensusChainId     string `json:"consensus_chainid"`
+	ExecutionChainId     string `json:"execution_chainid"`
+	DepositContact       string `json:"depositcontract"`
 }
 
 type httpOkRelayersState struct {
@@ -261,6 +273,9 @@ func (m *ApiService) StartHTTPServer() error {
 	}
 
 	err := m.srv.ListenAndServe()
+	if err != nil {
+		log.Fatal("could not start http server: ", err)
+	}
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
@@ -383,14 +398,27 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	finalizedEpoch := uint64(finality.Finalized.Epoch)
 	finalizedSlot := finalizedEpoch * SlotsInEpoch
 
+	oracleSync := false
+	if m.oracle.State.LatestProcessedSlot-finalizedSlot == 0 {
+		oracleSync = true
+	}
+
+	slotsTillNextCheckpoint := m.oracle.State.LatestProcessedSlot % m.Onchain.Cfg.CheckPointSizeInSlots
+
 	status := httpOkStatus{
-		IsConsensusInSync:         consInSync,
-		IsExecutionInSync:         execInSync,
-		OracleLatestProcessedSlot: m.oracle.State.LatestProcessedSlot,
-		ChainFinalizedSlot:        finalizedSlot,
-		OracleHeadDistance:        finalizedSlot - m.oracle.State.LatestProcessedSlot,
-		ChainId:                   chainId.String(),
-		DepositContact:            depositContract.String(),
+		IsConsensusInSync:    consInSync,
+		IsExecutionInSync:    execInSync,
+		IsOracleInSync:       oracleSync,
+		LatestProcessedSlot:  m.oracle.State.LatestProcessedSlot,
+		LatestProcessedBlock: m.oracle.State.LatestProcessedBlock,
+		LatestFinalizedEpoch: finalizedEpoch,
+		LatestFinalizedSlot:  finalizedSlot,
+		OracleHeadDistance:   finalizedSlot - m.oracle.State.LatestProcessedSlot,
+		NextCheckpointSlot:   m.oracle.State.LatestProcessedSlot + (m.Onchain.Cfg.CheckPointSizeInSlots - slotsTillNextCheckpoint),
+		NextCheckpointTime:   SlotsToTime(slotsTillNextCheckpoint),
+		ExecutionChainId:     chainId.String(),
+		ConsensusChainId:     strconv.FormatUint(depositContract.ChainID, 10),
+		DepositContact:       "0x" + hex.EncodeToString(depositContract.Address[:]),
 	}
 
 	m.respondOK(w, status)
@@ -445,17 +473,13 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		return
 	}
 
-	// 1) Get all tracked validators for that withdrawal address (tracked)
-	trackedValidators := make([]*oracle.ValidatorInfo, 0)
-	for _, validator := range m.oracle.State.Validators {
-		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
-			trackedValidators = append(trackedValidators, validator)
-		}
-	}
+	// We return
+	// 1) validators using this withdrawal address but not tracked by the oracle
+	// 2) validators using this withdrawal address and tracked by the oracle (eg already subscribed)
+	requestedValidators := make(map[uint64]*oracle.ValidatorInfo, 0)
 
-	// 2) Get all onchain validators for that withdrawal address (untracked)
-	notTracked := make([]*oracle.ValidatorInfo, 0)
-	for _, validator := range m.Onchain.Validators() {
+	// 1) Get all onchain validators for that withdrawal address (untracked)
+	for valIndex, validator := range m.Onchain.Validators() {
 
 		// Check if the withdrawal address matches the requested one
 		credStr := hex.EncodeToString(validator.Validator.WithdrawalCredentials)
@@ -467,7 +491,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		}
 
 		// Skip if the address does not match with the requested
-		if strings.ToLower(eth1Add) != strings.ToLower(withdrawalAddress) {
+		if !AreAddressEqual(eth1Add, withdrawalAddress) {
 			continue
 		}
 
@@ -476,27 +500,58 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 			continue
 		}
 
-		// Check if we are already tracking it in the oracle
-		found := false
-		for _, trackedVal := range trackedValidators {
-			if trackedVal.ValidatorIndex == uint64(validator.Index) {
-				found = true
-				break
-			}
-		}
-
-		// If not tracked, add it
-		if !found {
-			notTracked = append(notTracked, &oracle.ValidatorInfo{
-				ValidatorIndex:    uint64(validator.Index),
-				WithdrawalAddress: eth1Add,
-				ValidatorStatus:   oracle.Untracked,
-				ValidatorKey:      "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
-			})
+		requestedValidators[uint64(valIndex)] = &oracle.ValidatorInfo{
+			ValidatorIndex:    uint64(validator.Index),
+			WithdrawalAddress: eth1Add,
+			ValidatorStatus:   oracle.Untracked,
+			ValidatorKey:      "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
 		}
 	}
 
-	m.respondOK(w, append(trackedValidators, notTracked...))
+	// 2) Get all tracked validators for that withdrawal address (tracked)
+	for valIndex, validator := range m.oracle.State.Validators {
+		// Just overwrite the untracked validators with oracle state
+		if AreAddressEqual(validator.WithdrawalAddress, withdrawalAddress) {
+			requestedValidators[valIndex] = validator
+		}
+	}
+
+	// Now we apply the state transition to these validators, based on what we have seen
+	// onchain since the latest finalized slot util head. This is neccesary because the
+	// oracle runs all calculations on finalized states, but the api must report to the
+	// users without this 15 minutes-ish delay.
+	// This applies a non-finalized state to the validators, creating a virtual state
+	// only used for the api.
+
+	if m.oracle.State.LatestProcessedBlock == 0 {
+		m.respondError(w, http.StatusInternalServerError, "latest processed block is 0, try again later")
+		return
+	}
+
+	firstNotProcessedBlock := m.oracle.State.LatestProcessedBlock + 1
+
+	// TODO: Cache this, very inneficient to get it every time
+	allSubsTillHead, err := m.GetSubscriptionsTillHead(firstNotProcessedBlock)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get subscriptions: "+err.Error())
+		return
+	}
+	allUnsubsTillHead, err := m.GetUnsubscriptionsTillHead(firstNotProcessedBlock)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get unsubscriptions: "+err.Error())
+		return
+	}
+
+	// Apply latest seen events to the existing state. This is a "virtual" state, just for the api
+	// so that users are aware of the latest events, without waiting for the next finalized state.
+	m.ApplyNonFinalizedState(
+		allSubsTillHead,
+		allUnsubsTillHead,
+		requestedValidators)
+
+	log.Info("debug: ", len(allSubsTillHead), " ", len(allUnsubsTillHead))
+
+	m.respondOK(w, requestedValidators)
 }
 
 func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Request) {
@@ -815,4 +870,188 @@ func IsValidAddress(v string) bool {
 func IsValidPubkey(v string) bool {
 	re := regexp.MustCompile("^0x[0-9a-fA-f]{96}$")
 	return re.MatchString(v)
+}
+
+// Copied from oracle/utils. Cant import due to circular dependency
+// TODO: Move to utils package
+func AreAddressEqual(address1 string, address2 string) bool {
+	if len(address1) != len(address2) {
+		log.Fatal("address length mismatch: ",
+			"add1: ", address1,
+			"add2: ", address2)
+	}
+	if strings.ToLower(address1) == strings.ToLower(address2) {
+		return true
+	}
+	return false
+}
+
+// TODO: unsure if move this somewhere else
+func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]oracle.Subscription, error) {
+	// TODO: add check here to ensure its a reasonable amount of blocks. should be around 15-20 minutes in blocks
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: latestProcessedBlock, End: nil}
+
+	// Note that this event can be both donations and mev rewards
+	itrSubs, err := m.Onchain.Contract.FilterSubscribeValidator(filterOpts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not subscribe to validator events")
+	}
+
+	// Loop over all found events. Super inneficient. just Proof of concept
+	// TODO: When finished add a test in api_test for this feature, since its api specific.
+	blockSubscriptions := make([]oracle.Subscription, 0)
+	for itrSubs.Next() {
+		sub := oracle.Subscription{
+			Event:     itrSubs.Event,
+			Validator: m.Onchain.Validators()[phase0.ValidatorIndex(itrSubs.Event.ValidatorID)],
+		}
+		log.Info("block sub finalized until latest head: ", sub)
+		blockSubscriptions = append(blockSubscriptions, sub)
+	}
+	err = itrSubs.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close subscription iterator")
+	}
+	return blockSubscriptions, nil
+}
+
+func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]oracle.Unsubscription, error) {
+	// TODO: add check here to ensure its a reasonable amount of blocks. should be around 15-20 minutes in blocks
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: latestProcessedBlock, End: nil}
+	// Note that this event can be both donations and mev rewards
+	itrUnsubs, err := m.Onchain.Contract.FilterUnsubscribeValidator(filterOpts)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not subscribe to validator events")
+	}
+
+	// Loop over all found events, TODO: inneficient. only finter events of this validator.
+	blockUnsubscriptions := make([]oracle.Unsubscription, 0)
+	for itrUnsubs.Next() {
+		unsub := oracle.Unsubscription{
+			Event:     itrUnsubs.Event,
+			Validator: m.Onchain.Validators()[phase0.ValidatorIndex(itrUnsubs.Event.ValidatorID)],
+		}
+		log.Info("block unsub finalized until latest head: ", unsub)
+		blockUnsubscriptions = append(blockUnsubscriptions, unsub)
+	}
+	err = itrUnsubs.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close subscription iterator")
+	}
+	return blockUnsubscriptions, nil
+}
+
+func (m *ApiService) ApplyNonFinalizedState(
+	subs []oracle.Subscription,
+	unsubs []oracle.Unsubscription,
+	validators map[uint64]*oracle.ValidatorInfo) {
+
+	eventsBlocksList := make([]uint64, 0)
+
+	for _, sub := range subs {
+		block := sub.Event.Raw.BlockNumber
+		found := false
+		for _, b := range eventsBlocksList {
+			if b == block {
+				found = true
+			}
+		}
+		if !found {
+			eventsBlocksList = append(eventsBlocksList, block)
+		}
+	}
+	for _, unsub := range unsubs {
+		block := unsub.Event.Raw.BlockNumber
+		found := false
+		for _, b := range eventsBlocksList {
+			if b == block {
+				found = true
+			}
+		}
+		if !found {
+			eventsBlocksList = append(eventsBlocksList, block)
+		}
+	}
+
+	sort.Slice(eventsBlocksList, func(i, j int) bool { return eventsBlocksList[i] < eventsBlocksList[j] })
+
+	for _, block := range eventsBlocksList {
+		blockSub := GetSubInBlock(subs, block)
+		blockUnsub := GetUnsubInBlock(unsubs, block)
+
+		for _, subInBlock := range blockSub {
+			valIndex := subInBlock.Event.ValidatorID
+			val, found := validators[valIndex]
+			if found {
+				valWithdrawalAddress := val.WithdrawalAddress
+				eventAddress := subInBlock.Event.Sender.String()
+				if AreAddressEqual(valWithdrawalAddress, eventAddress) {
+					if subInBlock.Event.SubscriptionCollateral.Cmp(m.config.CollateralInWei) >= 0 {
+						if oracle.CanValidatorSubscribeToPool(subInBlock.Validator) {
+							if val.ValidatorStatus == oracle.Untracked || val.ValidatorStatus == oracle.NotSubscribed {
+								validators[valIndex].ValidatorStatus = oracle.Active
+							}
+						}
+					}
+				}
+			}
+		}
+
+		for _, unsubInBlock := range blockUnsub {
+			valIndex := unsubInBlock.Event.ValidatorID
+			val, found := validators[valIndex]
+			if found {
+				valWithdrawalAddress := val.WithdrawalAddress
+				eventAddress := unsubInBlock.Event.Sender.String()
+				if AreAddressEqual(valWithdrawalAddress, eventAddress) {
+					if val.ValidatorStatus == oracle.Active ||
+						val.ValidatorStatus == oracle.YellowCard ||
+						val.ValidatorStatus == oracle.RedCard {
+						validators[valIndex].ValidatorStatus = oracle.NotSubscribed
+					}
+				}
+			}
+		}
+	}
+}
+
+func GetSubInBlock(subs []oracle.Subscription, block uint64) []oracle.Subscription {
+	filteredSubs := make([]oracle.Subscription, 0)
+	for _, sub := range subs {
+		if sub.Event.Raw.BlockNumber == block {
+			filteredSubs = append(filteredSubs, sub)
+		}
+	}
+	return filteredSubs
+}
+
+func GetUnsubInBlock(subs []oracle.Unsubscription, block uint64) []oracle.Unsubscription {
+	filteredUnsubs := make([]oracle.Unsubscription, 0)
+	for _, unsub := range subs {
+		if unsub.Event.Raw.BlockNumber == block {
+			filteredUnsubs = append(filteredUnsubs, unsub)
+		}
+	}
+	return filteredUnsubs
+}
+
+// Do not use this, just as a proof of concept
+func DeepCopy(src, dist interface{}) (err error) {
+	buf := bytes.Buffer{}
+	if err = gob.NewEncoder(&buf).Encode(src); err != nil {
+		return
+	}
+	return gob.NewDecoder(&buf).Decode(dist)
+}
+
+// TODO: Duplicated, move to utils and take it from there
+// Converts from slots to readable time (eg 1 day 9 hours 20 minutes)
+func SlotsToTime(slots uint64) string {
+	// Hardcoded. Mainnet Ethereum configuration
+	SecondsInSlot := uint64(12)
+
+	timeduration := time.Duration(slots*SecondsInSlot) * time.Second
+	strDuration := durafmt.Parse(timeduration).String()
+
+	return strDuration
 }
