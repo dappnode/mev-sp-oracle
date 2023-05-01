@@ -15,9 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO: Add some tests with wrong collateral.
-// TODO: Check that the original state doesnt change
-// TODO: rewrite this to test everything in one function
 func Test_ApplyNonFinalizedState_Subscription(t *testing.T) {
 
 	api := NewApiService(&config.Config{

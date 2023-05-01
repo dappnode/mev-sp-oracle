@@ -82,6 +82,8 @@ func main() {
 
 		// Save state in SIGINT or SIGTERM
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM {
+			// TODO: Possible race condition. Ensure we finished processing the slot
+			// before saving the state
 			oracleInstance.State.SaveStateToFile()
 		}
 

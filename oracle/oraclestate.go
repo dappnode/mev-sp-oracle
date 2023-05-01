@@ -265,13 +265,14 @@ func (state *OracleState) LoadStateFromFile() error {
 	mRoot, enoughData := readState.GetMerkleRootIfAny()
 
 	log.WithFields(log.Fields{
-		"Path":                path,
-		"LatestProcessedSlot": readState.LatestProcessedSlot,
-		"NextSlotToProcess":   readState.NextSlotToProcess,
-		"Network":             readState.Network,
-		"PoolAddress":         readState.PoolAddress,
-		"MerkleRoot":          mRoot,
-		"EnoughData":          enoughData,
+		"Path":                 path,
+		"LatestProcessedSlot":  readState.LatestProcessedSlot,
+		"LatestProcessedBlock": readState.LatestProcessedBlock,
+		"NextSlotToProcess":    readState.NextSlotToProcess,
+		"Network":              readState.Network,
+		"PoolAddress":          readState.PoolAddress,
+		"MerkleRoot":           mRoot,
+		"EnoughData":           enoughData,
 	}).Info("Loaded state from file")
 
 	state.LatestProcessedSlot = readState.LatestProcessedSlot
