@@ -201,12 +201,13 @@ func (state *OracleState) SaveStateToFile() {
 
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
-		"LatestProcessedSlot": state.LatestProcessedSlot,
-		"NextSlotToProcess":   state.NextSlotToProcess,
-		"TotalValidators":     len(state.Validators),
-		"Network":             state.Network,
-		"PoolAddress":         state.PoolAddress,
-		"Path":                path,
+		"LatestProcessedSlot":  state.LatestProcessedSlot,
+		"LatestProcessedBlock": state.LatestProcessedBlock,
+		"NextSlotToProcess":    state.NextSlotToProcess,
+		"TotalValidators":      len(state.Validators),
+		"Network":              state.Network,
+		"PoolAddress":          state.PoolAddress,
+		"Path":                 path,
 		//"MerkleRoot":      mRoot,
 		//"EnoughData":      enoughData,
 	}).Info("Saving state to file")
@@ -275,8 +276,11 @@ func (state *OracleState) LoadStateFromFile() error {
 		"EnoughData":           enoughData,
 	}).Info("Loaded state from file")
 
+	// This could be nicer. Note that adding a new field to the state
+	// requires adding it here as well
 	state.LatestProcessedSlot = readState.LatestProcessedSlot
 	state.NextSlotToProcess = readState.NextSlotToProcess
+	state.LatestProcessedBlock = readState.LatestProcessedBlock
 	//state.Network = readState.Network
 	//state.PoolAddress = readState.PoolAddress
 	state.Validators = readState.Validators
