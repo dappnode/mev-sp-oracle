@@ -14,6 +14,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	github.com/txaty/go-merkletree v0.1.15-0.20230105063604-9a402c177611
 	golang.org/x/crypto v0.1.0
+	golang.org/x/exp v0.0.0-20230425010034-47ecfdc1ba53
 )
 
 require (

@@ -24,6 +24,7 @@ import (
 	"github.com/flashbots/go-boost-utils/types"
 	"github.com/hako/durafmt"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/maps"
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
@@ -580,7 +581,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		allUnsubsTillHead,
 		requestedValidators)
 
-	m.respondOK(w, requestedValidators)
+	m.respondOK(w, maps.Values(requestedValidators))
 }
 
 func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Request) {
