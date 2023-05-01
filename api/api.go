@@ -561,8 +561,6 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		allUnsubsTillHead,
 		requestedValidators)
 
-	log.Info("debug: ", len(allSubsTillHead), " ", len(allUnsubsTillHead))
-
 	m.respondOK(w, requestedValidators)
 }
 
