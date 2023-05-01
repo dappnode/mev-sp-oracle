@@ -472,6 +472,25 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	vars := mux.Vars(req)
 	withdrawalAddress := vars["withdrawalAddress"]
 
+	// Move this to a function and require it for all api calls
+	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), "finalized")
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get consensus latest finalized slot: "+err.Error())
+	}
+
+	SlotsInEpoch := uint64(32)
+	finalizedSlot := uint64(finality.Finalized.Epoch) * SlotsInEpoch
+
+	oracleInSync := false
+	if m.oracle.State.LatestProcessedSlot-finalizedSlot == 0 {
+		oracleInSync = true
+	}
+
+	if !oracleInSync {
+		m.respondError(w, http.StatusInternalServerError, "oracle not in sync yet, try again later")
+		return
+	}
+
 	// Use always lowercase
 	withdrawalAddress = strings.ToLower(withdrawalAddress)
 
