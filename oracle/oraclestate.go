@@ -188,7 +188,7 @@ func (state *OracleState) SaveStateToFile() {
 	}
 	file, err := os.Create(path)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("could not create file at path: ", path, ":", err)
 	}
 
 	defer file.Close()
@@ -207,7 +207,11 @@ func (state *OracleState) SaveStateToFile() {
 		//"MerkleRoot":      mRoot,
 		//"EnoughData":      enoughData,
 	}).Info("Saving state to file")
-	encoder.Encode(state)
+
+	err = encoder.Encode(state)
+	if err != nil {
+		log.Fatal("could not encode state into file: ", err)
+	}
 }
 
 func (state *OracleState) LoadStateFromFile() error {

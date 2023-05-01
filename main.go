@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,15 +26,31 @@ func main() {
 	log.SetFormatter(customFormatter)
 
 	log.Info("Starting smoothing pool oracle")
+
+	// Load config from cli
 	cfg, err := config.NewCliConfig()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error parsing the cli config: ", err)
 	}
 
-	onchain, err := oracle.NewOnchain(*cfg)
+	// Load key with rights to update the oracle (if not dry run)
+	var updaterKey *ecdsa.PrivateKey
+	if !cfg.DryRun {
+		keystore, err := oracle.DecryptKey(cfg)
+		if err != nil {
+			log.Fatal("Could not decrypt updater key: ", err)
+		}
+		updaterKey = keystore.PrivateKey
+		log.Info("Oracle contract will be update with address: ", keystore.Address.String(), " ensure it has permissions to update the contract")
+	}
+
+	// Instance of the onchain object to handle onchain interactions
+	onchain, err := oracle.NewOnchain(cfg, updaterKey)
 	if err != nil {
 		log.Fatal("Could not create new onchain object: ", err)
 	}
+
+	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)
 
 	balance, err := onchain.GetEthBalance(cfg.PoolAddress)

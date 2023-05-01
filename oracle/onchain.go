@@ -50,10 +50,11 @@ type Onchain struct {
 	Cfg             *config.Config
 	Contract        *contract.Contract
 	NumRetries      int
+	updaterKey      *ecdsa.PrivateKey
 	validators      map[phase0.ValidatorIndex]*v1.Validator
 }
 
-func NewOnchain(cfg config.Config) (*Onchain, error) {
+func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
 
 	// Dial the execution client
 	executionClient, err := ethclient.Dial(cfg.ExecutionEndpoint)
@@ -130,8 +131,9 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
-		Cfg:             &cfg,
+		Cfg:             cfg,
 		Contract:        contract,
+		updaterKey:      updaterKey,
 	}, nil
 }
 
@@ -618,7 +620,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
 	}
 
-	publicKey := o.Cfg.UpdaterKey.Public()
+	publicKey := o.updaterKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
 		log.Fatal("error casting public key to ECDSA")
@@ -643,7 +645,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("could not get chaind: ", err)
 	}
 
-	auth, err := bind.NewKeyedTransactorWithChainID(o.Cfg.UpdaterKey, chaindId)
+	auth, err := bind.NewKeyedTransactorWithChainID(o.updaterKey, chaindId)
 	if err != nil {
 		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
 	}
