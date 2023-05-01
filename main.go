@@ -125,7 +125,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		finalizedEpoch := uint64(finality.Finalized.Epoch)
 		finalizedSlot := finalizedEpoch * SlotsInEpoch
 
-		if finalizedSlot > oracleInstance.State.NextSlotToProcess {
+		if finalizedSlot >= oracleInstance.State.NextSlotToProcess {
 
 			// Get all the information of the block that was proposed in this slot
 			poolBlock, blockSubs, blockUnsubs, blockDonations := onchain.GetAllBlockInfo(oracleInstance.State.NextSlotToProcess)
@@ -152,7 +152,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 				"OracleStateSlot": oracleInstance.State.LatestSlot,
 			}).Info("Waiting for new finalized slot")*/
 			// No new finalized slot, wait a bit
-			time.Sleep(3 * time.Minute)
+			time.Sleep(1 * time.Minute)
 			continue
 		}
 
