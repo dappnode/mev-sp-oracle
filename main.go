@@ -97,6 +97,29 @@ func main() {
 
 func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config) {
 
+	// Check if we are in sync with the latest onchain root. If not we wont be updating
+	// the state until we are in sync with the latest. This prevents from the oracle
+	// losing sync, restarting and updating the roots again with old ones.
+	syncedWithOnchainRoot := false
+
+	latestKnownRoot := oracleInstance.State.LatestCommitedState.MerkleRoot
+
+	log.Info("Latest known commited merkle root: ", latestKnownRoot)
+	latestOnchainRoot, err := onchain.GetContractMerkleRoot()
+	if err != nil {
+		log.Fatal("Could not get contract merkle root: ", err)
+	}
+	log.Info("Latest onchain commited merkle root: ", latestOnchainRoot)
+
+	if !oracle.AreAddressEqual(latestKnownRoot, latestOnchainRoot) {
+		log.Info("Latest known root by oracle does not match the latest onchain. ",
+			latestOnchainRoot, " ", latestKnownRoot)
+		log.Info("The state wont be updated until the same root is reached")
+	} else {
+		syncedWithOnchainRoot = true
+		log.Info("Latest known root by oracle matches the latest onchain, oracle is ready to update new roots")
+	}
+
 	// Load all the validators from the beacon chain
 	onchain.RefreshBeaconValidators()
 
@@ -179,12 +202,28 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 
 			oracleInstance.State.SaveStateToFile()
 
+			latestOnchainRoot, err := onchain.GetContractMerkleRoot()
+			if err != nil {
+				log.Fatal("Could not get contract merkle root: ", err)
+			}
+			newOracleRoot := oracleInstance.State.LatestCommitedState.MerkleRoot
+
+			// Every time we calculate a new root, see if it matches the latest one onchain.
+			// If it does, we are in sync with the onchain root and we can update the contract.
+			if oracle.AreAddressEqual(latestOnchainRoot, newOracleRoot) {
+				syncedWithOnchainRoot = true
+				log.Info("Latest known root by oracle matches the latest onchain root: ",
+					latestOnchainRoot, " ", newOracleRoot)
+			} else {
+				log.Info("New merkle root calculated, but it does not match the latest onchain root. Continue syncing until we reach the same root ",
+					latestOnchainRoot, " ", newOracleRoot)
+			}
+
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 			} else {
-				//txHash := ""
-				if !cfg.DryRun {
-					txHash := onchain.UpdateContractMerkleRoot(oracleInstance.State.LatestCommitedState.MerkleRoot)
+				if !cfg.DryRun && syncedWithOnchainRoot {
+					txHash := onchain.UpdateContractMerkleRoot(newOracleRoot)
 					_ = txHash
 				}
 			}

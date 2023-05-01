@@ -908,14 +908,12 @@ func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]or
 	}
 
 	// Loop over all found events. Super inneficient. just Proof of concept
-	// TODO: When finished add a test in api_test for this feature, since its api specific.
 	blockSubscriptions := make([]oracle.Subscription, 0)
 	for itrSubs.Next() {
 		sub := oracle.Subscription{
 			Event:     itrSubs.Event,
 			Validator: m.Onchain.Validators()[phase0.ValidatorIndex(itrSubs.Event.ValidatorID)],
 		}
-		log.Info("block sub finalized until latest head: ", sub)
 		blockSubscriptions = append(blockSubscriptions, sub)
 	}
 	err = itrSubs.Close()
@@ -941,7 +939,6 @@ func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]
 			Event:     itrUnsubs.Event,
 			Validator: m.Onchain.Validators()[phase0.ValidatorIndex(itrUnsubs.Event.ValidatorID)],
 		}
-		log.Info("block unsub finalized until latest head: ", unsub)
 		blockUnsubscriptions = append(blockUnsubscriptions, unsub)
 	}
 	err = itrUnsubs.Close()
