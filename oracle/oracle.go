@@ -81,6 +81,9 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	processedSlot := or.State.NextSlotToProcess
 	or.State.LatestProcessedSlot = processedSlot
 	or.State.NextSlotToProcess++
+	if blockPool.BlockType != MissedProposal {
+		or.State.LatestProcessedBlock = blockPool.Block
+	}
 	return processedSlot, nil
 }
 

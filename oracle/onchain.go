@@ -564,6 +564,7 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 		// We populate the parameters of the pool block
 		poolBlock.Reward = reward
 		poolBlock.RewardType = rewardType
+		poolBlock.Block = extendedBlock.GetBlockNumber()
 
 		// And check if it contained a reward for the pool or not
 		if correctFeeRec {

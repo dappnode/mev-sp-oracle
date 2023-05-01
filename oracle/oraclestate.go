@@ -73,6 +73,7 @@ const (
 // Represents a block with information relevant for the pool
 type Block struct {
 	Slot              uint64     `json:"slot"`
+	Block             uint64     `json:"block"`
 	ValidatorIndex    uint64     `json:"validator_index"`
 	ValidatorKey      string     `json:"validator_key"`
 	BlockType         BlockType  `json:"block_type"`
@@ -136,12 +137,13 @@ type OnchainState struct {
 }
 
 type OracleState struct {
-	LatestProcessedSlot uint64
-	NextSlotToProcess   uint64
-	Network             string
-	PoolAddress         string
-	Validators          map[uint64]*ValidatorInfo
-	LatestCommitedState OnchainState
+	LatestProcessedSlot  uint64
+	LatestProcessedBlock uint64
+	NextSlotToProcess    uint64
+	Network              string
+	PoolAddress          string
+	Validators           map[uint64]*ValidatorInfo
+	LatestCommitedState  OnchainState
 
 	PoolFeesPercent     int
 	PoolFeesAddress     string
@@ -159,10 +161,11 @@ type OracleState struct {
 
 func NewOracleState(cfg *config.Config) *OracleState {
 	return &OracleState{
-		LatestProcessedSlot: cfg.DeployedSlot - 1,
-		NextSlotToProcess:   cfg.DeployedSlot,
-		Network:             cfg.Network,
-		PoolAddress:         cfg.PoolAddress,
+		LatestProcessedSlot:  cfg.DeployedSlot - 1,
+		LatestProcessedBlock: 0,
+		NextSlotToProcess:    cfg.DeployedSlot,
+		Network:              cfg.Network,
+		PoolAddress:          cfg.PoolAddress,
 
 		Validators: make(map[uint64]*ValidatorInfo, 0),
 
@@ -198,12 +201,13 @@ func (state *OracleState) SaveStateToFile() {
 
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
-		"LatestProcessedSlot": state.LatestProcessedSlot,
-		"NextSlotToProcess":   state.NextSlotToProcess,
-		"TotalValidators":     len(state.Validators),
-		"Network":             state.Network,
-		"PoolAddress":         state.PoolAddress,
-		"Path":                path,
+		"LatestProcessedSlot":  state.LatestProcessedSlot,
+		"LatestProcessedBlock": state.LatestProcessedBlock,
+		"NextSlotToProcess":    state.NextSlotToProcess,
+		"TotalValidators":      len(state.Validators),
+		"Network":              state.Network,
+		"PoolAddress":          state.PoolAddress,
+		"Path":                 path,
 		//"MerkleRoot":      mRoot,
 		//"EnoughData":      enoughData,
 	}).Info("Saving state to file")
@@ -262,17 +266,21 @@ func (state *OracleState) LoadStateFromFile() error {
 	mRoot, enoughData := readState.GetMerkleRootIfAny()
 
 	log.WithFields(log.Fields{
-		"Path":                path,
-		"LatestProcessedSlot": readState.LatestProcessedSlot,
-		"NextSlotToProcess":   readState.NextSlotToProcess,
-		"Network":             readState.Network,
-		"PoolAddress":         readState.PoolAddress,
-		"MerkleRoot":          mRoot,
-		"EnoughData":          enoughData,
+		"Path":                 path,
+		"LatestProcessedSlot":  readState.LatestProcessedSlot,
+		"LatestProcessedBlock": readState.LatestProcessedBlock,
+		"NextSlotToProcess":    readState.NextSlotToProcess,
+		"Network":              readState.Network,
+		"PoolAddress":          readState.PoolAddress,
+		"MerkleRoot":           mRoot,
+		"EnoughData":           enoughData,
 	}).Info("Loaded state from file")
 
+	// This could be nicer. Note that adding a new field to the state
+	// requires adding it here as well
 	state.LatestProcessedSlot = readState.LatestProcessedSlot
 	state.NextSlotToProcess = readState.NextSlotToProcess
+	state.LatestProcessedBlock = readState.LatestProcessedBlock
 	//state.Network = readState.Network
 	//state.PoolAddress = readState.PoolAddress
 	state.Validators = readState.Validators
