@@ -102,7 +102,6 @@ func Test_100_slots_test(t *testing.T) {
 	oracle := NewOracle(&config.Config{
 		Network:               "mainnet",
 		PoolAddress:           "0xdead000000000000000000000000000000000000",
-		UpdaterAddress:        "",
 		DeployedSlot:          uint64(50000),
 		CheckPointSizeInSlots: uint64(100),
 		PoolFeesPercent:       5,

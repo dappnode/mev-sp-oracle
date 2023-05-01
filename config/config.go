@@ -1,35 +1,31 @@
 package config
 
 import (
-	"crypto/ecdsa"
 	"errors"
 	"flag"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hako/durafmt"
 	log "github.com/sirupsen/logrus"
 )
 
 type Config struct {
-	ConsensusEndpoint     string            `json:"consensus_endpoint"`
-	ExecutionEndpoint     string            `json:"execution_endpoint"`
-	Network               string            `json:"network"`
-	PoolAddress           string            `json:"pool_address"`
-	DeployedSlot          uint64            `json:"deployed_slot"`
-	CheckPointSizeInSlots uint64            `json:"checkpoint_size"`
-	PoolFeesPercent       int               `json:"pool_fees_percent"`
-	PoolFeesAddress       string            `json:"pool_fees_address"`
-	DryRun                bool              `json:"dry_run"`
-	NumRetries            int               `json:"num_retries"`
-	CollateralInWei       *big.Int          `json:"collateral_in_wei"`
-	UpdaterAddress        string            `json:"updater_address"`
-	UpdaterKeyPath        string            `json:"-"`
-	UpdaterKey            *ecdsa.PrivateKey `json:"-"`
+	ConsensusEndpoint     string   `json:"consensus_endpoint"`
+	ExecutionEndpoint     string   `json:"execution_endpoint"`
+	Network               string   `json:"network"`
+	PoolAddress           string   `json:"pool_address"`
+	DeployedSlot          uint64   `json:"deployed_slot"`
+	CheckPointSizeInSlots uint64   `json:"checkpoint_size"`
+	PoolFeesPercent       int      `json:"pool_fees_percent"`
+	PoolFeesAddress       string   `json:"pool_fees_address"`
+	DryRun                bool     `json:"dry_run"`
+	NumRetries            int      `json:"num_retries"`
+	CollateralInWei       *big.Int `json:"collateral_in_wei"`
+	UpdaterKeyPass        string   `json:"-"`
+	UpdaterKeyPath        string   `json:"-"`
 }
 
 // By default the release is a custom build. CI takes care of upgrading it with
@@ -126,26 +122,6 @@ func NewCliConfig() (*Config, error) {
 		return nil, errors.New("you can't provide a password for the keystore file in dry run mode")
 	}
 
-	// Check deployerPrivateKey is valid
-	var privateKey *ecdsa.PrivateKey
-	var publicKey string
-
-	// Only parse it not in dry run mode
-	if !*dryRun {
-		jsonBytes, err := ioutil.ReadFile(*updaterKeystorePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		account, err := keystore.DecryptKey(jsonBytes, *updaterKeystorePass)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		privateKey = account.PrivateKey
-		publicKey = account.Address.String()
-	}
-
 	if !common.IsHexAddress(*poolAddress) {
 		return nil, errors.New("pool-address: " + *poolAddress + " is not a valid address")
 	}
@@ -171,8 +147,7 @@ func NewCliConfig() (*Config, error) {
 		CollateralInWei:       ethCollateralInWei,
 		DryRun:                *dryRun,
 		NumRetries:            *numRetries,
-		UpdaterAddress:        publicKey,
-		UpdaterKey:            privateKey,
+		UpdaterKeyPass:        *updaterKeystorePass,
 		UpdaterKeyPath:        *updaterKeystorePath,
 	}
 	logConfig(conf)
@@ -187,7 +162,6 @@ func logConfig(cfg *Config) {
 		"PoolAddress":           cfg.PoolAddress,
 		"DeployedSlot":          cfg.DeployedSlot,
 		"CheckPointSizeInSlots": cfg.CheckPointSizeInSlots,
-		"UpdaterAddress":        cfg.UpdaterAddress,
 		"UpdaterKeyPath":        cfg.UpdaterKeyPath,
 		"PoolFeesPercent":       cfg.PoolFeesPercent,
 		"PoolFeesAddress":       cfg.PoolFeesAddress,
@@ -203,7 +177,6 @@ func logConfig(cfg *Config) {
 	if cfg.DryRun {
 		log.Warn("The pool contract will NOT be updated, running in dry-run mode")
 	} else {
-		log.Warn("Configured address to update the pool merkle root (ensure it has permissions): ", cfg.UpdaterAddress)
 		log.Info("The merkle root onchain will be updated every ", cfg.CheckPointSizeInSlots, " slots (", SlotsToTime(cfg.CheckPointSizeInSlots), ")")
 	}
 }

@@ -2,15 +2,18 @@ package oracle
 
 import (
 	"encoding/hex"
-	"errors"
+	"io/ioutil"
 	"math/big"
 	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/hako/durafmt"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -176,4 +179,21 @@ func AreAddressEqual(address1 string, address2 string) bool {
 		return true
 	}
 	return false
+}
+
+func DecryptKey(cfg *config.Config) (*keystore.Key, error) {
+	// Only parse it not in dry run mode
+	if !cfg.DryRun {
+		jsonBytes, err := ioutil.ReadFile(cfg.UpdaterKeyPath)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read updater key file")
+		}
+
+		account, err := keystore.DecryptKey(jsonBytes, cfg.UpdaterKeyPass)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to decrypt updater key")
+		}
+		return account, nil
+	}
+	return nil, errors.New("running in dry run mode, key is not needed")
 }
