@@ -544,7 +544,20 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	for valIndex, validator := range m.oracle.State.Validators {
 		// Just overwrite the untracked validators with oracle state
 		if AreAddressEqual(validator.WithdrawalAddress, withdrawalAddress) {
-			requestedValidators[valIndex] = validator
+			// Copy the validator content to avoid modifying the state one
+			// Imporant! Its not a deep copy, but its fine as long as we dont modify the []Blocks
+			requestedValidators[valIndex] = &oracle.ValidatorInfo{
+				ValidatorStatus:         validator.ValidatorStatus,
+				AccumulatedRewardsWei:   validator.AccumulatedRewardsWei,
+				PendingRewardsWei:       validator.PendingRewardsWei,
+				CollateralWei:           validator.CollateralWei,
+				WithdrawalAddress:       validator.WithdrawalAddress,
+				ValidatorIndex:          validator.ValidatorIndex,
+				ValidatorKey:            validator.ValidatorKey,
+				ValidatorProposedBlocks: validator.ValidatorProposedBlocks,
+				ValidatorMissedBlocks:   validator.ValidatorMissedBlocks,
+				ValidatorWrongFeeBlocks: validator.ValidatorWrongFeeBlocks,
+			}
 		}
 	}
 
