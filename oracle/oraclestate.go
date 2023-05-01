@@ -30,6 +30,9 @@ type ValidatorStatus uint8
 type Event uint8
 type BlockType uint8
 
+const DefaultRoot = "0x0000000000000000000000000000000000000000000000000000000000000000"
+const DefaultAddress = "0x0000000000000000000000000000000000000000"
+
 // TODO: Dont export functions and variables that are not used outside the package
 
 // Types of block rewards
@@ -180,6 +183,15 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		MissedBlocks:    make([]Block, 0),
 		WrongFeeBlocks:  make([]Block, 0),
 		Config:          cfg,
+		LatestCommitedState: OnchainState{
+			Validators: make(map[uint64]*ValidatorInfo, 0),
+			Slot:       0,
+			TxHash:     "",
+			MerkleRoot: DefaultRoot,
+			Tree:       nil,
+			Proofs:     make(map[string][]string, 0),
+			Leafs:      make(map[string]RawLeaf, 0),
+		},
 	}
 }
 
@@ -313,7 +325,7 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	if !enoughData {
 		return false
 	}
-	merkleRootStr := hex.EncodeToString(tree.Root)
+	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
 
 	log.WithFields(log.Fields{
 		"LatestProcessedSlot": state.LatestProcessedSlot,
@@ -957,7 +969,7 @@ func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 	if !enoughData {
 		return "", enoughData
 	}
-	merkleRootStr := hex.EncodeToString(tree.Root)
+	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
 
 	return merkleRootStr, true
 }

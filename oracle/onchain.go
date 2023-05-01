@@ -607,6 +607,11 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
+	// Support both 0x prefixed and non prefixed merkle roots
+	if strings.HasPrefix(newMerkleRoot, "0x") {
+		newMerkleRoot = newMerkleRoot[2:]
+	}
+
 	// Parse merkle root to byte array
 	newMerkleRootBytes := [32]byte{}
 	unboundedBytes := common.Hex2Bytes(newMerkleRoot)
