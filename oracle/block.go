@@ -62,14 +62,14 @@ func (b *VersionedSignedBeaconBlock) MevRewardInWei(poolAddress string) (*big.In
 			if strings.ToLower(b.GetFeeRecipient()) == strings.ToLower(msg.From().String()) {
 				totalMevReward.Add(totalMevReward, msg.Value())
 				log.WithFields(log.Fields{
-					"Slot":         b.GetSlot(),
-					"Block":        b.GetBlockNumber(),
-					"ValIndex":     b.GetProposerIndex(),
-					"FeeRecipient": b.GetFeeRecipient()[0:4],
-					"To":           msg.To().String(),
-					"Reward":       msg.Value(),
-					"TxHash":       tx.Hash().String()[0:4],
-					"Type":         "MevBlock",
+					"Slot":            b.GetSlot(),
+					"Block":           b.GetBlockNumber(),
+					"ValIndex":        b.GetProposerIndex(),
+					"FeeRecipient":    b.GetFeeRecipient(),
+					"MEVFeeRecipient": msg.To().String(),
+					"Reward":          msg.Value(),
+					"TxHash":          tx.Hash().String(),
+					"Type":            "MevBlock",
 				}).Info("[Reward]")
 				numTxs++
 			}
