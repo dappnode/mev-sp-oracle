@@ -80,23 +80,25 @@ type httpErrorResp struct {
 }
 
 type httpOkStatus struct {
-	IsConsensusInSync       bool   `json:"is_consensus_in_sync"`
-	IsExecutionInSync       bool   `json:"is_execution_in_sync"`
-	IsOracleInSync          bool   `json:"is_oracle_in_sync"`
-	LatestProcessedSlot     uint64 `json:"latest_processed_slot"`
-	LatestProcessedBlock    uint64 `json:"latest_processed_block"`
-	LatestFinalizedEpoch    uint64 `json:"latest_finalized_epoch"`
-	LatestFinalizedSlot     uint64 `json:"latest_finalized_slot"`
-	OracleHeadDistance      uint64 `json:"oracle_sync_distance_slots"`
-	NextCheckpointSlot      uint64 `json:"next_checkpoint_slot"`
-	NextCheckpointTime      string `json:"next_checkpoint_time"`
-	NextCheckpointRemaining string `json:"next_checkpoint_remaining"`
-	PreviousCheckpointSlot  uint64 `json:"previous_checkpoint_slot"`
-	PreviousCheckpointTime  string `json:"previous_checkpoint_time"`
-	PreviousCheckpointAge   string `json:"previous_checkpoint_age"`
-	ConsensusChainId        string `json:"consensus_chainid"`
-	ExecutionChainId        string `json:"execution_chainid"`
-	DepositContact          string `json:"depositcontract"`
+	IsConsensusInSync           bool   `json:"is_consensus_in_sync"`
+	IsExecutionInSync           bool   `json:"is_execution_in_sync"`
+	IsOracleInSync              bool   `json:"is_oracle_in_sync"`
+	LatestProcessedSlot         uint64 `json:"latest_processed_slot"`
+	LatestProcessedBlock        uint64 `json:"latest_processed_block"`
+	LatestFinalizedEpoch        uint64 `json:"latest_finalized_epoch"`
+	LatestFinalizedSlot         uint64 `json:"latest_finalized_slot"`
+	OracleHeadDistance          uint64 `json:"oracle_sync_distance_slots"`
+	NextCheckpointSlot          uint64 `json:"next_checkpoint_slot"`
+	NextCheckpointTime          string `json:"next_checkpoint_time"`
+	NextCheckpointRemaining     string `json:"next_checkpoint_remaining"`
+	NextCheckpointRemainingUnix uint64 `json:"next_checkpoint_remaining_unix"`
+	PreviousCheckpointSlot      uint64 `json:"previous_checkpoint_slot"`
+	PreviousCheckpointTime      string `json:"previous_checkpoint_time"`
+	PreviousCheckpointAge       string `json:"previous_checkpoint_age"`
+	PreviousCheckpointAgeUnix   uint64 `json:"previous_checkpoint_age_unix"`
+	ConsensusChainId            string `json:"consensus_chainid"`
+	ExecutionChainId            string `json:"execution_chainid"`
+	DepositContact              string `json:"depositcontract"`
 }
 
 type httpOkRelayersState struct {
@@ -400,6 +402,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	}
 
 	SlotsInEpoch := uint64(32)
+	SecondsInSlot := uint64(12)
 	finalizedEpoch := uint64(finality.Finalized.Epoch)
 	finalizedSlot := finalizedEpoch * SlotsInEpoch
 
@@ -415,23 +418,25 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	slotsTillNextCheckpoint := m.Onchain.Cfg.CheckPointSizeInSlots - slotsFromLastCheckpoint
 
 	status := httpOkStatus{
-		IsConsensusInSync:       consInSync,
-		IsExecutionInSync:       execInSync,
-		IsOracleInSync:          oracleSync,
-		LatestProcessedSlot:     m.oracle.State.LatestProcessedSlot,
-		LatestProcessedBlock:    m.oracle.State.LatestProcessedBlock,
-		LatestFinalizedEpoch:    finalizedEpoch,
-		LatestFinalizedSlot:     finalizedSlot,
-		OracleHeadDistance:      finalizedSlot - m.oracle.State.LatestProcessedSlot,
-		NextCheckpointSlot:      m.oracle.State.LatestProcessedSlot + slotsTillNextCheckpoint,
-		NextCheckpointTime:      "", // TODO:
-		NextCheckpointRemaining: SlotsToTime(slotsTillNextCheckpoint),
-		PreviousCheckpointSlot:  0,  // TODO:
-		PreviousCheckpointTime:  "", // TODO:
-		PreviousCheckpointAge:   SlotsToTime(slotsFromLastCheckpoint),
-		ExecutionChainId:        chainId.String(),
-		ConsensusChainId:        strconv.FormatUint(depositContract.ChainID, 10),
-		DepositContact:          "0x" + hex.EncodeToString(depositContract.Address[:]),
+		IsConsensusInSync:           consInSync,
+		IsExecutionInSync:           execInSync,
+		IsOracleInSync:              oracleSync,
+		LatestProcessedSlot:         m.oracle.State.LatestProcessedSlot,
+		LatestProcessedBlock:        m.oracle.State.LatestProcessedBlock,
+		LatestFinalizedEpoch:        finalizedEpoch,
+		LatestFinalizedSlot:         finalizedSlot,
+		OracleHeadDistance:          finalizedSlot - m.oracle.State.LatestProcessedSlot,
+		NextCheckpointSlot:          m.oracle.State.LatestProcessedSlot + slotsTillNextCheckpoint,
+		NextCheckpointTime:          "", // TODO:
+		NextCheckpointRemaining:     SlotsToTime(slotsTillNextCheckpoint),
+		NextCheckpointRemainingUnix: slotsTillNextCheckpoint * SecondsInSlot,
+		PreviousCheckpointSlot:      0,  // TODO:
+		PreviousCheckpointTime:      "", // TODO:
+		PreviousCheckpointAge:       SlotsToTime(slotsFromLastCheckpoint),
+		PreviousCheckpointAgeUnix:   slotsFromLastCheckpoint * SecondsInSlot,
+		ExecutionChainId:            chainId.String(),
+		ConsensusChainId:            strconv.FormatUint(depositContract.ChainID, 10),
+		DepositContact:              "0x" + hex.EncodeToString(depositContract.Address[:]),
 	}
 
 	m.respondOK(w, status)
