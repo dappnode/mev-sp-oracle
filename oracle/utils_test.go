@@ -159,5 +159,6 @@ func Test_WithdrawalCredentials(t *testing.T) {
 }
 
 func Test_AreAddressEqual(t *testing.T) {
-	require.Equal(t, true, AreAddressEqual("0x0000", "0x0000"))
+	require.Equal(t, true, Equals("0x0000", "0x0000"))
+	require.Equal(t, false, Equals("0x0000", "0x0001"))
 }

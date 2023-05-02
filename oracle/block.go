@@ -100,12 +100,7 @@ func (b *VersionedSignedBeaconBlock) GetSentRewardAndType(
 	var txType RewardType = UnknownRewardType
 	var wasRewardSent bool = false
 
-	if len(b.GetFeeRecipient()) != len(poolAddress) {
-		log.Fatal("Fee recipient and pool address have different lengths. FeeRecipient: ",
-			b.GetFeeRecipient(), "PoolAddress: ", poolAddress)
-	}
-
-	if strings.ToLower(b.GetFeeRecipient()) == strings.ToLower(poolAddress) {
+	if Equals(b.GetFeeRecipient(), poolAddress) {
 		// vanila block, we get the tip from the block
 		blockNumber := new(big.Int).SetUint64(b.GetBlockNumber())
 		header, receipts, err := onchain.GetExecHeaderAndReceipts(blockNumber, b.GetBlockTransactions())
@@ -208,36 +203,6 @@ func (b *VersionedSignedBeaconBlock) GetProposerTip(blockHeader *types.Header, t
 	return proposerReward, nil
 }
 
-// This function detects an Eth transaction sent to an address. Note that if it sent
-// by interacting with an smart contract, it will not be detected here.
-// This does not takes into account txs made from the fee recipient (MEV txs)
-func (b *VersionedSignedBeaconBlock) SentEthToAddress(poolAddress string) *big.Int {
-	sentEth := big.NewInt(0)
-	numTxs := 0
-	for _, rawTx := range b.GetBlockTransactions() {
-		_, msg, err := DecodeTx(rawTx)
-		if err != nil {
-			log.Fatal("could not decode tx: ", err)
-		}
-		// If a transaction was sent to the pool
-		// And the sender is not the fee recipient (exclude MEV transactions)
-		// Note that msg.To() is nil for contract creation transactions
-		if msg.To() == nil {
-			continue
-		}
-		// This just detect normal eth transactions sent to the pool address, not via
-		// smart conrtacts interactions.
-		if strings.ToLower(msg.To().String()) == strings.ToLower(poolAddress) &&
-			(strings.ToLower(msg.From().String()) != strings.ToLower(b.GetFeeRecipient())) {
-
-			sentEth.Add(sentEth, msg.Value())
-			log.Info("Sent amount: ", msg.Value())
-			numTxs++
-		}
-	}
-	return sentEth
-}
-
 // Note that this does not detect tx made from smart contract, just plain eth txs
 // This function is called on everyblock and MevRewardInWei, which iterate the same
 // set of transactions. As a TODO: we can refactor this to only iterate once and get
@@ -257,17 +222,10 @@ func (b *VersionedSignedBeaconBlock) GetDonations(poolAddress string) []Donation
 			continue
 		}
 
-		// Make sure we are not comparing different length addresses
-		if len(msg.To().String()) != len(poolAddress) {
-			log.Fatal("pool address is not the same length as msg.To()",
-				msg.To().String(), " ", poolAddress)
-		}
-
 		// This just detect normal eth transactions sent to the pool address, not via
 		// smart conrtacts interactions.
 		// It also ignores txs made by the fee recipient (MEV txs)
-		if strings.ToLower(msg.To().String()) == strings.ToLower(poolAddress) &&
-			(strings.ToLower(msg.From().String()) != strings.ToLower(b.GetFeeRecipient())) {
+		if Equals(msg.To().String(), poolAddress) && !Equals(msg.From().String(), b.GetFeeRecipient()) {
 
 			// We want pure eth transactions. If its a smart contract interaction (eg subscription)
 			// we skip it. Otherwise subscriptions would be detected as donations.

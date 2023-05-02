@@ -338,7 +338,7 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	for WithdrawalAddress, rawLeaf := range withdrawalToRawLeaf {
 
 		// Extra sanity check to make sure the withdrawal address is the same as the key
-		if WithdrawalAddress != rawLeaf.WithdrawalAddress {
+		if !Equals(WithdrawalAddress, rawLeaf.WithdrawalAddress) {
 			log.Fatal("withdrawal address in raw leaf doesnt match the key")
 		}
 
@@ -486,7 +486,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		}
 
 		// Subscription received from an address that is not the validator withdrawal address
-		if !AreAddressEqual(sender, validatorWithdrawal) {
+		if !Equals(sender, validatorWithdrawal) {
 			log.WithFields(log.Fields{
 				"BlockNumber":         sub.Event.Raw.BlockNumber,
 				"Collateral":          sub.Event.SubscriptionCollateral,
@@ -552,7 +552,7 @@ func (state *OracleState) HandleManualSubscriptions(
 					AccumulatedRewardsWei:   big.NewInt(0),
 					PendingRewardsWei:       big.NewInt(0),
 					CollateralWei:           collateral,
-					WithdrawalAddress:       validatorWithdrawal, // TODO: Rename withdrawal Address
+					WithdrawalAddress:       validatorWithdrawal,
 					ValidatorIndex:          valIdx,
 					ValidatorKey:            "0x" + hex.EncodeToString(sub.Validator.Validator.PublicKey[:]),
 					ValidatorProposedBlocks: make([]Block, 0),
@@ -643,7 +643,7 @@ func (state *OracleState) HandleManualUnsubscriptions(
 
 		// Its very important to check that the unsubscription was made from the withdrawal address
 		// of the validator, otherwise anyone could call the unsubscription function.
-		if !AreAddressEqual(sender, withdrawalAddress) {
+		if !Equals(sender, withdrawalAddress) {
 			log.WithFields(log.Fields{
 				"BlockNumber":      unsub.Event.Raw.BlockNumber,
 				"TxHash":           unsub.Event.Raw.TxHash,

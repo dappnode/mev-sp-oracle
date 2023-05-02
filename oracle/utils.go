@@ -169,13 +169,13 @@ func GetEth1AddressByte(withdrawalCredByte []byte) (string, error) {
 	return "0x" + withdrawalCred[24:], nil
 }
 
-func AreAddressEqual(address1 string, address2 string) bool {
-	if len(address1) != len(address2) {
-		log.Fatal("address length mismatch: ",
-			"add1: ", address1,
-			"add2: ", address2)
+func Equals(a string, b string) bool {
+	if len(a) != len(b) {
+		log.Fatal("values length mismatch: ",
+			"a: ", a,
+			"b: ", b)
 	}
-	if strings.ToLower(address1) == strings.ToLower(address2) {
+	if strings.ToLower(a) == strings.ToLower(b) {
 		return true
 	}
 	return false
