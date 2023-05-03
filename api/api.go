@@ -447,7 +447,27 @@ func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
 		m.respondError(w, http.StatusInternalServerError, "no config loaded, nil value")
 		return
 	}
-	m.respondOK(w, m.config)
+	type httpOkConfig struct {
+		// TODO Add deployed block
+		Network               string `json:"network"`
+		PoolAddress           string `json:"pool_address"`
+		DeployedSlot          uint64 `json:"deployed_slot"`
+		CheckPointSizeInSlots uint64 `json:"checkpoint_size"`
+		PoolFeesPercent       int    `json:"pool_fees_percent"`
+		PoolFeesAddress       string `json:"pool_fees_address"`
+		DryRun                bool   `json:"dry_run"`
+		CollateralInWei       string `json:"collateral_in_wei"`
+	}
+	m.respondOK(w, httpOkConfig{
+		Network:               m.config.Network,
+		PoolAddress:           m.config.PoolAddress,
+		DeployedSlot:          m.config.DeployedSlot,
+		CheckPointSizeInSlots: m.config.CheckPointSizeInSlots,
+		PoolFeesPercent:       m.config.PoolFeesPercent,
+		PoolFeesAddress:       m.config.PoolFeesAddress,
+		DryRun:                m.config.DryRun,
+		CollateralInWei:       m.config.CollateralInWei.String(),
+	})
 }
 
 func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Request) {
