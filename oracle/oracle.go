@@ -3,6 +3,7 @@ package oracle
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	log "github.com/sirupsen/logrus"
@@ -11,6 +12,7 @@ import (
 type Oracle struct {
 	cfg   *config.Config
 	State *OracleState
+	mu sync.RWMutex
 }
 
 func NewOracle(cfg *config.Config) *Oracle {
@@ -33,6 +35,10 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	blockUnsubs []Unsubscription,
 	blockDonations []Donation) (uint64, error) {
 
+	//declare mutex and release it when function returns
+	or.mu.Lock()
+	defer or.mu.Unlock()
+	
 	if or.State.NextSlotToProcess != (or.State.LatestProcessedSlot + 1) {
 		log.Fatal("Next slot to process is not the last processed slot + 1",
 			or.State.NextSlotToProcess, " ", or.State.LatestProcessedSlot)
