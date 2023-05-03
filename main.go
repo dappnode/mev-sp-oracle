@@ -66,9 +66,9 @@ func main() {
 	if err == nil {
 		log.Info("Found previous state to continue syncing")
 	} else {
-		log.Info("Previous state not found or could not be loaded, syncing from the begining: ", err)
+		log.Warn("Previous state not found or could not be loaded, syncing from the begining: ", err)
 	}
-
+	
 	api := api.NewApiService(cfg, oracleInstance, onchain)
 
 	go api.StartHTTPServer()
@@ -115,9 +115,11 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		log.Info("Latest known root by oracle does not match the latest onchain. ",
 			latestOnchainRoot, " ", latestKnownRoot)
 		log.Info("The state wont be updated until the same root is reached")
+	} else if cfg.DryRun {
+		log.Info("Latest known root by oracle matches the latest on-chain root, but dry run mode is enabled. The onchain root wont be updated")
 	} else {
 		syncedWithOnchainRoot = true
-		log.Info("Latest known root by oracle matches the latest onchain, oracle is ready to update new roots")
+		log.Info("Latest known root by oracle matches the latest on-chain root. Oracle is ready to update new roots.")
 	}
 
 	// Load all the validators from the beacon chain
