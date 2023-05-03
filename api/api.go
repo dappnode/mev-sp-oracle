@@ -137,14 +137,14 @@ type httpOkMemoryStatistics struct {
 	TotalBanned        uint64 `json:"total_banned_validators"`
 	TotalNotSubscribed uint64 `json:"total_notsubscribed_validators"`
 
-	LatestCheckpointSlot       uint64   `json:"latest_checkpoint_slot"`
-	NextCheckpointSlot         uint64   `json:"next_checkpoint_slot"`
-	TotalAccumulatedRewardsWei *big.Int `json:"total_accumulated_rewards_wei"`
-	TotalPendingRewaradsWei    *big.Int `json:"total_pending_rewards_wei"`
+	LatestCheckpointSlot       uint64 `json:"latest_checkpoint_slot"`
+	NextCheckpointSlot         uint64 `json:"next_checkpoint_slot"`
+	TotalAccumulatedRewardsWei string `json:"total_accumulated_rewards_wei"`
+	TotalPendingRewaradsWei    string `json:"total_pending_rewards_wei"`
 
-	TotalRewardsSentWei *big.Int `json:"total_rewards_sent_wei"`
-	TotalDonationsWei   *big.Int `json:"total_donations_wei"`
-	AvgBlockRewardWei   *big.Int `json:"avg_block_reward_wei"`
+	TotalRewardsSentWei string `json:"total_rewards_sent_wei"`
+	TotalDonationsWei   string `json:"total_donations_wei"`
+	AvgBlockRewardWei   string `json:"avg_block_reward_wei"`
 
 	// TODO: Split Proposed in Vanila/Mev
 	//TotalVanilaBlocks   uint64
@@ -155,13 +155,13 @@ type httpOkMemoryStatistics struct {
 }
 
 type httpOkValidatorState struct {
-	ValidatorStatus       string   `json:"status"`
-	AccumulatedRewardsWei *big.Int `json:"accumulated_rewards_wei"`
-	PendingRewardsWei     *big.Int `json:"pending_rewards_wei"`
-	CollateralWei         *big.Int `json:"collateral_rewards_wei"`
-	WithdrawalAddress     string   `json:"withdrawal_address"`
-	ValidatorIndex        uint64   `json:"validator_index"`
-	ValidatorKey          string   `json:"validator_key"`
+	ValidatorStatus       string `json:"status"`
+	AccumulatedRewardsWei string `json:"accumulated_rewards_wei"`
+	PendingRewardsWei     string `json:"pending_rewards_wei"`
+	CollateralWei         string `json:"collateral_rewards_wei"`
+	WithdrawalAddress     string `json:"withdrawal_address"`
+	ValidatorIndex        uint64 `json:"validator_index"`
+	ValidatorKey          string `json:"validator_key"`
 	//ValidatorProposedBlocks   []BlockState
 	//ValidatorMissedBlocks     []BlockState
 	//ValidatorWrongFeeBlocks   []BlockState
@@ -171,15 +171,15 @@ type httpOkValidatorState struct {
 
 type httpOkProofs struct {
 	LeafWithdrawalAddress      string   `json:"leaf_withdrawal_address"`
-	LeafAccumulatedBalance     *big.Int `json:"leaf_accumulated_balance"`
+	LeafAccumulatedBalance     string   `json:"leaf_accumulated_balance"`
 	MerkleRoot                 string   `json:"merkleroot"`
 	CheckpointSlot             uint64   `json:"checkpoint_slot"`
 	Proofs                     []string `json:"merkle_proofs"`
 	RegisteredValidators       []uint64 `json:"registered_validators"`
-	TotalAccumulatedRewardsWei *big.Int `json:"total_accumulated_rewards_wei"`
-	AlreadyClaimedRewardsWei   *big.Int `json:"already_claimed_rewards_wei"`
-	ClaimableRewardsWei        *big.Int `json:"claimable_rewards_wei"`
-	PendingRewardsWei          *big.Int `json:"pending_rewards_wei"`
+	TotalAccumulatedRewardsWei string   `json:"total_accumulated_rewards_wei"`
+	AlreadyClaimedRewardsWei   string   `json:"already_claimed_rewards_wei"`
+	ClaimableRewardsWei        string   `json:"claimable_rewards_wei"`
+	PendingRewardsWei          string   `json:"pending_rewards_wei"`
 }
 
 type ApiService struct {
@@ -352,11 +352,11 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		TotalNotSubscribed:         totalNotSubscribed,
 		LatestCheckpointSlot:       m.oracle.State.LatestProcessedSlot,                                       // This is wrong. TODO: convert date
 		NextCheckpointSlot:         m.oracle.State.LatestProcessedSlot + m.Onchain.Cfg.CheckPointSizeInSlots, // TODO: Also wrong. convert to date
-		TotalAccumulatedRewardsWei: totalAccumulatedRewards,
-		TotalPendingRewaradsWei:    totalPendingRewards,
-		TotalRewardsSentWei:        totalRewardsSentWei,
-		TotalDonationsWei:          totalDonationsWei,
-		AvgBlockRewardWei:          avgBlockRewardWei,
+		TotalAccumulatedRewardsWei: totalAccumulatedRewards.String(),
+		TotalPendingRewaradsWei:    totalPendingRewards.String(),
+		TotalRewardsSentWei:        totalRewardsSentWei.String(),
+		TotalDonationsWei:          totalDonationsWei.String(),
+		AvgBlockRewardWei:          avgBlockRewardWei.String(),
 		TotalProposedBlocks:        totalProposedBlocks,
 		TotalMissedBlocks:          uint64(len(m.oracle.State.MissedBlocks)),
 		TotalWrongFeeBlocks:        uint64(len(m.oracle.State.WrongFeeBlocks)),
@@ -447,7 +447,27 @@ func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
 		m.respondError(w, http.StatusInternalServerError, "no config loaded, nil value")
 		return
 	}
-	m.respondOK(w, m.config)
+	type httpOkConfig struct {
+		// TODO Add deployed block
+		Network               string `json:"network"`
+		PoolAddress           string `json:"pool_address"`
+		DeployedSlot          uint64 `json:"deployed_slot"`
+		CheckPointSizeInSlots uint64 `json:"checkpoint_size"`
+		PoolFeesPercent       int    `json:"pool_fees_percent"`
+		PoolFeesAddress       string `json:"pool_fees_address"`
+		DryRun                bool   `json:"dry_run"`
+		CollateralInWei       string `json:"collateral_in_wei"`
+	}
+	m.respondOK(w, httpOkConfig{
+		Network:               m.config.Network,
+		PoolAddress:           m.config.PoolAddress,
+		DeployedSlot:          m.config.DeployedSlot,
+		CheckPointSizeInSlots: m.config.CheckPointSizeInSlots,
+		PoolFeesPercent:       m.config.PoolFeesPercent,
+		PoolFeesAddress:       m.config.PoolFeesAddress,
+		DryRun:                m.config.DryRun,
+		CollateralInWei:       m.config.CollateralInWei.String(),
+	})
 }
 
 func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Request) {
@@ -773,15 +793,15 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 	m.respondOK(w, httpOkProofs{
 		LeafWithdrawalAddress:      leafs.WithdrawalAddress,
-		LeafAccumulatedBalance:     leafs.AccumulatedBalance,
+		LeafAccumulatedBalance:     leafs.AccumulatedBalance.String(),
 		MerkleRoot:                 m.oracle.State.LatestCommitedState.MerkleRoot,
 		CheckpointSlot:             m.oracle.State.LatestCommitedState.Slot,
 		Proofs:                     proofs,
 		RegisteredValidators:       registeredValidators,
-		TotalAccumulatedRewardsWei: leafs.AccumulatedBalance,
-		ClaimableRewardsWei:        new(big.Int).Sub(leafs.AccumulatedBalance, claimed),
-		AlreadyClaimedRewardsWei:   claimed,
-		PendingRewardsWei:          totalPending,
+		TotalAccumulatedRewardsWei: leafs.AccumulatedBalance.String(),
+		ClaimableRewardsWei:        new(big.Int).Sub(leafs.AccumulatedBalance, claimed).String(),
+		AlreadyClaimedRewardsWei:   claimed.String(),
+		PendingRewardsWei:          totalPending.String(),
 	})
 }
 
@@ -815,9 +835,9 @@ func (m *ApiService) handleValidatorOnchainStateByIndex(w http.ResponseWriter, r
 	}
 	m.respondOK(w, httpOkValidatorState{
 		ValidatorStatus:       oracle.ValidatorStateToString(valState.ValidatorStatus),
-		AccumulatedRewardsWei: valState.AccumulatedRewardsWei,
-		PendingRewardsWei:     valState.PendingRewardsWei,
-		CollateralWei:         valState.CollateralWei,
+		AccumulatedRewardsWei: valState.AccumulatedRewardsWei.String(),
+		PendingRewardsWei:     valState.PendingRewardsWei.String(),
+		CollateralWei:         valState.CollateralWei.String(),
 		WithdrawalAddress:     valState.WithdrawalAddress,
 		ValidatorIndex:        valState.ValidatorIndex,
 		ValidatorKey:          valState.ValidatorKey,
