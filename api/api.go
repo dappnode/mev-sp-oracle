@@ -1,9 +1,7 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -308,7 +306,7 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	//totalVanilaBlocks := 0
 	//totalMevBlocks := 0
 
-	for _, validator := range m.oracle.State.Validators {
+	for _, validator := range m.oracle.State().Validators {
 		if validator.ValidatorStatus == oracle.Active {
 			totalActive++
 		} else if validator.ValidatorStatus == oracle.YellowCard {
@@ -327,20 +325,20 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	totalSubscribed = totalActive + totalYellowCard + totalRedCard
 
 	totalRewardsSentWei := big.NewInt(0)
-	for _, block := range m.oracle.State.ProposedBlocks {
+	for _, block := range m.oracle.State().ProposedBlocks {
 		totalRewardsSentWei.Add(totalRewardsSentWei, block.Reward)
 	}
 	totalDonationsWei := big.NewInt(0)
-	for _, donation := range m.oracle.State.Donations {
+	for _, donation := range m.oracle.State().Donations {
 		totalDonationsWei.Add(totalDonationsWei, donation.AmountWei)
 	}
 
-	totalProposedBlocks := uint64(len(m.oracle.State.ProposedBlocks))
+	totalProposedBlocks := uint64(len(m.oracle.State().ProposedBlocks))
 	avgBlockRewardWei := big.NewInt(0)
 
 	// Avoid division by zero
 	if totalProposedBlocks != 0 {
-		avgBlockRewardWei = big.NewInt(0).Div(totalRewardsSentWei, big.NewInt(0).SetUint64(uint64(len(m.oracle.State.ProposedBlocks))))
+		avgBlockRewardWei = big.NewInt(0).Div(totalRewardsSentWei, big.NewInt(0).SetUint64(uint64(len(m.oracle.State().ProposedBlocks))))
 	}
 
 	m.respondOK(w, httpOkMemoryStatistics{
@@ -350,16 +348,16 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		TotalRedCard:               totalRedCard,
 		TotalBanned:                totalBanned,
 		TotalNotSubscribed:         totalNotSubscribed,
-		LatestCheckpointSlot:       m.oracle.State.LatestProcessedSlot,                                       // This is wrong. TODO: convert date
-		NextCheckpointSlot:         m.oracle.State.LatestProcessedSlot + m.Onchain.Cfg.CheckPointSizeInSlots, // TODO: Also wrong. convert to date
+		LatestCheckpointSlot:       m.oracle.State().LatestProcessedSlot,                                       // This is wrong. TODO: convert date
+		NextCheckpointSlot:         m.oracle.State().LatestProcessedSlot + m.Onchain.Cfg.CheckPointSizeInSlots, // TODO: Also wrong. convert to date
 		TotalAccumulatedRewardsWei: totalAccumulatedRewards.String(),
 		TotalPendingRewaradsWei:    totalPendingRewards.String(),
 		TotalRewardsSentWei:        totalRewardsSentWei.String(),
 		TotalDonationsWei:          totalDonationsWei.String(),
 		AvgBlockRewardWei:          avgBlockRewardWei.String(),
 		TotalProposedBlocks:        totalProposedBlocks,
-		TotalMissedBlocks:          uint64(len(m.oracle.State.MissedBlocks)),
-		TotalWrongFeeBlocks:        uint64(len(m.oracle.State.WrongFeeBlocks)),
+		TotalMissedBlocks:          uint64(len(m.oracle.State().MissedBlocks)),
+		TotalWrongFeeBlocks:        uint64(len(m.oracle.State().WrongFeeBlocks)),
 	})
 }
 
@@ -407,12 +405,12 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	finalizedSlot := finalizedEpoch * SlotsInEpoch
 
 	oracleSync := false
-	if m.oracle.State.LatestProcessedSlot-finalizedSlot == 0 {
+	if m.oracle.State().LatestProcessedSlot-finalizedSlot == 0 {
 		oracleSync = true
 	}
 
 	// Slots that passed since last checkpoint
-	slotsFromLastCheckpoint := m.oracle.State.LatestProcessedSlot % m.Onchain.Cfg.CheckPointSizeInSlots
+	slotsFromLastCheckpoint := m.oracle.State().LatestProcessedSlot % m.Onchain.Cfg.CheckPointSizeInSlots
 
 	// Remaining slots till next checkpoint
 	slotsTillNextCheckpoint := m.Onchain.Cfg.CheckPointSizeInSlots - slotsFromLastCheckpoint
@@ -421,12 +419,12 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		IsConsensusInSync:           consInSync,
 		IsExecutionInSync:           execInSync,
 		IsOracleInSync:              oracleSync,
-		LatestProcessedSlot:         m.oracle.State.LatestProcessedSlot,
-		LatestProcessedBlock:        m.oracle.State.LatestProcessedBlock,
+		LatestProcessedSlot:         m.oracle.State().LatestProcessedSlot,
+		LatestProcessedBlock:        m.oracle.State().LatestProcessedBlock,
 		LatestFinalizedEpoch:        finalizedEpoch,
 		LatestFinalizedSlot:         finalizedSlot,
-		OracleHeadDistance:          finalizedSlot - m.oracle.State.LatestProcessedSlot,
-		NextCheckpointSlot:          m.oracle.State.LatestProcessedSlot + slotsTillNextCheckpoint,
+		OracleHeadDistance:          finalizedSlot - m.oracle.State().LatestProcessedSlot,
+		NextCheckpointSlot:          m.oracle.State().LatestProcessedSlot + slotsTillNextCheckpoint,
 		NextCheckpointTime:          "", // TODO:
 		NextCheckpointRemaining:     SlotsToTime(slotsTillNextCheckpoint),
 		NextCheckpointRemainingUnix: slotsTillNextCheckpoint * SecondsInSlot,
@@ -472,7 +470,7 @@ func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
 
 func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Request) {
 	// Perhaps a bit dangerours to access this directly without getters.
-	m.respondOK(w, m.oracle.State.Validators)
+	m.respondOK(w, m.oracle.State().Validators)
 }
 
 func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.Request) {
@@ -485,7 +483,7 @@ func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.
 		return
 	}
 
-	validator, found := m.oracle.State.Validators[valIndex]
+	validator, found := m.oracle.State().Validators[valIndex]
 	if !found {
 		m.respondError(w, http.StatusBadRequest, fmt.Sprint("could not find validator with index: ", valIndex))
 		return
@@ -498,6 +496,14 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	vars := mux.Vars(req)
 	withdrawalAddress := vars["withdrawalAddress"]
 
+	// Use always lowercase
+	withdrawalAddress = strings.ToLower(withdrawalAddress)
+
+	if !IsValidAddress(withdrawalAddress) {
+		m.respondError(w, http.StatusBadRequest, "invalid withdrawalAddress: "+withdrawalAddress)
+		return
+	}
+
 	// Move this to a function and require it for all api calls
 	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), "finalized")
 	if err != nil {
@@ -508,20 +514,15 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	finalizedSlot := uint64(finality.Finalized.Epoch) * SlotsInEpoch
 
 	oracleInSync := false
-	if m.oracle.State.LatestProcessedSlot-finalizedSlot == 0 {
+	if m.oracle.State().LatestProcessedSlot-finalizedSlot == 0 {
 		oracleInSync = true
 	}
 
+	//TODO: allow 32 or 64 slots of not in sync. to account for what happens when we processed the last finalized epoch
+	// but do this once the mutex works
+
 	if !oracleInSync {
 		m.respondError(w, http.StatusInternalServerError, "oracle not in sync yet, try again later")
-		return
-	}
-
-	// Use always lowercase
-	withdrawalAddress = strings.ToLower(withdrawalAddress)
-
-	if !IsValidAddress(withdrawalAddress) {
-		m.respondError(w, http.StatusBadRequest, "invalid withdrawalAddress: "+withdrawalAddress)
 		return
 	}
 
@@ -566,7 +567,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	}
 
 	// 2) Get all tracked validators for that withdrawal address (tracked)
-	for valIndex, validator := range m.oracle.State.Validators {
+	for valIndex, validator := range m.oracle.State().Validators {
 		// Just overwrite the untracked validators with oracle state
 		if AreAddressEqual(validator.WithdrawalAddress, withdrawalAddress) {
 			// Copy the validator content to avoid modifying the state one
@@ -593,12 +594,12 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	// This applies a non-finalized state to the validators, creating a virtual state
 	// only used for the api.
 
-	if m.oracle.State.LatestProcessedBlock == 0 {
+	if m.oracle.State().LatestProcessedBlock == 0 {
 		m.respondError(w, http.StatusInternalServerError, "latest processed block is 0, try again later")
 		return
 	}
 
-	firstNotProcessedBlock := m.oracle.State.LatestProcessedBlock + 1
+	firstNotProcessedBlock := m.oracle.State().LatestProcessedBlock + 1
 
 	// TODO: Cache this, very inneficient to get it every time
 	allSubsTillHead, err := m.GetSubscriptionsTillHead(firstNotProcessedBlock)
@@ -630,9 +631,9 @@ func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Reque
 	}
 
 	m.respondOK(w, httpOkMemoryFeesInfo{
-		PoolFeesPercent:     m.oracle.State.PoolFeesPercent,
-		PoolFeesAddress:     m.oracle.State.PoolFeesAddress,
-		PoolAccumulatedFees: m.oracle.State.PoolAccumulatedFees,
+		PoolFeesPercent:     m.oracle.State().PoolFeesPercent,
+		PoolFeesAddress:     m.oracle.State().PoolFeesAddress,
+		PoolAccumulatedFees: m.oracle.State().PoolAccumulatedFees,
 	})
 }
 
@@ -640,31 +641,31 @@ func (m *ApiService) handleMemoryAllBlocks(w http.ResponseWriter, req *http.Requ
 	allBlocks := make([]oracle.Block, 0)
 
 	// Concat all the blocks, order is not guaranteed
-	allBlocks = append(allBlocks, m.oracle.State.ProposedBlocks...)
-	allBlocks = append(allBlocks, m.oracle.State.MissedBlocks...)
-	allBlocks = append(allBlocks, m.oracle.State.WrongFeeBlocks...)
+	allBlocks = append(allBlocks, m.oracle.State().ProposedBlocks...)
+	allBlocks = append(allBlocks, m.oracle.State().MissedBlocks...)
+	allBlocks = append(allBlocks, m.oracle.State().WrongFeeBlocks...)
 
 	m.respondOK(w, allBlocks)
 }
 
 func (m *ApiService) handleMemoryProposedBlocks(w http.ResponseWriter, req *http.Request) {
 	// TODO: Use getter, since its safer and dont make this fields public
-	m.respondOK(w, m.oracle.State.ProposedBlocks)
+	m.respondOK(w, m.oracle.State().ProposedBlocks)
 }
 
 func (m *ApiService) handleMemoryMissedBlocks(w http.ResponseWriter, req *http.Request) {
 	// TODO: Use getter, since its safer and dont make this fields public
-	m.respondOK(w, m.oracle.State.MissedBlocks)
+	m.respondOK(w, m.oracle.State().MissedBlocks)
 }
 
 func (m *ApiService) handleMemoryWrongFeeBlocks(w http.ResponseWriter, req *http.Request) {
 	// TODO: Use getter, since its safer and dont make this fields public
-	m.respondOK(w, m.oracle.State.WrongFeeBlocks)
+	m.respondOK(w, m.oracle.State().WrongFeeBlocks)
 }
 
 func (m *ApiService) handleMemoryDonations(w http.ResponseWriter, req *http.Request) {
 	// TODO: Use getter, since its safer and dont make this fields public
-	m.respondOK(w, m.oracle.State.Donations)
+	m.respondOK(w, m.oracle.State().Donations)
 }
 
 func (m *ApiService) handleOnchainFeesInfo(w http.ResponseWriter, req *http.Request) {
@@ -688,21 +689,21 @@ func (m *ApiService) handleOnchainFeesInfo(w http.ResponseWriter, req *http.Requ
 		return
 	}*/
 
-	if len(m.oracle.State.LatestCommitedState.Proofs) == 0 {
+	if len(m.oracle.State().LatestCommitedState.Proofs) == 0 {
 		m.respondError(w, http.StatusInternalServerError, "no proofs found: not in sync or nothing commited yet")
 		return
 	}
 
 	// TODO: Use always lowercase. This is a bit of a workaround
-	poolFeesAddress := strings.ToLower(m.oracle.State.PoolFeesAddress)
+	poolFeesAddress := strings.ToLower(m.oracle.State().PoolFeesAddress)
 
-	proofs, okProof := m.oracle.State.LatestCommitedState.Proofs[poolFeesAddress]
+	proofs, okProof := m.oracle.State().LatestCommitedState.Proofs[poolFeesAddress]
 	if !okProof {
 		m.respondError(w, http.StatusInternalServerError, "no proof found for pool fees address, perhaps not commited yet")
 		return
 	}
 
-	leaf, okLeaf := m.oracle.State.LatestCommitedState.Leafs[poolFeesAddress]
+	leaf, okLeaf := m.oracle.State().LatestCommitedState.Leafs[poolFeesAddress]
 	if !okLeaf {
 		m.respondError(w, http.StatusInternalServerError, "no leaf found for pool fees address, perhaps not commited yet")
 		return
@@ -718,7 +719,7 @@ func (m *ApiService) handleOnchainFeesInfo(w http.ResponseWriter, req *http.Requ
 	m.respondOK(w, httpOkProofsFee{
 		LeafWithdrawalAddress:  leaf.WithdrawalAddress,
 		LeafAccumulatedBalance: leaf.AccumulatedBalance,
-		MerkleRoot:             m.oracle.State.LatestCommitedState.MerkleRoot,
+		MerkleRoot:             m.oracle.State().LatestCommitedState.MerkleRoot,
 		Proofs:                 proofs,
 	})
 }
@@ -756,14 +757,14 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 	}*/
 
 	// Get the proofs of this withdrawal address (to be used onchain to claim rewards)
-	proofs, proofFound := m.oracle.State.LatestCommitedState.Proofs[withdrawalAddress]
+	proofs, proofFound := m.oracle.State().LatestCommitedState.Proofs[withdrawalAddress]
 	if !proofFound {
 		m.respondError(w, http.StatusBadRequest, "could not find proof for WithdrawalAddress: "+withdrawalAddress)
 		return
 	}
 
 	// Get the leafs of this withdrawal address (to be used onchain to claim rewards)
-	leafs, leafsFound := m.oracle.State.LatestCommitedState.Leafs[withdrawalAddress]
+	leafs, leafsFound := m.oracle.State().LatestCommitedState.Leafs[withdrawalAddress]
 	if !leafsFound {
 		m.respondError(w, http.StatusBadRequest, "could not find leafs for WithdrawalAddress: "+withdrawalAddress)
 		return
@@ -771,7 +772,7 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 	// Get validators that are registered to this withdrawal address in the pool
 	registeredValidators := make([]uint64, 0)
-	for valIndex, validator := range m.oracle.State.LatestCommitedState.Validators {
+	for valIndex, validator := range m.oracle.State().LatestCommitedState.Validators {
 		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
 			registeredValidators = append(registeredValidators, valIndex)
 		}
@@ -785,7 +786,7 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 	totalPending := big.NewInt(0)
 
-	for _, validator := range m.oracle.State.LatestCommitedState.Validators {
+	for _, validator := range m.oracle.State().LatestCommitedState.Validators {
 		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
 			totalPending.Add(totalPending, validator.PendingRewardsWei)
 		}
@@ -794,8 +795,8 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 	m.respondOK(w, httpOkProofs{
 		LeafWithdrawalAddress:      leafs.WithdrawalAddress,
 		LeafAccumulatedBalance:     leafs.AccumulatedBalance.String(),
-		MerkleRoot:                 m.oracle.State.LatestCommitedState.MerkleRoot,
-		CheckpointSlot:             m.oracle.State.LatestCommitedState.Slot,
+		MerkleRoot:                 m.oracle.State().LatestCommitedState.MerkleRoot,
+		CheckpointSlot:             m.oracle.State().LatestCommitedState.Slot,
 		Proofs:                     proofs,
 		RegisteredValidators:       registeredValidators,
 		TotalAccumulatedRewardsWei: leafs.AccumulatedBalance.String(),
@@ -828,7 +829,7 @@ func (m *ApiService) handleValidatorOnchainStateByIndex(w http.ResponseWriter, r
 	}
 
 	// We look into the LatestCommitedState, since its whats its onchain
-	valState, found := m.oracle.State.LatestCommitedState.Validators[uint64(valIndex)]
+	valState, found := m.oracle.State().LatestCommitedState.Validators[uint64(valIndex)]
 	if !found {
 		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("validator index not tracked in the oracle: %d", valIndex))
 		return
@@ -1098,15 +1099,6 @@ func GetUnsubInBlock(subs []oracle.Unsubscription, block uint64) []oracle.Unsubs
 		}
 	}
 	return filteredUnsubs
-}
-
-// Do not use this, just as a proof of concept
-func DeepCopy(src, dist interface{}) (err error) {
-	buf := bytes.Buffer{}
-	if err = gob.NewEncoder(&buf).Encode(src); err != nil {
-		return
-	}
-	return gob.NewDecoder(&buf).Decode(dist)
 }
 
 // TODO: Duplicated, move to utils and take it from there

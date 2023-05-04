@@ -62,7 +62,7 @@ func main() {
 		"BalanceWei": balance,
 	}).Info("Pool Address Balance")
 
-	err = oracleInstance.State.LoadStateFromFile()
+	err = oracleInstance.State().LoadStateFromFile()
 	if err == nil {
 		log.Info("Found previous state to continue syncing")
 	} else {
@@ -82,9 +82,7 @@ func main() {
 
 		// Save state in SIGINT or SIGTERM
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM {
-			// TODO: Possible race condition. Ensure we finished processing the slot
-			// before saving the state
-			oracleInstance.State.SaveStateToFile()
+			oracleInstance.State().SaveStateToFile()
 		}
 
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM || sig == os.Interrupt || sig == os.Kill {
@@ -102,7 +100,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 	// losing sync, restarting and updating the roots again with old ones.
 	syncedWithOnchainRoot := false
 
-	latestKnownRoot := oracleInstance.State.LatestCommitedState.MerkleRoot
+	latestKnownRoot := oracleInstance.State().LatestCommitedState.MerkleRoot
 
 	log.Info("Latest known commited merkle root: ", latestKnownRoot)
 	latestOnchainRoot, err := onchain.GetContractMerkleRoot()
@@ -124,8 +122,8 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 	onchain.RefreshBeaconValidators()
 
 	log.WithFields(log.Fields{
-		"LatestProcessedSlot": oracleInstance.State.LatestProcessedSlot,
-		"NextSlotToProcess":   oracleInstance.State.NextSlotToProcess,
+		"LatestProcessedSlot": oracleInstance.State().LatestProcessedSlot,
+		"NextSlotToProcess":   oracleInstance.State().NextSlotToProcess,
 	}).Info("Processing, see api for progress")
 
 	for {
@@ -150,15 +148,15 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		finalizedEpoch := uint64(finality.Finalized.Epoch)
 		finalizedSlot := finalizedEpoch * SlotsInEpoch
 
-		if finalizedSlot >= oracleInstance.State.NextSlotToProcess {
+		if finalizedSlot >= oracleInstance.State().NextSlotToProcess {
 
 			// Get all the information of the block that was proposed in this slot
-			poolBlock, blockSubs, blockUnsubs, blockDonations := onchain.GetAllBlockInfo(oracleInstance.State.NextSlotToProcess)
+			poolBlock, blockSubs, blockUnsubs, blockDonations := onchain.GetAllBlockInfo(oracleInstance.State().NextSlotToProcess)
 			processedSlot, err := oracleInstance.AdvanceStateToNextSlot(poolBlock, blockSubs, blockUnsubs, blockDonations)
 			if err != nil {
 				log.Fatal(err)
 			}
-			slotToLatestFinalized := finalizedSlot - oracleInstance.State.LatestProcessedSlot
+			slotToLatestFinalized := finalizedSlot - oracleInstance.State().LatestProcessedSlot
 
 			_ = processedSlot
 			_ = slotToLatestFinalized
@@ -183,30 +181,30 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 
 		// 1200 slots is 4 hour
 		UpdateValidatorsIntervalSlots := uint64(1200)
-		if oracleInstance.State.LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
+		if oracleInstance.State().LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
 			validators := onchain.Validators()
 			lastValidator := validators[phase0.ValidatorIndex(len(validators)-1)]
 
 			// Update only if the oracle advances beyond the last validator we have
-			if lastValidator.Validator.ActivationEligibilityEpoch <= phase0.Epoch(oracleInstance.State.LatestProcessedSlot/SlotsInEpoch) {
+			if lastValidator.Validator.ActivationEligibilityEpoch <= phase0.Epoch(oracleInstance.State().LatestProcessedSlot/SlotsInEpoch) {
 				onchain.RefreshBeaconValidators()
 			}
 		}
 
 		// Every CheckPointSizeInSlots we commit the state
-		if oracleInstance.State.LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 {
-			log.Info("Checkpoint reached, latest processed slot: ", oracleInstance.State.LatestProcessedSlot)
+		if oracleInstance.State().LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 {
+			log.Info("Checkpoint reached, latest processed slot: ", oracleInstance.State().LatestProcessedSlot)
 
 			// mRoot, enoughData := oracle.State.GetMerkleRootIfAny()
-			enoughData := oracleInstance.State.StoreLatestOnchainState()
+			enoughData := oracleInstance.StoreLatestOnchainState()
 
-			oracleInstance.State.SaveStateToFile()
+			oracleInstance.State().SaveStateToFile()
 
 			latestOnchainRoot, err := onchain.GetContractMerkleRoot()
 			if err != nil {
 				log.Fatal("Could not get contract merkle root: ", err)
 			}
-			newOracleRoot := oracleInstance.State.LatestCommitedState.MerkleRoot
+			newOracleRoot := oracleInstance.State().LatestCommitedState.MerkleRoot
 
 			// Every time we calculate a new root, see if it matches the latest one onchain.
 			// If it does, we are in sync with the onchain root and we can update the contract.

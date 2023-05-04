@@ -1,6 +1,8 @@
 package oracle
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/hex"
 	"io/ioutil"
 	"math/big"
@@ -196,4 +198,16 @@ func DecryptKey(cfg *config.Config) (*keystore.Key, error) {
 		return account, nil
 	}
 	return nil, errors.New("running in dry run mode, key is not needed")
+}
+
+// TODO: Test
+// Not the most efficient way of deep coping, if performance
+// matters, dont use this.
+func DeepCopy(a, b interface{}) {
+
+	buff := new(bytes.Buffer)
+	enc := gob.NewEncoder(buff)
+	dec := gob.NewDecoder(buff)
+	enc.Encode(a)
+	dec.Decode(b)
 }
