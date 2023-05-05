@@ -431,7 +431,7 @@ func (state *OracleState) HandleManualSubscriptions(
 
 	for _, sub := range subscriptions {
 
-		valIdx := uint64(sub.Event.ValidatorID) // TODO: Contract should be uint64
+		valIdx := sub.Event.ValidatorID
 		collateral := sub.Event.SubscriptionCollateral
 		sender := sub.Event.Sender.String()
 
@@ -443,7 +443,7 @@ func (state *OracleState) HandleManualSubscriptions(
 				"TxHash":         sub.Event.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for non existing validator, skipping")
-			// Fees go to the pool, as we dont know who is the sender
+			// Fees go to the pool, since validator does not exist in the pool and it is not tracked
 			state.SendRewardToPool(collateral)
 			continue
 		}
@@ -462,7 +462,7 @@ func (state *OracleState) HandleManualSubscriptions(
 				"ValidatorIndex": valIdx,
 				"ValidatorState": sub.Validator.Status,
 			}).Warn("[Subscription]: for validator that cannot subscribe due to its state, skipping")
-			// Fees go to the pool, as we dont know who is the sender
+			// Fees go to the pool, since validator is not operational (withdrawn, slashed, etc)
 			state.SendRewardToPool(collateral)
 			continue
 		}
@@ -477,7 +477,7 @@ func (state *OracleState) HandleManualSubscriptions(
 				"WithdrawalAddr": "0x" + hex.EncodeToString(sub.Validator.Validator.WithdrawalCredentials[:]),
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for validator with invalid withdrawal address (bls), skipping")
-			// Fees go to the pool, as we dont know who is the sender
+			// Fees go to the pool. A validator with a bls address can not be tracked since it has not been able to subscribe.
 			state.SendRewardToPool(collateral)
 			continue
 		}
@@ -492,7 +492,8 @@ func (state *OracleState) HandleManualSubscriptions(
 				"Sender":              sender,
 				"ValidatorWithdrawal": validatorWithdrawal,
 			}).Warn("[Subscription]: but tx sender is not the validator withdrawal address, skipping")
-			// Fees go to the pool, as we dont know who is the sender
+			// Fees go to the pool.
+			// TODO: maybe we could check if sender has a validator registered with withdrawal address = sender, and if so, give the collateral back to the sender
 			state.SendRewardToPool(collateral)
 			continue
 		}
@@ -518,7 +519,7 @@ func (state *OracleState) HandleManualSubscriptions(
 				"TxHash":         sub.Event.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for an already subscribed validator, skipping")
-			// Return the collateral as accumulated balance
+			// Since we track this validator, return the collateral as accumulated balance
 			state.IncreaseValidatorAccumulatedRewards(valIdx, collateral)
 			continue
 		}
@@ -531,7 +532,7 @@ func (state *OracleState) HandleManualSubscriptions(
 				"TxHash":         sub.Event.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for a validator with not enough collateral, skipping")
-			// Wrong, collateral goes to pool
+			// Fees go to the pool, since validator does not exist in the pool
 			state.SendRewardToPool(collateral)
 			continue
 		}
@@ -578,6 +579,7 @@ func (state *OracleState) HandleManualSubscriptions(
 			"ValidatorIndex":   valIdx,
 			"WithdrawaAddress": validatorWithdrawal,
 		}).Info("[Subscription]: Not considered case meaning wrong subscription, skipping")
+		// Send the collateral to the pool
 		state.SendRewardToPool(collateral)
 	}
 }
