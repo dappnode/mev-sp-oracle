@@ -545,23 +545,14 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	}
 
 	// 2) Get all tracked validators for that withdrawal address (tracked)
-	for valIndex, validator := range m.oracle.State().Validators {
+	validatorsCopy := make(map[uint64]*oracle.ValidatorInfo)
+
+	// Imporant! This is a deep copy, otherwise we will modify the state
+	oracle.DeepCopy(m.oracle.State().Validators, &validatorsCopy)
+	for valIndex, validator := range validatorsCopy {
 		// Just overwrite the untracked validators with oracle state
 		if AreAddressEqual(validator.WithdrawalAddress, withdrawalAddress) {
-			// Copy the validator content to avoid modifying the state one
-			// Imporant! Its not a deep copy, but its fine as long as we dont modify the []Blocks
-			requestedValidators[valIndex] = &oracle.ValidatorInfo{
-				ValidatorStatus:         validator.ValidatorStatus,
-				AccumulatedRewardsWei:   validator.AccumulatedRewardsWei,
-				PendingRewardsWei:       validator.PendingRewardsWei,
-				CollateralWei:           validator.CollateralWei,
-				WithdrawalAddress:       validator.WithdrawalAddress,
-				ValidatorIndex:          validator.ValidatorIndex,
-				ValidatorKey:            validator.ValidatorKey,
-				ValidatorProposedBlocks: validator.ValidatorProposedBlocks,
-				ValidatorMissedBlocks:   validator.ValidatorMissedBlocks,
-				ValidatorWrongFeeBlocks: validator.ValidatorWrongFeeBlocks,
-			}
+			requestedValidators[valIndex] = validator
 		}
 	}
 
