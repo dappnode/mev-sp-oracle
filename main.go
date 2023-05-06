@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/api"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
@@ -100,24 +99,6 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 	// losing sync, restarting and updating the roots again with old ones.
 	syncedWithOnchainRoot := false
 
-	latestKnownRoot := oracleInstance.State().LatestCommitedState.MerkleRoot
-
-	log.Info("Latest known commited merkle root: ", latestKnownRoot)
-	latestOnchainRoot, err := onchain.GetContractMerkleRoot()
-	if err != nil {
-		log.Fatal("Could not get contract merkle root: ", err)
-	}
-	log.Info("Latest onchain commited merkle root: ", latestOnchainRoot)
-
-	if !oracle.Equals(latestKnownRoot, latestOnchainRoot) {
-		log.Info("Latest known root by oracle does not match the latest onchain. ",
-			latestOnchainRoot, " ", latestKnownRoot)
-		log.Info("The state wont be updated until the same root is reached")
-	} else {
-		syncedWithOnchainRoot = true
-		log.Info("Latest known root by oracle matches the latest onchain, oracle is ready to update new roots")
-	}
-
 	// Load all the validators from the beacon chain
 	onchain.RefreshBeaconValidators()
 
@@ -179,42 +160,67 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			continue
 		}
 
-		// 1200 slots is 4 hour
-		UpdateValidatorsIntervalSlots := uint64(1200)
+		// 600 slots is 2 hours
+		UpdateValidatorsIntervalSlots := uint64(600)
 		if oracleInstance.State().LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
-			validators := onchain.Validators()
-			lastValidator := validators[phase0.ValidatorIndex(len(validators)-1)]
-
-			// Update only if the oracle advances beyond the last validator we have
-			if lastValidator.Validator.ActivationEligibilityEpoch <= phase0.Epoch(oracleInstance.State().LatestProcessedSlot/SlotsInEpoch) {
-				onchain.RefreshBeaconValidators()
-			}
+			onchain.RefreshBeaconValidators()
 		}
 
 		// Every CheckPointSizeInSlots we commit the state
 		if oracleInstance.State().LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached, latest processed slot: ", oracleInstance.State().LatestProcessedSlot)
 
-			// mRoot, enoughData := oracle.State.GetMerkleRootIfAny()
-			enoughData := oracleInstance.StoreLatestOnchainState()
-
-			oracleInstance.State().SaveStateToFile()
-
+			// Get the latest onchain root (from the contract)
 			latestOnchainRoot, err := onchain.GetContractMerkleRoot()
 			if err != nil {
-				log.Fatal("Could not get contract merkle root: ", err)
+				log.Fatal("Could not get latest onchain root: ", err)
 			}
+
+			// Get the latest calculated root (from the oracle)
+			prevOracleRoot := oracleInstance.State().LatestCommitedState.MerkleRoot
+
+			// Ensure we didnt fell behind sync. If we did, we wont update the contract
+			if !oracle.Equals(latestOnchainRoot, prevOracleRoot) {
+				syncedWithOnchainRoot = false
+				log.WithFields(log.Fields{
+					"LatestOnChainRoot": latestOnchainRoot,
+					"NewCalculateRoot":  prevOracleRoot,
+					"RootSlot":          oracleInstance.State().LatestCommitedState.Slot,
+				}).Info("Oracle IS NOT in sync with the latest onchain root")
+			} else {
+				syncedWithOnchainRoot = true
+				log.WithFields(log.Fields{
+					"LatestOnChainRoot": latestOnchainRoot,
+					"NewCalculateRoot":  prevOracleRoot,
+					"RootSlot":          oracleInstance.State().LatestCommitedState.Slot,
+				}).Info("Oracle IS in sync with the latest onchain root")
+			}
+
+			// Calculate new state with new root
+			enoughData := oracleInstance.StoreLatestOnchainState()
 			newOracleRoot := oracleInstance.State().LatestCommitedState.MerkleRoot
 
-			// Every time we calculate a new root, see if it matches the latest one onchain.
-			// If it does, we are in sync with the onchain root and we can update the contract.
-			if oracle.Equals(latestOnchainRoot, newOracleRoot) {
+			// Persist new state in file
+			oracleInstance.State().SaveStateToFile()
+
+			// If we were not in sync and the new root matches the latest onchain root, we are now in sync
+			// meaning that in the next checkpoint we will update the contract
+			if !syncedWithOnchainRoot && oracle.Equals(latestOnchainRoot, newOracleRoot) {
 				syncedWithOnchainRoot = true
-				log.Info("Latest known root by oracle matches the latest onchain root: ",
-					latestOnchainRoot, " ", newOracleRoot)
-			} else {
-				log.Info("New merkle root calculated, but it does not match the latest onchain root. Continue syncing until we reach the same root ",
-					latestOnchainRoot, " ", newOracleRoot)
+				log.WithFields(log.Fields{
+					"LatestOnChainRoot": latestOnchainRoot,
+					"NewCalculateRoot":  newOracleRoot,
+					"RootSlot":          oracleInstance.State().LatestCommitedState.Slot,
+				}).Info("New oracle root IS in sync with the latest onchain root")
+			}
+
+			// If we were not in sync and the new roots doesnt match, just log the progress
+			if !syncedWithOnchainRoot && !oracle.Equals(latestOnchainRoot, newOracleRoot) {
+				log.WithFields(log.Fields{
+					"LatestOnChainRoot": latestOnchainRoot,
+					"NewCalculateRoot":  newOracleRoot,
+					"RootSlot":          oracleInstance.State().LatestCommitedState.Slot,
+				}).Info("New oracle root IS NOT in sync with the latest onchain root")
 			}
 
 			if !enoughData {

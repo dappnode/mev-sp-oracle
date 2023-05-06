@@ -325,8 +325,8 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
 
 	log.WithFields(log.Fields{
-		"LatestProcessedSlot": state.LatestProcessedSlot,
-		"MerkleRoot":          merkleRootStr,
+		"Slot":       state.LatestProcessedSlot,
+		"MerkleRoot": merkleRootStr,
 	}).Info("Freezing state")
 
 	// Merkle proofs for each withdrawal address

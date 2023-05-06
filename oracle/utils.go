@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -210,4 +211,34 @@ func DeepCopy(a, b interface{}) {
 	dec := gob.NewDecoder(buff)
 	enc.Encode(a)
 	dec.Decode(b)
+}
+
+// TODO: unit test
+func GetActivationSlotOfLatestProcessedValidator(
+	validators map[phase0.ValidatorIndex]*v1.Validator) uint64 {
+	MaxUint := ^uint64(0)
+	if len(validators) == 0 {
+		log.Fatal("validators map is empty")
+	}
+
+	latestEpoch := uint64(0)
+
+	// Could be faster if iterated backwards
+	for _, val := range validators {
+		// When validators are not processed yet, max uint64 is stored
+		activationEpoch := uint64(val.Validator.ActivationEpoch)
+		if activationEpoch != MaxUint &&
+			activationEpoch > latestEpoch {
+			latestEpoch = activationEpoch
+		}
+	}
+
+	// Could technically happen if oracle were deployed in genesis
+	// But useful as a sanity check
+	if latestEpoch == 0 {
+		log.Fatal("latestEpoch is 0")
+	}
+
+	SlotsInEpoch := uint64(32)
+	return latestEpoch * SlotsInEpoch
 }
