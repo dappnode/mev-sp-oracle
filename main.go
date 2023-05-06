@@ -25,6 +25,7 @@ func main() {
 	log.SetFormatter(customFormatter)
 
 	log.Info("Starting smoothing pool oracle")
+	log.Info("Version: ", config.ReleaseVersion)
 
 	// Load config from cli
 	cfg, err := config.NewCliConfig()

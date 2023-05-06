@@ -29,8 +29,8 @@ type Config struct {
 }
 
 // By default the release is a custom build. CI takes care of upgrading it with
-// go build -v -ldflags="-X 'github.com/xxx/yyy/config.ReleaseVersion=x.y.z'"
-var ReleaseVersion = "custom-build"
+// go build -v -ldflags="-X 'github.com/dappnode/mev-sp-oracle/config.ReleaseVersion=x.y.z'"
+var ReleaseVersion = "custom-build-your-own-risk"
 
 var MainnetRelays = []string{
 	"boost-relay.flashbots.net",
