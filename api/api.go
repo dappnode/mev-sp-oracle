@@ -68,7 +68,6 @@ const (
 	pathOnchainValidatorsByWithdrawal = "/onchain/validators/{withdrawalAddress}" // TODO
 	pathOnchainMerkleRoot             = "/onchain/merkleroot"                     // TODO:
 	pathOnchainMerkleProof            = "/onchain/proof/{withdrawalAddress}"
-	pathOnchainLatestCheckpoint       = "/onchain/latestcheckpoint" // TODO: needed?
 )
 
 type httpErrorResp struct {
@@ -255,10 +254,10 @@ func (m *ApiService) getRouter() http.Handler {
 	return r
 }
 
-func (m *ApiService) StartHTTPServer() error {
+func (m *ApiService) StartHTTPServer() {
 	log.Info("Starting HTTP server on ", m.ApiListenAddr)
 	if m.srv != nil {
-		return errors.New("server already running")
+		log.Fatal("HTTP server already started")
 	}
 
 	//go m.startBidCacheCleanupTask()
@@ -279,10 +278,6 @@ func (m *ApiService) StartHTTPServer() error {
 	if err != nil {
 		log.Fatal("could not start http server: ", err)
 	}
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	return err
 }
 
 func (m *ApiService) handleRoot(w http.ResponseWriter, req *http.Request) {
@@ -502,25 +497,10 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		return
 	}
 
-	// Move this to a function and require it for all api calls
-	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), "finalized")
+	MaxSlotsBehind := uint64(32 * 3)
+	err := m.OracleReady(MaxSlotsBehind)
 	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not get consensus latest finalized slot: "+err.Error())
-	}
-
-	SlotsInEpoch := uint64(32)
-	finalizedSlot := uint64(finality.Finalized.Epoch) * SlotsInEpoch
-
-	oracleInSync := false
-	if m.oracle.State().LatestProcessedSlot-finalizedSlot == 0 {
-		oracleInSync = true
-	}
-
-	//TODO: allow 32 or 64 slots of not in sync. to account for what happens when we processed the last finalized epoch
-	// but do this once the mutex works
-
-	if !oracleInSync {
-		m.respondError(w, http.StatusInternalServerError, "oracle not in sync yet, try again later")
+		m.respondError(w, http.StatusInternalServerError, "oracle not ready: "+err.Error())
 		return
 	}
 
@@ -678,25 +658,28 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 	// Use always lowercase
 	withdrawalAddress = strings.ToLower(withdrawalAddress)
 
-	// Get the merkle root stored onchain
-	// TODO: Temporally disabled until we enable submitting state to chain
+	// Error if the oracle is not synced to latest
+	MaxSlotsBehind := uint64(32 * 1)
+	err := m.OracleReady(MaxSlotsBehind)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "oracle not ready: "+err.Error())
+		return
+	}
 
-	/*contractRoot, err := m.Onchain.GetContractMerkleRoot(apiRetryOpts...)
+	// Get the merkle root stored onchain
+	contractRoot, err := m.Onchain.GetContractMerkleRoot(apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get contract merkle root: "+err.Error())
 		return
 	}
 
-	if contractRoot == defaultMerkleRoot {
-		m.respondError(w, http.StatusInternalServerError, "contract merkle root is default, no state was commited yet")
+	// Check if the oracle root matches the one offchain
+	oracleLatestRoot := m.oracle.State().LatestCommitedState.MerkleRoot
+	if contractRoot != oracleLatestRoot {
+		m.respondError(w, http.StatusInternalServerError,
+			"contract merkle root does not match oracle state: "+contractRoot+" vs "+oracleLatestRoot)
 		return
 	}
-
-	if strings.ToLower(contractRoot) != strings.ToLower(m.OracleState.LatestCommitedState.MerkleRoot) {
-		m.respondError(w, http.StatusInternalServerError, fmt.Sprint("contract merkle root is not in sync with oracle state: ",
-			contractRoot, " vs ", m.OracleState.LatestCommitedState.MerkleRoot))
-		return
-	}*/
 
 	// Get the proofs of this withdrawal address (to be used onchain to claim rewards)
 	proofs, proofFound := m.oracle.State().LatestCommitedState.Proofs[withdrawalAddress]
@@ -998,6 +981,8 @@ func (m *ApiService) ApplyNonFinalizedState(
 						if oracle.CanValidatorSubscribeToPool(subInBlock.Validator) {
 							if val.ValidatorStatus == oracle.Untracked || val.ValidatorStatus == oracle.NotSubscribed {
 								validators[valIndex].ValidatorStatus = oracle.Active
+								validators[valIndex].PendingRewardsWei.Add(validators[valIndex].PendingRewardsWei, subInBlock.Event.SubscriptionCollateral)
+								// Accumulated is not updated, since that has to be done onchain
 							}
 						}
 					}
@@ -1016,11 +1001,41 @@ func (m *ApiService) ApplyNonFinalizedState(
 						val.ValidatorStatus == oracle.YellowCard ||
 						val.ValidatorStatus == oracle.RedCard {
 						validators[valIndex].ValidatorStatus = oracle.NotSubscribed
+						validators[valIndex].PendingRewardsWei = big.NewInt(0)
+						// Accumulated is not updated, since that has to be done onchain
 					}
 				}
 			}
 		}
 	}
+}
+
+func (m *ApiService) OracleReady(maxSlotsBehind uint64) error {
+	// Allow 3 epochs 32*3 slots out of sync (behind latest finalized). This allows to always serve requests since
+	// otherwise the oracle wont be able to reply, since from time to time its normal that it fall behind sync
+	// since it has to process the new epochs that keep arriving.
+	SlotsInEpoch := uint64(32)
+
+	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), "finalized")
+	if err != nil {
+		return errors.Wrap(err, "could not get consensus latest finalized slot")
+	}
+
+	finalizedSlot := uint64(finality.Finalized.Epoch) * SlotsInEpoch
+	slotsFromFinalized := m.oracle.State().LatestProcessedSlot - finalizedSlot
+
+	// Use this if we want full in sync to latest finalized
+	/*oracleInSync := false
+	if slotsFromFinalized == 0 {
+		oracleInSync = true
+	}
+	_ = oracleInSync*/
+
+	if slotsFromFinalized > maxSlotsBehind {
+		return errors.New(fmt.Sprintf("oracle not in sync, try again later: %d slots behind. Max allowed: %d",
+			slotsFromFinalized, maxSlotsBehind))
+	}
+	return nil
 }
 
 func GetSubInBlock(subs []oracle.Subscription, block uint64) []oracle.Subscription {

@@ -108,6 +108,27 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		"NextSlotToProcess":   oracleInstance.State().NextSlotToProcess,
 	}).Info("Processing, see api for progress")
 
+	// Check if we are in sync with the latest onchain root
+	latestOnchainRoot, err := onchain.GetContractMerkleRoot()
+	prevOracleRoot := oracleInstance.State().LatestCommitedState.MerkleRoot
+	if err != nil {
+		log.Fatal("Could not get latest onchain root: ", err)
+	}
+
+	if oracle.Equals(latestOnchainRoot, prevOracleRoot) {
+		log.WithFields(log.Fields{
+			"LatestOnChainRoot": latestOnchainRoot,
+			"NewCalculateRoot":  prevOracleRoot,
+			"RootSlot":          oracleInstance.State().LatestCommitedState.Slot,
+		}).Info("Oracle IS in sync with the latest onchain root")
+	} else {
+		log.WithFields(log.Fields{
+			"LatestOnChainRoot": latestOnchainRoot,
+			"NewCalculateRoot":  prevOracleRoot,
+			"RootSlot":          oracleInstance.State().LatestCommitedState.Slot,
+		}).Info("Oracle IS NOT in sync with the latest onchain root")
+	}
+
 	for {
 		// Ensure that the nodes we are using are in sync with the blockchain (consensus + execution)
 		inSync, err := onchain.AreNodesInSync()
