@@ -66,8 +66,7 @@ const (
 	pathOnchainValidators             = "/onchain/validators"                     // TODO
 	pathOnchainValidatorByIndex       = "/onchain/validator/{valindex}"           // TODO
 	pathOnchainValidatorsByWithdrawal = "/onchain/validators/{withdrawalAddress}" // TODO
-	pathOnchainFeesInfo               = "/onchain/proof/fees"
-	pathOnchainMerkleRoot             = "/onchain/merkleroot" // TODO:
+	pathOnchainMerkleRoot             = "/onchain/merkleroot"                     // TODO:
 	pathOnchainMerkleProof            = "/onchain/proof/{withdrawalAddress}"
 	pathOnchainLatestCheckpoint       = "/onchain/latestcheckpoint" // TODO: needed?
 )
@@ -247,7 +246,6 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc(pathMemoryDonations, m.handleMemoryDonations).Methods(http.MethodGet)
 
 	// Onchain endpoints
-	r.HandleFunc(pathOnchainFeesInfo, m.handleOnchainFeesInfo).Methods(http.MethodGet)
 	r.HandleFunc(pathOnchainMerkleProof, m.handleOnchainMerkleProof).Methods(http.MethodGet)
 
 	//r.HandleFunc(pathLatestCheckpoint, m.handleLatestCheckpoint)
@@ -666,62 +664,6 @@ func (m *ApiService) handleMemoryWrongFeeBlocks(w http.ResponseWriter, req *http
 func (m *ApiService) handleMemoryDonations(w http.ResponseWriter, req *http.Request) {
 	// TODO: Use getter, since its safer and dont make this fields public
 	m.respondOK(w, m.oracle.State().Donations)
-}
-
-func (m *ApiService) handleOnchainFeesInfo(w http.ResponseWriter, req *http.Request) {
-
-	// Get the merkle root stored onchain
-	// TODO: Temporally disabled until we enable submitting state to chain
-	/*contractRoot, err := m.Onchain.GetContractMerkleRoot(apiRetryOpts...)
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not get contract merkle root: "+err.Error())
-		return
-	}
-
-	if contractRoot == defaultMerkleRoot {
-		m.respondError(w, http.StatusInternalServerError, "contract merkle root is default, no state was commited yet")
-		return
-	}
-
-	if strings.ToLower(contractRoot) != strings.ToLower(m.OracleState.LatestCommitedState.MerkleRoot) {
-		m.respondError(w, http.StatusInternalServerError, fmt.Sprint("contract merkle root is not in sync with oracle state: ",
-			contractRoot, " vs ", m.OracleState.LatestCommitedState.MerkleRoot))
-		return
-	}*/
-
-	if len(m.oracle.State().LatestCommitedState.Proofs) == 0 {
-		m.respondError(w, http.StatusInternalServerError, "no proofs found: not in sync or nothing commited yet")
-		return
-	}
-
-	// TODO: Use always lowercase. This is a bit of a workaround
-	poolFeesAddress := strings.ToLower(m.oracle.State().PoolFeesAddress)
-
-	proofs, okProof := m.oracle.State().LatestCommitedState.Proofs[poolFeesAddress]
-	if !okProof {
-		m.respondError(w, http.StatusInternalServerError, "no proof found for pool fees address, perhaps not commited yet")
-		return
-	}
-
-	leaf, okLeaf := m.oracle.State().LatestCommitedState.Leafs[poolFeesAddress]
-	if !okLeaf {
-		m.respondError(w, http.StatusInternalServerError, "no leaf found for pool fees address, perhaps not commited yet")
-		return
-	}
-
-	type httpOkProofsFee struct {
-		LeafWithdrawalAddress  string   `json:"leaf_withdrawal_address"`
-		LeafAccumulatedBalance *big.Int `json:"leaf_accumulated_balance"`
-		MerkleRoot             string   `json:"merkleroot"`
-		Proofs                 []string `json:"merkle_proofs"`
-	}
-
-	m.respondOK(w, httpOkProofsFee{
-		LeafWithdrawalAddress:  leaf.WithdrawalAddress,
-		LeafAccumulatedBalance: leaf.AccumulatedBalance,
-		MerkleRoot:             m.oracle.State().LatestCommitedState.MerkleRoot,
-		Proofs:                 proofs,
-	})
 }
 
 func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.Request) {
