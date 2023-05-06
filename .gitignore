@@ -12,3 +12,4 @@ deployments/postgres-data
 deployments/metabase-data
 deployments/.env
 state.gob
+state_unused.gob

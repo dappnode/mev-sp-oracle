@@ -716,13 +716,21 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
 // Loads all validator from the beacon chain into the oracle, must be called periodically
 func (o *Onchain) RefreshBeaconValidators() {
-	log.Info("Loading existing validators in the beacon chain")
+	log.Info("Loading existing validators from the beacon chain")
 	vals, err := o.GetFinalizedValidators()
 	if err != nil {
 		log.Fatal("Could not get validators: ", err)
 	}
 	o.validators = vals
-	log.Info("Done loading existing validators in the beacon chain total: ", len(vals))
+	if len(vals) != 0 {
+		log.WithFields(log.Fields{
+			"TotalValidators":       len(vals),
+			"LastIndex":             vals[phase0.ValidatorIndex(len(vals)-1)].Index,
+			"ActivationSlotLastVal": GetActivationSlotOfLatestProcessedValidator(vals),
+		}).Info("Done loading beacon chain validators")
+	} else {
+		log.Fatal("No validators were loaded from the beacon chain")
+	}
 }
 
 func (o *Onchain) Validators() map[phase0.ValidatorIndex]*v1.Validator {

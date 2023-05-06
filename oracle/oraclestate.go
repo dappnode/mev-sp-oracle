@@ -313,11 +313,8 @@ func (state *OracleState) LoadStateFromFile() error {
 // Returns false if there wasnt enough data to create a merkle tree
 func (state *OracleState) StoreLatestOnchainState() bool {
 
-	// Quick way of coping the whole state
 	validatorsCopy := make(map[uint64]*ValidatorInfo)
-	for k2, v2 := range state.Validators {
-		validatorsCopy[k2] = v2
-	}
+	DeepCopy(state.Validators, &validatorsCopy)
 
 	mk := NewMerklelizer()
 	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
@@ -328,8 +325,8 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
 
 	log.WithFields(log.Fields{
-		"LatestProcessedSlot": state.LatestProcessedSlot,
-		"MerkleRoot":          merkleRootStr,
+		"Slot":       state.LatestProcessedSlot,
+		"MerkleRoot": merkleRootStr,
 	}).Info("Freezing state")
 
 	// Merkle proofs for each withdrawal address
