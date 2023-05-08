@@ -456,6 +456,94 @@ func (o *Onchain) GetContractCollateral(opts ...retry.Option) (*big.Int, error) 
 	return subscriptionCollateral, nil
 }
 
+func (o *Onchain) GetSlotCheckpointSize(opts ...retry.Option) (uint64, error) {
+	var slotCheckpointSize *big.Int
+	var err error
+
+	err = retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			slotCheckpointSize, err = o.Contract.CheckpointSlotSize(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get slot checkpoint size from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get slot checkpoint size from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return 0, errors.New("could not get claimed balance from contract: " + err.Error())
+	}
+
+	return slotCheckpointSize.Uint64(), nil
+}
+
+func (o *Onchain) GetContractDeploymentBlock(opts ...retry.Option) (uint64, error) {
+	var deploymentBlock *big.Int
+	var err error
+
+	err = retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			deploymentBlock, err = o.Contract.DeploymentBlockNumber(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get deployment block from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get deployment block from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return 0, errors.New("could not get deployment block from contract: " + err.Error())
+	}
+
+	return deploymentBlock.Uint64(), nil
+}
+
+func (o *Onchain) GetPoolFee(opts ...retry.Option) (*big.Int, error) {
+	var poolFee *big.Int
+	var err error
+
+	err = retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			poolFee, err = o.Contract.PoolFee(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get pool fee from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get pool fee from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("could not get pool fee from contract: " + err.Error())
+	}
+
+	return poolFee, nil
+}
+
+func (o *Onchain) GetPoolFeeAddress(opts ...retry.Option) (string, error) {
+	var poolFeeAddress common.Address
+	var err error
+
+	err = retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			poolFeeAddress, err = o.Contract.PoolFeeRecipient(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get pool fee address from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get pool fee address from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return "", errors.New("could not get pool fee address from contract: " + err.Error())
+	}
+
+	return poolFeeAddress.Hex(), nil
+}
+
 func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	var rewardsRootStr string
 
