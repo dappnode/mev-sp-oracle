@@ -747,14 +747,20 @@ func (state *OracleState) IncreaseAllPendingRewards(
 		return
 	}
 
+	// 100 is the % and the other 100 is because we use two decimals
+	// eg 1000 is 10%
+	// eg 50 is 0.5%
+	over := big.NewInt(100 * 100)
+	TODO: This is wrong
+
 	// The pool takes PoolFeesPercent cut of the rewards
 	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(state.PoolFeesPercent)))
 
 	// Calculate the pool cut
-	poolCut := big.NewInt(0).Div(aux, big.NewInt(100))
+	poolCut := big.NewInt(0).Div(aux, over)
 
 	// And remainder of above operation
-	remainder1 := big.NewInt(0).Mod(aux, big.NewInt(100))
+	remainder1 := big.NewInt(0).Mod(aux, over)
 
 	// The amount to share is the reward minus the pool cut + remainder
 	toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
