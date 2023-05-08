@@ -249,7 +249,7 @@ func (m *ApiService) getRouter() http.Handler {
 
 	//r.HandleFunc(pathLatestCheckpoint, m.handleLatestCheckpoint)
 
-	//r.Use(mux.CORSMethodMiddleware(r))
+	r.Use(mux.CORSMethodMiddleware(r))
 
 	return r
 }
@@ -562,6 +562,12 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		}
 	}
 
+	// If at this point we have no validators, just return empty to avoid more processing
+	if len(requestedValidators) == 0 {
+		m.respondOK(w, maps.Values(requestedValidators))
+		return
+	}
+
 	// Now we apply the state transition to these validators, based on what we have seen
 	// onchain since the latest finalized slot util head. This is neccesary because the
 	// oracle runs all calculations on finalized states, but the api must report to the
@@ -595,7 +601,11 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		allUnsubsTillHead,
 		requestedValidators)
 
-	m.respondOK(w, maps.Values(requestedValidators))
+	// Sort by index
+	values := maps.Values(requestedValidators)
+	sort.Slice(values, func(i, j int) bool { return values[i].ValidatorIndex < values[j].ValidatorIndex })
+
+	m.respondOK(w, values)
 }
 
 func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Request) {
@@ -1019,7 +1029,7 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) error {
 	}
 
 	finalizedSlot := uint64(finality.Finalized.Epoch) * SlotsInEpoch
-	slotsFromFinalized := m.oracle.State().LatestProcessedSlot - finalizedSlot
+	slotsFromFinalized := finalizedSlot - m.oracle.State().LatestProcessedSlot
 
 	// Use this if we want full in sync to latest finalized
 	/*oracleInSync := false
