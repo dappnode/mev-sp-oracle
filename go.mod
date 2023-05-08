@@ -7,7 +7,6 @@ require (
 	github.com/flashbots/go-boost-utils v1.4.1
 	github.com/gorilla/mux v1.8.0
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
-	github.com/jackc/pgx/v4 v4.17.2
 	github.com/miguelmota/go-solidity-sha3 v0.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.26.1
@@ -15,6 +14,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	github.com/txaty/go-merkletree v0.1.15-0.20230105063604-9a402c177611
 	golang.org/x/crypto v0.1.0
+	golang.org/x/exp v0.0.0-20230425010034-47ecfdc1ba53
 )
 
 require (
@@ -35,13 +35,6 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
-	github.com/jackc/pgconn v1.13.0 // indirect
-	github.com/jackc/pgio v1.0.0 // indirect
-	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgproto3/v2 v2.3.1 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b // indirect
-	github.com/jackc/pgtype v1.12.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.1.2 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
@@ -61,7 +54,6 @@ require (
 	github.com/tklauser/numcpus v0.2.2 // indirect
 	github.com/txaty/gool v0.1.4 // indirect
 	golang.org/x/net v0.1.0 // indirect
-	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gopkg.in/cenkalti/backoff.v1 v1.1.0 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect

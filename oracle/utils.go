@@ -1,16 +1,22 @@
 package oracle
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/hex"
-	"errors"
+	"io/ioutil"
 	"math/big"
 	"strings"
 	"time"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/hako/durafmt"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -166,14 +172,73 @@ func GetEth1AddressByte(withdrawalCredByte []byte) (string, error) {
 	return "0x" + withdrawalCred[24:], nil
 }
 
-func AreAddressEqual(address1 string, address2 string) bool {
-	if len(address1) != len(address2) {
-		log.Fatal("address length mismatch: ",
-			"add1: ", address1,
-			"add2: ", address2)
+func Equals(a string, b string) bool {
+	if len(a) != len(b) {
+		log.Fatal("values length mismatch: ",
+			"a: ", a,
+			"b: ", b)
 	}
-	if strings.ToLower(address1) == strings.ToLower(address2) {
+	if strings.ToLower(a) == strings.ToLower(b) {
 		return true
 	}
 	return false
+}
+
+func DecryptKey(cfg *config.Config) (*keystore.Key, error) {
+	// Only parse it not in dry run mode
+	if !cfg.DryRun {
+		jsonBytes, err := ioutil.ReadFile(cfg.UpdaterKeyPath)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read updater key file")
+		}
+
+		account, err := keystore.DecryptKey(jsonBytes, cfg.UpdaterKeyPass)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to decrypt updater key")
+		}
+		return account, nil
+	}
+	return nil, errors.New("running in dry run mode, key is not needed")
+}
+
+// TODO: Test
+// Not the most efficient way of deep coping, if performance
+// matters, dont use this.
+func DeepCopy(a, b interface{}) {
+
+	buff := new(bytes.Buffer)
+	enc := gob.NewEncoder(buff)
+	dec := gob.NewDecoder(buff)
+	enc.Encode(a)
+	dec.Decode(b)
+}
+
+// TODO: unit test
+func GetActivationSlotOfLatestProcessedValidator(
+	validators map[phase0.ValidatorIndex]*v1.Validator) uint64 {
+	MaxUint := ^uint64(0)
+	if len(validators) == 0 {
+		log.Fatal("validators map is empty")
+	}
+
+	latestEpoch := uint64(0)
+
+	// Could be faster if iterated backwards
+	for _, val := range validators {
+		// When validators are not processed yet, max uint64 is stored
+		activationEpoch := uint64(val.Validator.ActivationEpoch)
+		if activationEpoch != MaxUint &&
+			activationEpoch > latestEpoch {
+			latestEpoch = activationEpoch
+		}
+	}
+
+	// Could technically happen if oracle were deployed in genesis
+	// But useful as a sanity check
+	if latestEpoch == 0 {
+		log.Fatal("latestEpoch is 0")
+	}
+
+	SlotsInEpoch := uint64(32)
+	return latestEpoch * SlotsInEpoch
 }

@@ -26,3 +26,4 @@ jobs:
         with:
           push: true
           tags: dappnode/mev-sp-oracle:${{ steps.commit.outputs.short }}
+          build-args: BUILD_VERSION=${{ steps.commit.outputs.hash }}

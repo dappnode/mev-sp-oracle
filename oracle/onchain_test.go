@@ -22,11 +22,11 @@ import (
 // Fetches the balance of a given address
 func Test_FetchFromExecution(t *testing.T) {
 	t.Skip("Skipping test")
-	var cfgOnchain = config.Config{
+	var cfgOnchain = &config.Config{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	onChain, err := NewOnchain(cfgOnchain)
+	onChain, err := NewOnchain(cfgOnchain, nil)
 	require.NoError(t, err)
 	account := common.HexToAddress("0xf573d99385c05c23b24ed33de616ad16a43a0919")
 	balance, err := onChain.ExecutionClient.BalanceAt(context.Background(), account, nil)
@@ -40,11 +40,11 @@ func Test_FetchFromExecution(t *testing.T) {
 func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	t.Skip("Skipping test")
 
-	var cfgOnchain = config.Config{
+	var cfgOnchain = &config.Config{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
-	onchain, err := NewOnchain(cfgOnchain)
+	onchain, err := NewOnchain(cfgOnchain, nil)
 	require.NoError(t, err)
 	folder := "../mock"
 	blockType := "capella"

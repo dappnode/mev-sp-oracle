@@ -745,6 +745,103 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	}, state.Validators[valIndex])
 }
 
+func Test_StoreLatestOnchainState(t *testing.T) {
+	state := NewOracleState(&config.Config{
+		PoolFeesPercent: 0,
+		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
+	})
+
+	valInfo1 := &ValidatorInfo{
+		ValidatorStatus:       Active,
+		ValidatorIndex:        1,
+		AccumulatedRewardsWei: big.NewInt(1000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
+		ValidatorProposedBlocks: []Block{
+			{
+				Slot:   1,
+				Block:  1,
+				Reward: big.NewInt(1),
+			},
+			{
+				Slot:   2,
+				Block:  2,
+				Reward: big.NewInt(2),
+			},
+		},
+	}
+
+	valInfo2 := &ValidatorInfo{
+		ValidatorStatus:       NotSubscribed,
+		ValidatorIndex:        2,
+		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		// same withdrawal address as valInfo3
+		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
+		ValidatorMissedBlocks: []Block{
+			{
+				Slot:   10,
+				Block:  10,
+				Reward: big.NewInt(1),
+			},
+		},
+	}
+
+	valInfo3 := &ValidatorInfo{
+		ValidatorStatus:       NotSubscribed,
+		ValidatorIndex:        3,
+		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		// same withdrawal address as valInfo2
+		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
+		ValidatorMissedBlocks: []Block{
+			{
+				Slot:   50,
+				Block:  50,
+				Reward: big.NewInt(10000),
+			},
+		},
+	}
+
+	state.Validators[1] = valInfo1
+	state.Validators[2] = valInfo2
+	state.Validators[3] = valInfo3
+
+	// Function under test
+	state.StoreLatestOnchainState()
+
+	// Ensure all validators are present in the state
+	require.Equal(t, valInfo1, state.LatestCommitedState.Validators[1])
+	require.Equal(t, valInfo2, state.LatestCommitedState.Validators[2])
+	require.Equal(t, valInfo3, state.LatestCommitedState.Validators[3])
+
+	// Ensure merkle root matches
+	require.Equal(t, "0xd9a1eee574026532cddccbcce6320c0600f370a7c64ce30c5eafc63357449940", state.LatestCommitedState.MerkleRoot)
+
+	// Ensure proofs and leafs are correct
+	require.Equal(t, state.LatestCommitedState.Proofs["0xfee0000000000000000000000000000000000000"], []string{"0x8bfb8acff6772a60d6641cb854587bb2b6f2100391fbadff2c34be0b8c20a0cc", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, state.LatestCommitedState.Proofs["0x1000000000000000000000000000000000000000"], []string{"0xaaf838df9c8d5cec6ed77fcbc2cace945e8f2078eede4a0bb7164818d425f24d", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, state.LatestCommitedState.Proofs["0x2000000000000000000000000000000000000000"], []string{"0xd643163144dcba353b4d27c50939b3d11133bd3c6916092de059d07353b4cb5f", "0xda53f5dd3e17f66f4a35c9c9d5fd27c094fa4249e2933fb819ac724476dc9ae1"})
+
+	require.Equal(t, state.LatestCommitedState.Leafs["0xfee0000000000000000000000000000000000000"], RawLeaf{"0xfee0000000000000000000000000000000000000", big.NewInt(0)})
+	require.Equal(t, state.LatestCommitedState.Leafs["0x1000000000000000000000000000000000000000"], RawLeaf{"0x1000000000000000000000000000000000000000", big.NewInt(1000000000000000000)})
+	require.Equal(t, state.LatestCommitedState.Leafs["0x2000000000000000000000000000000000000000"], RawLeaf{"0x2000000000000000000000000000000000000000", big.NewInt(4000000000000000000)})
+
+	// Ensure LatestCommitedState contains a deep copy of the validators and not just a reference
+	// This is very important since otherwise they will be modified when the state is modified
+	// and we want a frozen snapshot of the state at that moment.
+
+	// Do some changes in validators
+	state.Validators[1].ValidatorProposedBlocks[0].Slot = 3
+	state.Validators[2].AccumulatedRewardsWei = big.NewInt(22)
+	state.Validators[3].PendingRewardsWei = big.NewInt(22)
+
+	// And assert the frozen state is not changes
+	require.Equal(t, uint64(1), state.LatestCommitedState.Validators[1].ValidatorProposedBlocks[0].Slot)
+	require.Equal(t, big.NewInt(2000000000000000000), state.LatestCommitedState.Validators[2].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(500000), state.LatestCommitedState.Validators[3].PendingRewardsWei)
+}
+
 func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 
 	state := NewOracleState(&config.Config{

@@ -227,24 +227,6 @@ func Test_MevReward_Slot_5320342(t *testing.T) {
 	require.Equal(t, "0xdafea492d9c6733ae3d56b7ed1adb60692c98bc5", myBlock.GetFeeRecipient())
 }
 
-// Test donated amount to a given address in a block
-func Test_DonatedAmountInWei_Slot_5320342(t *testing.T) {
-	fileName := "bellatrix_slot_5320342_mainnet"
-	block, _, _ := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &block}
-	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
-
-	// one donation is sent to this addres: 0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e
-	donation1 := myBlock.SentEthToAddress("0x023aa0a3a580e7f3b4bcbb716e0fb6efd86ed25e")
-	number, ok := new(big.Int).SetString("20000000000000000000", 10)
-	require.Equal(t, donation1, number)
-	require.Equal(t, ok, true)
-
-	// two tx are done to this adress: 0xef1266370e603ad06cff8304b27f866ca444d434
-	donation2 := myBlock.SentEthToAddress("0xef1266370e603ad06cff8304b27f866ca444d434")
-	require.Equal(t, donation2, big.NewInt(3648455520393139))
-}
-
 func Test_GetDonations(t *testing.T) {
 
 	fileName := "bellatrix_slot_5320342_mainnet"

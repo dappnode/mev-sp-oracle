@@ -5,44 +5,59 @@ The dappnode **mev smoothing pool** is made of three repositories:
 * [mev-sp-oracle](https://github.com/dappnode/mev-sp-oracle): contains the rewards calculation algorithm and utilities to both update the merkle root of the tree and create proofs to be used in the smart contract for claiming rewards.
 * [mev-sp-trees](https://github.com/dappnode/mev-sp-trees): contains all rewards calculations for all subscribed validators organised per checkpoint, with all the merkle proofs and each checkpoint's merkle root.
 
+## Build from source
+
 ```
-Usage of ./mev-sp-oracle:
-  -checkpoint-size uint
-    	Size in slots for each checkpoint, used to generate dumps and update merkle roots
-  -consensus-endpoint string
-    	Ethereum consensus endpoint
-  -debug-subscriptions-file string
-    	Path to file containing a list of hardcoded validator indexes, one per line
-  -deployed-slot uint
-    	Deployed slot of the smart contract: slot, not block
-  -deployer-private-key string
-    	Private key of the deployer account
-  -execution-endpoint string
-    	Ethereum execution endpoint
-  -network string
-    	Network to run in: mainnet|goerli (default "mainnet")
-  -pool-address string
-    	Address of the smoothing pool contract
-  -version
-    	Prints the release version and exits
+go build
+./mev-sp-oracle --help
 ```
+
+## Docker images
+
+Latest master is available and identified by its first 7 commit digits.
+```
+dappnode/mev-sp-oracle:583e6e1
+```
+
+## Roles
+
+The oracle can run in two modes:
+* Updater: Recreates the state of all validator balances and every `checkpoint-size` updates the onchain contract with the new merkle root. Note that this mode requires to be configured with a valid keystore (containing the encrypted key) and this address must be allowed to update the contract onchain. Said account requires gas to pay for gas fees.
+* Verifier: Recreates the state calculating all validator balances, and can be run by anyone, but does not update the onchain root.
 
 ## Goerli Example
 
-Use `--dry-run` to avoid updating the contract, useful when you want to recreate the state to verify the merkle roots.
-```console
-$ go build
-$ ./mev-sp-oracle \
+Running in `updater` mode:
+
+```
 ./mev-sp-oracle \
 --consensus-endpoint="http://127.0.0.1:5051" \
 --execution-endpoint="http://127.0.0.1:8545" \
---deployed-slot=5195000 \
---pool-address="0x455e5aa18469bc6ccef49594645666c587a3a71b" \
---checkpoint-size=100 \
---deployer-private-key="xxx" \ TODO: use file
+--deployed-slot=5536400 \
+--pool-address=0x553BD5a94bcC09FFab6550274d5db140a95AE9bC \
+--checkpoint-size=10000 \
 --pool-fees-percent=10 \
---pool-fees-address=0x95222290dd7278aa3ddd389cc1e1d165cc4bafe5 \
---network=goerli
+--pool-fees-address=0x692E1Afbc1b0F9Ad6f67a4868A56D138C822D400 \
+--network=goerli \
+--collateral-in-wei=10000000000000000 \
+--updater-keystore-path=yyy \
+--updater-keystore-pass=xxx
+```
+
+Running in verifier mode:
+
+```
+./mev-sp-oracle \
+--consensus-endpoint="http://127.0.0.1:5051" \
+--execution-endpoint="http://127.0.0.1:8545" \
+--deployed-slot=5536700 \
+--pool-address=0x553BD5a94bcC09FFab6550274d5db140a95AE9bC \
+--checkpoint-size=3000 \
+--pool-fees-percent=10 \
+--pool-fees-address=0x692E1Afbc1b0F9Ad6f67a4868A56D138C822D400 \
+--network=goerli \
+--collateral-in-wei=10000000000000000 \
+--dry-run
 ```
 
 ## How to deploy
@@ -69,8 +84,6 @@ export CHECKPOINT_SIZE=10000
 export POOL_ADDRESS=0x553BD5a94bcC09FFab6550274d5db140a95AE9bC
 export POOL_FEES_ADDRESS=0x692E1Afbc1b0F9Ad6f67a4868A56D138C822D400
 export POOL_FEES_PERCENT=10
-export BLOCK_DEPOSIT_CONTRACT=4367322
-export DEPLOYER_PRIVATE_KEY=xxx
 export COLLATERAL_IN_WEI=10000000000000000
 export UPDATER_KEYSTORE_PASS=xxx
 ```
@@ -82,16 +95,4 @@ docker-compose up -d
 Use to check that all env variables were correctly replaced
 ```console
 docker compose convert
-```
-
-### Mainnet
-
-Store in `.env` so that it's picked up by `docker-compose`
-
-```
-TODO
-```
-
-```
-docker-compose up -d
 ```

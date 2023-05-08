@@ -102,7 +102,6 @@ func Test_100_slots_test(t *testing.T) {
 	oracle := NewOracle(&config.Config{
 		Network:               "mainnet",
 		PoolAddress:           "0xdead000000000000000000000000000000000000",
-		UpdaterAddress:        "",
 		DeployedSlot:          uint64(50000),
 		CheckPointSizeInSlots: uint64(100),
 		PoolFeesPercent:       5,
@@ -247,11 +246,11 @@ func Test_100_slots_test(t *testing.T) {
 
 	// What we owe
 	totalLiabilities := big.NewInt(0)
-	for _, val := range oracle.State.Validators {
+	for _, val := range oracle.State().Validators {
 		totalLiabilities.Add(totalLiabilities, val.AccumulatedRewardsWei)
 		totalLiabilities.Add(totalLiabilities, val.PendingRewardsWei)
 	}
-	totalLiabilities.Add(totalLiabilities, oracle.State.PoolAccumulatedFees) // TODO: rename wei
+	totalLiabilities.Add(totalLiabilities, oracle.State().PoolAccumulatedFees) // TODO: rename wei
 
 	require.Equal(t, totalAssets, totalLiabilities)
 }

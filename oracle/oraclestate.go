@@ -30,6 +30,9 @@ type ValidatorStatus uint8
 type Event uint8
 type BlockType uint8
 
+const DefaultRoot = "0x0000000000000000000000000000000000000000000000000000000000000000"
+const DefaultAddress = "0x0000000000000000000000000000000000000000"
+
 // TODO: Dont export functions and variables that are not used outside the package
 
 // Types of block rewards
@@ -73,6 +76,7 @@ const (
 // Represents a block with information relevant for the pool
 type Block struct {
 	Slot              uint64     `json:"slot"`
+	Block             uint64     `json:"block"`
 	ValidatorIndex    uint64     `json:"validator_index"`
 	ValidatorKey      string     `json:"validator_key"`
 	BlockType         BlockType  `json:"block_type"`
@@ -136,12 +140,13 @@ type OnchainState struct {
 }
 
 type OracleState struct {
-	LatestProcessedSlot uint64
-	NextSlotToProcess   uint64
-	Network             string
-	PoolAddress         string
-	Validators          map[uint64]*ValidatorInfo
-	LatestCommitedState OnchainState
+	LatestProcessedSlot  uint64
+	LatestProcessedBlock uint64
+	NextSlotToProcess    uint64
+	Network              string
+	PoolAddress          string
+	Validators           map[uint64]*ValidatorInfo
+	LatestCommitedState  OnchainState
 
 	PoolFeesPercent     int
 	PoolFeesAddress     string
@@ -159,10 +164,11 @@ type OracleState struct {
 
 func NewOracleState(cfg *config.Config) *OracleState {
 	return &OracleState{
-		LatestProcessedSlot: cfg.DeployedSlot - 1,
-		NextSlotToProcess:   cfg.DeployedSlot,
-		Network:             cfg.Network,
-		PoolAddress:         cfg.PoolAddress,
+		LatestProcessedSlot:  cfg.DeployedSlot - 1,
+		LatestProcessedBlock: 0,
+		NextSlotToProcess:    cfg.DeployedSlot,
+		Network:              cfg.Network,
+		PoolAddress:          cfg.PoolAddress,
 
 		Validators: make(map[uint64]*ValidatorInfo, 0),
 
@@ -177,6 +183,15 @@ func NewOracleState(cfg *config.Config) *OracleState {
 		MissedBlocks:    make([]Block, 0),
 		WrongFeeBlocks:  make([]Block, 0),
 		Config:          cfg,
+		LatestCommitedState: OnchainState{
+			Validators: make(map[uint64]*ValidatorInfo, 0),
+			Slot:       0,
+			TxHash:     "",
+			MerkleRoot: DefaultRoot,
+			Tree:       nil,
+			Proofs:     make(map[string][]string, 0),
+			Leafs:      make(map[string]RawLeaf, 0),
+		},
 	}
 }
 
@@ -188,7 +203,7 @@ func (state *OracleState) SaveStateToFile() {
 	}
 	file, err := os.Create(path)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("could not create file at path: ", path, ":", err)
 	}
 
 	defer file.Close()
@@ -198,16 +213,21 @@ func (state *OracleState) SaveStateToFile() {
 
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
-		"LatestProcessedSlot": state.LatestProcessedSlot,
-		"NextSlotToProcess":   state.NextSlotToProcess,
-		"TotalValidators":     len(state.Validators),
-		"Network":             state.Network,
-		"PoolAddress":         state.PoolAddress,
-		"Path":                path,
+		"LatestProcessedSlot":  state.LatestProcessedSlot,
+		"LatestProcessedBlock": state.LatestProcessedBlock,
+		"NextSlotToProcess":    state.NextSlotToProcess,
+		"TotalValidators":      len(state.Validators),
+		"Network":              state.Network,
+		"PoolAddress":          state.PoolAddress,
+		"Path":                 path,
 		//"MerkleRoot":      mRoot,
 		//"EnoughData":      enoughData,
 	}).Info("Saving state to file")
-	encoder.Encode(state)
+
+	err = encoder.Encode(state)
+	if err != nil {
+		log.Fatal("could not encode state into file: ", err)
+	}
 }
 
 func (state *OracleState) LoadStateFromFile() error {
@@ -258,17 +278,21 @@ func (state *OracleState) LoadStateFromFile() error {
 	mRoot, enoughData := readState.GetMerkleRootIfAny()
 
 	log.WithFields(log.Fields{
-		"Path":                path,
-		"LatestProcessedSlot": readState.LatestProcessedSlot,
-		"NextSlotToProcess":   readState.NextSlotToProcess,
-		"Network":             readState.Network,
-		"PoolAddress":         readState.PoolAddress,
-		"MerkleRoot":          mRoot,
-		"EnoughData":          enoughData,
+		"Path":                 path,
+		"LatestProcessedSlot":  readState.LatestProcessedSlot,
+		"LatestProcessedBlock": readState.LatestProcessedBlock,
+		"NextSlotToProcess":    readState.NextSlotToProcess,
+		"Network":              readState.Network,
+		"PoolAddress":          readState.PoolAddress,
+		"MerkleRoot":           mRoot,
+		"EnoughData":           enoughData,
 	}).Info("Loaded state from file")
 
+	// This could be nicer. Note that adding a new field to the state
+	// requires adding it here as well
 	state.LatestProcessedSlot = readState.LatestProcessedSlot
 	state.NextSlotToProcess = readState.NextSlotToProcess
+	state.LatestProcessedBlock = readState.LatestProcessedBlock
 	//state.Network = readState.Network
 	//state.PoolAddress = readState.PoolAddress
 	state.Validators = readState.Validators
@@ -289,11 +313,8 @@ func (state *OracleState) LoadStateFromFile() error {
 // Returns false if there wasnt enough data to create a merkle tree
 func (state *OracleState) StoreLatestOnchainState() bool {
 
-	// Quick way of coping the whole state
 	validatorsCopy := make(map[uint64]*ValidatorInfo)
-	for k2, v2 := range state.Validators {
-		validatorsCopy[k2] = v2
-	}
+	DeepCopy(state.Validators, &validatorsCopy)
 
 	mk := NewMerklelizer()
 	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
@@ -301,11 +322,11 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	if !enoughData {
 		return false
 	}
-	merkleRootStr := hex.EncodeToString(tree.Root)
+	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
 
 	log.WithFields(log.Fields{
-		"LatestProcessedSlot": state.LatestProcessedSlot,
-		"MerkleRoot":          merkleRootStr,
+		"Slot":       state.LatestProcessedSlot,
+		"MerkleRoot": merkleRootStr,
 	}).Info("Freezing state")
 
 	// Merkle proofs for each withdrawal address
@@ -314,7 +335,7 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	for WithdrawalAddress, rawLeaf := range withdrawalToRawLeaf {
 
 		// Extra sanity check to make sure the withdrawal address is the same as the key
-		if WithdrawalAddress != rawLeaf.WithdrawalAddress {
+		if !Equals(WithdrawalAddress, rawLeaf.WithdrawalAddress) {
 			log.Fatal("withdrawal address in raw leaf doesnt match the key")
 		}
 
@@ -462,7 +483,7 @@ func (state *OracleState) HandleManualSubscriptions(
 		}
 
 		// Subscription received from an address that is not the validator withdrawal address
-		if !AreAddressEqual(sender, validatorWithdrawal) {
+		if !Equals(sender, validatorWithdrawal) {
 			log.WithFields(log.Fields{
 				"BlockNumber":         sub.Event.Raw.BlockNumber,
 				"Collateral":          sub.Event.SubscriptionCollateral,
@@ -528,7 +549,7 @@ func (state *OracleState) HandleManualSubscriptions(
 					AccumulatedRewardsWei:   big.NewInt(0),
 					PendingRewardsWei:       big.NewInt(0),
 					CollateralWei:           collateral,
-					WithdrawalAddress:       validatorWithdrawal, // TODO: Rename withdrawal Address
+					WithdrawalAddress:       validatorWithdrawal,
 					ValidatorIndex:          valIdx,
 					ValidatorKey:            "0x" + hex.EncodeToString(sub.Validator.Validator.PublicKey[:]),
 					ValidatorProposedBlocks: make([]Block, 0),
@@ -619,7 +640,7 @@ func (state *OracleState) HandleManualUnsubscriptions(
 
 		// Its very important to check that the unsubscription was made from the withdrawal address
 		// of the validator, otherwise anyone could call the unsubscription function.
-		if !AreAddressEqual(sender, withdrawalAddress) {
+		if !Equals(sender, withdrawalAddress) {
 			log.WithFields(log.Fields{
 				"BlockNumber":      unsub.Event.Raw.BlockNumber,
 				"TxHash":           unsub.Event.Raw.TxHash,
@@ -789,7 +810,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalOk",
 				"StateChange":    "Active -> Active",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case ProposalWrongFee:
@@ -797,7 +818,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalWrongFee",
 				"StateChange":    "Active -> Banned",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
@@ -805,7 +826,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalMissed",
 				"StateChange":    "Active -> YellowCard",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case Unsubscribe:
@@ -813,7 +834,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "Unsubscribe",
 				"StateChange":    "Active -> NotSubscribed",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -824,7 +845,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalOk",
 				"StateChange":    "YellowCard -> Active",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case ProposalWrongFee:
@@ -832,7 +853,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalWrongFee",
 				"StateChange":    "YellowCard -> Banned",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
@@ -840,7 +861,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalMissed",
 				"StateChange":    "YellowCard -> RedCard",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
@@ -848,7 +869,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "Unsubscribe",
 				"StateChange":    "YellowCard -> NotSubscribed",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -859,7 +880,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalOk",
 				"StateChange":    "RedCard -> YellowCard",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = YellowCard
 		case ProposalWrongFee:
@@ -867,7 +888,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalWrongFee",
 				"StateChange":    "RedCard -> Banned",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Banned
 		case ProposalMissed:
@@ -875,7 +896,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ProposalMissed",
 				"StateChange":    "RedCard -> RedCard",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = RedCard
 		case Unsubscribe:
@@ -883,7 +904,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "Unsubscribe",
 				"StateChange":    "RedCard -> NotSubscribed",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = NotSubscribed
 		}
@@ -894,7 +915,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "ManualSubscription",
 				"StateChange":    "NotSubscribed -> Active",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		case AutoSubscription:
@@ -902,7 +923,7 @@ func (state *OracleState) AdvanceStateMachine(valIndex uint64, event Event) {
 				"Event":          "AutoSubscription",
 				"StateChange":    "NotSubscribed -> Active",
 				"ValidatorIndex": valIndex,
-				"ProcessedSlot":  state.LatestProcessedSlot,
+				"Slot":           state.NextSlotToProcess,
 			}).Info("Validator state change")
 			state.Validators[valIndex].ValidatorStatus = Active
 		}
@@ -945,7 +966,7 @@ func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 	if !enoughData {
 		return "", enoughData
 	}
-	merkleRootStr := hex.EncodeToString(tree.Root)
+	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
 
 	return merkleRootStr, true
 }

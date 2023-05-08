@@ -50,10 +50,11 @@ type Onchain struct {
 	Cfg             *config.Config
 	Contract        *contract.Contract
 	NumRetries      int
+	updaterKey      *ecdsa.PrivateKey
 	validators      map[phase0.ValidatorIndex]*v1.Validator
 }
 
-func NewOnchain(cfg config.Config) (*Onchain, error) {
+func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
 
 	// Dial the execution client
 	executionClient, err := ethclient.Dial(cfg.ExecutionEndpoint)
@@ -130,8 +131,9 @@ func NewOnchain(cfg config.Config) (*Onchain, error) {
 	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
-		Cfg:             &cfg,
+		Cfg:             cfg,
 		Contract:        contract,
+		updaterKey:      updaterKey,
 	}, nil
 }
 
@@ -582,6 +584,7 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 		// We populate the parameters of the pool block
 		poolBlock.Reward = reward
 		poolBlock.RewardType = rewardType
+		poolBlock.Block = extendedBlock.GetBlockNumber()
 
 		// And check if it contained a reward for the pool or not
 		if correctFeeRec {
@@ -624,6 +627,11 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
+	// Support both 0x prefixed and non prefixed merkle roots
+	if strings.HasPrefix(newMerkleRoot, "0x") {
+		newMerkleRoot = newMerkleRoot[2:]
+	}
+
 	// Parse merkle root to byte array
 	newMerkleRootBytes := [32]byte{}
 	unboundedBytes := common.Hex2Bytes(newMerkleRoot)
@@ -638,7 +646,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
 	}
 
-	publicKey := o.Cfg.UpdaterKey.Public()
+	publicKey := o.updaterKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
 		log.Fatal("error casting public key to ECDSA")
@@ -663,7 +671,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		log.Fatal("could not get chaind: ", err)
 	}
 
-	auth, err := bind.NewKeyedTransactorWithChainID(o.Cfg.UpdaterKey, chaindId)
+	auth, err := bind.NewKeyedTransactorWithChainID(o.updaterKey, chaindId)
 	if err != nil {
 		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
 	}
@@ -728,13 +736,21 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 
 // Loads all validator from the beacon chain into the oracle, must be called periodically
 func (o *Onchain) RefreshBeaconValidators() {
-	log.Info("Loading existing validators in the beacon chain")
+	log.Info("Loading existing validators from the beacon chain")
 	vals, err := o.GetFinalizedValidators()
 	if err != nil {
 		log.Fatal("Could not get validators: ", err)
 	}
 	o.validators = vals
-	log.Info("Done loading existing validators in the beacon chain total: ", len(vals))
+	if len(vals) != 0 {
+		log.WithFields(log.Fields{
+			"TotalValidators":       len(vals),
+			"LastIndex":             vals[phase0.ValidatorIndex(len(vals)-1)].Index,
+			"ActivationSlotLastVal": GetActivationSlotOfLatestProcessedValidator(vals),
+		}).Info("Done loading beacon chain validators")
+	} else {
+		log.Fatal("No validators were loaded from the beacon chain")
+	}
 }
 
 func (o *Onchain) Validators() map[phase0.ValidatorIndex]*v1.Validator {
