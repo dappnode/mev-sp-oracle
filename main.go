@@ -249,7 +249,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 			} else {
 				if !cfg.DryRun && syncedWithOnchainRoot && !oracle.Equals(latestOnchainRoot, newOracleRoot) {
-					txHash := onchain.UpdateContractMerkleRoot(newOracleRoot)
+					txHash := onchain.UpdateContractMerkleRoot(oracleInstance.State().LatestCommitedState.Slot, newOracleRoot)
 					_ = txHash
 				}
 			}

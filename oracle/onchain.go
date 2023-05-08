@@ -625,7 +625,7 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 	return poolBlock, blockSubs, blockUnsubs, blockDonations
 }
 
-func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
+func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) string {
 
 	// Support both 0x prefixed and non prefixed merkle roots
 	if strings.HasPrefix(newMerkleRoot, "0x") {
@@ -697,7 +697,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	}
 
 	// Create a tx calling the update rewards root function with the new merkle root
-	tx, err := instance.UpdateRewardsRoot(auth, newMerkleRootBytes)
+	tx, err := instance.UpdateRewardsRoot(auth, big.NewInt(0).SetUint64(slot), newMerkleRootBytes)
 	if err != nil {
 		log.Fatal(err)
 	}
