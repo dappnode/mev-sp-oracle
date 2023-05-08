@@ -22,7 +22,7 @@ import (
 // Fetches the balance of a given address
 func Test_FetchFromExecution(t *testing.T) {
 	t.Skip("Skipping test")
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
@@ -40,7 +40,7 @@ func Test_FetchFromExecution(t *testing.T) {
 func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	t.Skip("Skipping test")
 
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}

@@ -180,7 +180,7 @@ type httpOkProofs struct {
 
 type ApiService struct {
 	srv           *http.Server
-	config        *config.Config
+	cfg           *config.Config
 	Onchain       *oracle.Onchain
 	oracle        *oracle.Oracle
 	ApiListenAddr string
@@ -195,7 +195,7 @@ func NewApiService(
 	return &ApiService{
 		// TODO: configure, add cli flag
 		ApiListenAddr: "0.0.0.0:7300",
-		config:        cfg,
+		cfg:           cfg,
 		oracle:        oracle,
 		Onchain:       onchain,
 		Network:       cfg.Network,
@@ -362,8 +362,8 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		TotalRedCard:               totalRedCard,
 		TotalBanned:                totalBanned,
 		TotalNotSubscribed:         totalNotSubscribed,
-		LatestCheckpointSlot:       m.oracle.State().LatestProcessedSlot,                                       // This is wrong. TODO: convert date
-		NextCheckpointSlot:         m.oracle.State().LatestProcessedSlot + m.Onchain.Cfg.CheckPointSizeInSlots, // TODO: Also wrong. convert to date
+		LatestCheckpointSlot:       m.oracle.State().LatestProcessedSlot,                               // This is wrong. TODO: convert date
+		NextCheckpointSlot:         m.oracle.State().LatestProcessedSlot + m.cfg.CheckPointSizeInSlots, // TODO: Also wrong. convert to date
 		TotalAccumulatedRewardsWei: totalAccumulatedRewards.String(),
 		TotalPendingRewaradsWei:    totalPendingRewards.String(),
 		TotalRewardsSentWei:        totalRewardsSentWei.String(),
@@ -424,10 +424,10 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Slots that passed since last checkpoint
-	slotsFromLastCheckpoint := m.oracle.State().LatestProcessedSlot % m.Onchain.Cfg.CheckPointSizeInSlots
+	slotsFromLastCheckpoint := m.oracle.State().LatestProcessedSlot % m.cfg.CheckPointSizeInSlots
 
 	// Remaining slots till next checkpoint
-	slotsTillNextCheckpoint := m.Onchain.Cfg.CheckPointSizeInSlots - slotsFromLastCheckpoint
+	slotsTillNextCheckpoint := m.cfg.CheckPointSizeInSlots - slotsFromLastCheckpoint
 
 	status := httpOkStatus{
 		IsConsensusInSync:           consInSync,
@@ -455,7 +455,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 }
 
 func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
-	if m.config == nil {
+	if m.cfg == nil {
 		m.respondError(w, http.StatusInternalServerError, "no config loaded, nil value")
 		return
 	}
@@ -471,14 +471,14 @@ func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
 		CollateralInWei       string `json:"collateral_in_wei"`
 	}
 	m.respondOK(w, httpOkConfig{
-		Network:               m.config.Network,
-		PoolAddress:           m.config.PoolAddress,
-		DeployedSlot:          m.config.DeployedSlot,
-		CheckPointSizeInSlots: m.config.CheckPointSizeInSlots,
-		PoolFeesPercent:       m.config.PoolFeesPercent,
-		PoolFeesAddress:       m.config.PoolFeesAddress,
-		DryRun:                m.config.DryRun,
-		CollateralInWei:       m.config.CollateralInWei.String(),
+		Network:               m.cfg.Network,
+		PoolAddress:           m.cfg.PoolAddress,
+		DeployedSlot:          m.cfg.DeployedSlot,
+		CheckPointSizeInSlots: m.cfg.CheckPointSizeInSlots,
+		PoolFeesPercent:       m.cfg.PoolFeesPercent,
+		PoolFeesAddress:       m.cfg.PoolFeesAddress,
+		DryRun:                m.cfg.DryRun,
+		CollateralInWei:       m.cfg.CollateralInWei.String(),
 	})
 }
 
@@ -850,7 +850,7 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 				Timestamp:    fmt.Sprintf("%s", time.Unix(int64(signedRegistration.Message.Timestamp), 0)),
 			}
 
-			if strings.ToLower(signedRegistration.Message.FeeRecipient.String()) == strings.ToLower(m.Onchain.Cfg.PoolAddress) {
+			if strings.ToLower(signedRegistration.Message.FeeRecipient.String()) == strings.ToLower(m.Onchain.CliCfg.PoolAddress) {
 				correctFeeRelays = append(correctFeeRelays, relayRegistration)
 			} else {
 				wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
@@ -1005,7 +1005,7 @@ func (m *ApiService) ApplyNonFinalizedState(
 				valWithdrawalAddress := val.WithdrawalAddress
 				eventAddress := subInBlock.Event.Sender.String()
 				if AreAddressEqual(valWithdrawalAddress, eventAddress) {
-					if subInBlock.Event.SubscriptionCollateral.Cmp(m.config.CollateralInWei) >= 0 {
+					if subInBlock.Event.SubscriptionCollateral.Cmp(m.cfg.CollateralInWei) >= 0 {
 						if oracle.CanValidatorSubscribeToPool(subInBlock.Validator) {
 							if val.ValidatorStatus == oracle.Untracked || val.ValidatorStatus == oracle.NotSubscribed {
 								validators[valIndex].ValidatorStatus = oracle.Active

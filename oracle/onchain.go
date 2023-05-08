@@ -47,17 +47,17 @@ var ProposalDutyCache EpochDuties
 type Onchain struct {
 	ConsensusClient *http.Service
 	ExecutionClient *ethclient.Client
-	Cfg             *config.Config
+	CliCfg          *config.CliConfig
 	Contract        *contract.Contract
 	NumRetries      int
 	updaterKey      *ecdsa.PrivateKey
 	validators      map[phase0.ValidatorIndex]*v1.Validator
 }
 
-func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
+func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
 
 	// Dial the execution client
-	executionClient, err := ethclient.Dial(cfg.ExecutionEndpoint)
+	executionClient, err := ethclient.Dial(cliCfg.ExecutionEndpoint)
 	if err != nil {
 		return nil, errors.New("Error dialing execution client: " + err.Error())
 	}
@@ -72,7 +72,7 @@ func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, err
 	// Dial the consensus client
 	client, err := http.New(context.Background(),
 		http.WithTimeout(120*time.Second),
-		http.WithAddress(cfg.ConsensusEndpoint),
+		http.WithAddress(cliCfg.ConsensusEndpoint),
 		http.WithLogLevel(zerolog.WarnLevel),
 	)
 	if err != nil {
@@ -120,9 +120,8 @@ func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, err
 		log.Info("Consensus client is NOT in sync, slots behind: ", consSync.SyncDistance)
 	}
 
-	// TODO: Get this from Config.
 	// Instantiate the smoothing pool contract to run get/set operations on it
-	address := common.HexToAddress(cfg.PoolAddress)
+	address := common.HexToAddress(cliCfg.PoolAddress)
 	contract, err := contract.NewContract(address, executionClient)
 	if err != nil {
 		return nil, errors.New("Error instantiating contract: " + err.Error())
@@ -131,7 +130,7 @@ func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, err
 	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
-		Cfg:             cfg,
+		CliCfg:          cliCfg,
 		Contract:        contract,
 		updaterKey:      updaterKey,
 	}, nil
@@ -213,6 +212,25 @@ func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.Valid
 		return nil, errors.New("Could not fetch finalized validators: " + err.Error())
 	}
 	return validators, err
+}
+
+func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*types.Block, error) {
+	var err error
+	var block *types.Block
+
+	err = retry.Do(func() error {
+		block, err = o.ExecutionClient.BlockByNumber(context.Background(), blockNumber)
+		if err != nil {
+			log.Warn("Failed attempt to fetch block by number: ", err.Error(), " Retrying...")
+			return errors.New("Error fetching block by number: " + err.Error())
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Could not fetch block by number: " + err.Error())
+	}
+	return block, err
 }
 
 func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
@@ -478,7 +496,7 @@ func (o *Onchain) GetSlotCheckpointSize(opts ...retry.Option) (uint64, error) {
 	return slotCheckpointSize.Uint64(), nil
 }
 
-func (o *Onchain) GetContractDeploymentBlock(opts ...retry.Option) (uint64, error) {
+func (o *Onchain) GetContractDeploymentBlock(opts ...retry.Option) (*big.Int, error) {
 	var deploymentBlock *big.Int
 	var err error
 
@@ -494,10 +512,10 @@ func (o *Onchain) GetContractDeploymentBlock(opts ...retry.Option) (uint64, erro
 		}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
-		return 0, errors.New("could not get deployment block from contract: " + err.Error())
+		return nil, errors.New("could not get deployment block from contract: " + err.Error())
 	}
 
-	return deploymentBlock.Uint64(), nil
+	return deploymentBlock, nil
 }
 
 func (o *Onchain) GetPoolFee(opts ...retry.Option) (*big.Int, error) {
@@ -664,7 +682,7 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 		// Cast the block to our extended version with utils functions
 		extendedBlock = &VersionedSignedBeaconBlock{proposedBlock}
 		// If the proposal was succesfull, we check if this block contained a reward for the pool
-		reward, correctFeeRec, rewardType, err := extendedBlock.GetSentRewardAndType(o.Cfg.PoolAddress, *o)
+		reward, correctFeeRec, rewardType, err := extendedBlock.GetSentRewardAndType(o.CliCfg.PoolAddress, *o)
 		if err != nil {
 			log.Fatal("could not get reward and type: ", err)
 		}
@@ -708,7 +726,7 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 	//	log.Fatal("could not get block donations: ", err)
 	//}
 
-	blockDonations := extendedBlock.GetDonations(o.Cfg.PoolAddress)
+	blockDonations := extendedBlock.GetDonations(o.CliCfg.PoolAddress)
 
 	return poolBlock, blockSubs, blockUnsubs, blockDonations
 }
@@ -777,7 +795,7 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 	auth.NoSend = false
 	auth.Context = context.Background()
 
-	address := common.HexToAddress(o.Cfg.PoolAddress)
+	address := common.HexToAddress(o.CliCfg.PoolAddress)
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)
 	if err != nil {
@@ -855,7 +873,7 @@ func (o *Onchain) GetRetryOpts(opts []retry.Option) []retry.Option {
 	// to override the default retry options
 	if len(opts) == 0 {
 		return []retry.Option{
-			retry.Attempts(uint(o.Cfg.NumRetries)),
+			retry.Attempts(uint(o.CliCfg.NumRetries)),
 			retry.Delay(15 * time.Second),
 		}
 	} else {
