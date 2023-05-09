@@ -962,11 +962,17 @@ func Test_IncreaseAllPendingRewards_4(t *testing.T) {
 		// 10%
 		{10 * 100, big.NewInt(10000000000), 1, []*big.Int{big.NewInt(9000000000)}, big.NewInt(1000000000)},
 
+		// 10 % with 2 validators
+		{10 * 100, big.NewInt(10000000000), 2, []*big.Int{big.NewInt(4500000000), big.NewInt(4500000000)}, big.NewInt(1000000000)},
+
 		// 0%
 		{0, big.NewInt(555555555555), 5, []*big.Int{big.NewInt(111111111111), big.NewInt(111111111111), big.NewInt(111111111111), big.NewInt(111111111111), big.NewInt(111111111111)}, big.NewInt(0)},
 
 		// 2.5%
-		{250 * 100, big.NewInt(15000), 5, []*big.Int{big.NewInt(2925), big.NewInt(2925), big.NewInt(2925), big.NewInt(2925), big.NewInt(2925)}, big.NewInt(375)},
+		{2.5 * 100, big.NewInt(15000), 5, []*big.Int{big.NewInt(2925), big.NewInt(2925), big.NewInt(2925), big.NewInt(2925), big.NewInt(2925)}, big.NewInt(375)},
+
+		// 0.25%: 87654567898 * 25 / 10000 = 219136419 (+ remainder of 7450). Then 887654567898-(219136419 + 7450))/5 = 17487084805 (+ reminder of 4)
+		{0.25 * 100, big.NewInt(87654567898), 5, []*big.Int{big.NewInt(17487084805), big.NewInt(17487084805), big.NewInt(17487084805), big.NewInt(17487084805), big.NewInt(17487084805)}, big.NewInt(219136419 + 7450 + 4)},
 	}
 
 	for _, test := range tests {
@@ -981,7 +987,21 @@ func Test_IncreaseAllPendingRewards_4(t *testing.T) {
 		for i := 0; i < test.AmountValidators; i++ {
 			require.Equal(t, test.NewPendingArray[i], state.Validators[uint64(i)].PendingRewardsWei)
 		}
+
 		require.Equal(t, test.FeesAddress, state.PoolAccumulatedFees)
+
+		// Ensure that what we gave away matches the reward we had
+		totalDistributedRewards := big.NewInt(0)
+		totalDistributedRewards.Add(totalDistributedRewards, state.PoolAccumulatedFees)
+
+		// Since all validators rewards are equal, just take the reward of the first one
+		rewardsToValidators := big.NewInt(0)
+		if len(state.Validators) > 0 {
+			rewardsToValidators = state.Validators[0].PendingRewardsWei
+		}
+		rewardsToValidators.Mul(rewardsToValidators, big.NewInt(int64(test.AmountValidators)))
+		totalDistributedRewards.Add(totalDistributedRewards, rewardsToValidators)
+		require.Equal(t, totalDistributedRewards, test.Reward)
 	}
 }
 

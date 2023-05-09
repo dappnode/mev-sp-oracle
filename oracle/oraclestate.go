@@ -747,11 +747,14 @@ func (state *OracleState) IncreaseAllPendingRewards(
 		return
 	}
 
+	if state.PoolFeesPercent > 100*100 {
+		log.Fatal("Pool fees percent cannot be greater than 100% (10000) value: ", state.PoolFeesPercent)
+	}
+
 	// 100 is the % and the other 100 is because we use two decimals
 	// eg 1000 is 10%
 	// eg 50 is 0.5%
 	over := big.NewInt(100 * 100)
-	TODO: This is wrong
 
 	// The pool takes PoolFeesPercent cut of the rewards
 	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(state.PoolFeesPercent)))
