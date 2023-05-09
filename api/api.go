@@ -286,17 +286,13 @@ func (m *ApiService) StartHTTPServer() {
 // Also adds CORS headers to the HTTP response so that the server indicates which origins and methods are allowed.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		//only one origin is allowed, hardcoded for now
-		if origin != "" && origin != "https://dappnode-mev-pool.vercel.app" {
-			http.Error(w, "Origin not allowed", http.StatusForbidden)
-			return
-		}
-		w.Header().Set("Access-Control-Allow-Origin", "https://dappnode-mev-pool.vercel.app")
+		// Set the CORS headers for all requests so that the browser allows the request
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		//we do not accept OPTIONS method for now
+
+		// If the request method is OPTIONS, return a response with the allowed methods, headers, and origin
 		if r.Method == "OPTIONS" {
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			return
