@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"encoding/hex"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -55,42 +56,26 @@ func Test_HandleManualSubscriptions_Valid(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
-			Index:  33,
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
-	}
+	senderAddress := common.HexToAddress("0x9427a30991170f917d7b83def6e44d26577871ed")
+	valsID := []uint64{1}
+	sub1 := new_subs_slice(senderAddress, valsID, big.NewInt(1000))
+	state.HandleManualSubscriptions(sub1)
 
-	state.HandleManualSubscriptions([]Subscription{sub1})
-
-	require.Equal(t, state.Validators[33], &ValidatorInfo{
+	require.Equal(t, state.Validators[1], &ValidatorInfo{
 		ValidatorStatus:         Active,
 		AccumulatedRewardsWei:   big.NewInt(0),
 		PendingRewardsWei:       big.NewInt(1000),
 		CollateralWei:           big.NewInt(1000),
 		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          33,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorIndex:          1,
+		ValidatorKey:            "0x" + hex.EncodeToString([]byte{byte(valsID[0]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})[:],
 		ValidatorProposedBlocks: []Block{},
 		ValidatorMissedBlocks:   []Block{},
 		ValidatorWrongFeeBlocks: []Block{},
 	})
 	require.Equal(t, 1, len(state.Validators))
 	require.Equal(t, 1, len(state.Subscriptions))
-	require.Equal(t, sub1, state.Subscriptions[0])
+	require.Equal(t, sub1[0], state.Subscriptions[0])
 }
 
 func Test_HandleManualSubscriptions_FromWrongAddress(t *testing.T) {
@@ -132,28 +117,9 @@ func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 	state := NewOracleState(&config.Config{
 		CollateralInWei: big.NewInt(1000),
 	})
-
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
-			Index:  33,
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
-	}
-
-	// Run 3 subscriptions, only one should be added
-	state.HandleManualSubscriptions([]Subscription{sub1, sub1, sub1})
+	sub1 := new_subs_slice(common.HexToAddress("0x9427a30991170f917d7b83def6e44d26577871ed"), []uint64{33, 33, 33}, big.NewInt(1000))
+	//Run 3 subscriptions, only one should be added
+	state.HandleManualSubscriptions(sub1)
 
 	require.Equal(t, state.Validators[33], &ValidatorInfo{
 		ValidatorStatus:         Active,
@@ -162,7 +128,7 @@ func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 		CollateralWei:           big.NewInt(1000),
 		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          33,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorKey:            "0x" + hex.EncodeToString([]byte{byte(33), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})[:],
 		ValidatorProposedBlocks: []Block{},
 		ValidatorMissedBlocks:   []Block{},
 		ValidatorWrongFeeBlocks: []Block{},
@@ -179,34 +145,17 @@ func Test_HandleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
-			Index:  33,
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
-	}
+	sub1 := new_subs_slice(common.HexToAddress("0x9427a30991170f917d7b83def6e44d26577871ed"), []uint64{33}, big.NewInt(1000))
 
 	// Validator is subscribed
-	state.HandleManualSubscriptions([]Subscription{sub1})
+	state.HandleManualSubscriptions(sub1)
 
 	// And has some rewards
 	state.IncreaseValidatorAccumulatedRewards(33, big.NewInt(9000))
 	state.IncreaseValidatorPendingRewards(33, big.NewInt(44000))
 
 	// Due to some mistake, the user subscribes again and again
-	state.HandleManualSubscriptions([]Subscription{sub1, sub1})
+	state.HandleManualSubscriptions(append(sub1, sub1...))
 
 	require.Equal(t, state.Validators[33], &ValidatorInfo{
 		ValidatorStatus:         Active,
@@ -215,7 +164,7 @@ func Test_HandleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 		CollateralWei:           big.NewInt(1000),
 		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          33,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorKey:            "0x" + hex.EncodeToString([]byte{byte(33), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})[:],
 		ValidatorProposedBlocks: []Block{},
 		ValidatorMissedBlocks:   []Block{},
 		ValidatorWrongFeeBlocks: []Block{},
@@ -336,7 +285,7 @@ func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	bannedIndex := uint64(300000)
+	bannedIndex := uint64(2)
 	state.Validators[bannedIndex] = &ValidatorInfo{
 		ValidatorStatus:         Banned,
 		AccumulatedRewardsWei:   big.NewInt(0),
@@ -344,29 +293,14 @@ func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
 		CollateralWei:           big.NewInt(1000),
 		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          bannedIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorKey:            "0x" + hex.EncodeToString([]byte{byte(2), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})[:],
 		ValidatorProposedBlocks: []Block{},
 		ValidatorMissedBlocks:   []Block{},
 		ValidatorWrongFeeBlocks: []Block{},
 	}
 
-	sub := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            bannedIndex,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(bannedIndex),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-		},
-	}
-	state.HandleManualSubscriptions([]Subscription{sub})
+	sub := new_subs_slice(common.HexToAddress("0x9427a30991170f917d7b83def6e44d26577871ed"), []uint64{2}, big.NewInt(1000))
+	state.HandleManualSubscriptions(sub)
 
 	// Banned validator stays banned
 	require.Equal(t, 1, len(state.Validators))
@@ -379,7 +313,7 @@ func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
 		CollateralWei:           big.NewInt(1000),
 		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          bannedIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorKey:            "0x" + hex.EncodeToString([]byte{byte(2), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})[:],
 		ValidatorProposedBlocks: []Block{},
 		ValidatorMissedBlocks:   []Block{},
 		ValidatorWrongFeeBlocks: []Block{},
@@ -571,24 +505,8 @@ func Test_HandleUnsubscriptions_NotSubscribedValidator(t *testing.T) {
 
 	// Unsubscribe event of a validator index that BUT is not subscribed
 	valIdx := uint64(730100)
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
-			ValidatorID: valIdx,
-			// Same as withdrawal credential without the prefix
-			Sender: common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			Raw:    types.Log{TxHash: [32]byte{0x1}},
-		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIdx),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key/withdrawal addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
-	}
-	state.HandleManualUnsubscriptions([]Unsubscription{unsub})
+	unsub1 := new_unsubs_slice(common.HexToAddress("0x9427a30991170f917d7b83def6e44d26577871ed"), []uint64{valIdx})
+	state.HandleManualUnsubscriptions(unsub1)
 	require.Equal(t, 0, len(state.Validators))
 }
 
@@ -657,8 +575,8 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 		CollateralInWei: big.NewInt(500000),
 	})
 
-	// Simulate subscription of validator 750100
-	valIndex := uint64(750100)
+	// Simulate subscription of validator 33
+	valIndex := uint64(33)
 	state.Validators[valIndex] = &ValidatorInfo{
 		ValidatorStatus:         Active,
 		AccumulatedRewardsWei:   big.NewInt(0),
@@ -666,7 +584,7 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 		CollateralWei:           big.NewInt(500000),
 		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          valIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorKey:            "0x" + hex.EncodeToString([]byte{byte(33), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})[:],
 		ValidatorProposedBlocks: []Block{},
 		ValidatorMissedBlocks:   []Block{},
 		ValidatorWrongFeeBlocks: []Block{},
@@ -677,24 +595,9 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	state.IncreaseValidatorPendingRewards(valIndex, big.NewInt(5000000000000000000))
 
 	// Now it unsubscribes ok
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
-			ValidatorID: valIndex,
-			// Wrong sender address (see WithdrawalCredentials)
-			Sender: common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			Raw:    types.Log{TxHash: [32]byte{0x1}},
-		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIndex),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
-	}
-	state.HandleManualUnsubscriptions([]Unsubscription{unsub})
+	unsub1 := new_unsubs_slice(common.HexToAddress("0x9427a30991170f917d7b83def6e44d26577871ed"), []uint64{33})
+
+	state.HandleManualUnsubscriptions(unsub1)
 
 	// Unsubscription is ok
 	require.Equal(t, &ValidatorInfo{
@@ -704,31 +607,16 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 		CollateralWei:           big.NewInt(500000),
 		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          valIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorKey:            "0x" + hex.EncodeToString([]byte{byte(33), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})[:],
 		ValidatorProposedBlocks: []Block{},
 		ValidatorMissedBlocks:   []Block{},
 		ValidatorWrongFeeBlocks: []Block{},
 	}, state.Validators[valIndex])
 
 	// Now the same validator tries to rejoin
-	sub := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            valIndex,
-			SubscriptionCollateral: big.NewInt(500000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIndex),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
-	}
-	state.HandleManualSubscriptions([]Subscription{sub})
+	sub1 := new_subs_slice(common.HexToAddress("0x9427a30991170f917d7b83def6e44d26577871ed"), []uint64{33}, big.NewInt(500000))
+
+	state.HandleManualSubscriptions(sub1)
 
 	// Its subscribed again with its old accumulated rewards
 	require.Equal(t, &ValidatorInfo{
@@ -738,7 +626,7 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 		CollateralWei:           big.NewInt(500000),
 		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
 		ValidatorIndex:          valIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
+		ValidatorKey:            "0x" + hex.EncodeToString([]byte{byte(33), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})[:],
 		ValidatorProposedBlocks: []Block{},
 		ValidatorMissedBlocks:   []Block{},
 		ValidatorWrongFeeBlocks: []Block{},
@@ -1580,4 +1468,55 @@ func Test_CanValidatorSubscribeToPool(t *testing.T) {
 	require.Equal(t, CanValidatorSubscribeToPool(&v1.Validator{
 		Status: v1.ValidatorStateActiveOngoing,
 	}), true)
+}
+
+// returns len(valsID) new valid subscriptions
+func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int) []Subscription {
+	subs := make([]Subscription, len(valsID))
+	for i := 0; i < len(valsID); i++ {
+		subs[i] = Subscription{
+			Event: &contract.ContractSubscribeValidator{
+				ValidatorID:            valsID[i],
+				SubscriptionCollateral: collateral,
+				Raw:                    types.Log{TxHash: [32]byte{0x1}},
+				Sender:                 address,
+			},
+			Validator: &v1.Validator{
+				Index:  phase0.ValidatorIndex(valsID[i]),
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// withdrawal credentials = 0x(valID)0000..000
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, address[0], address[1], address[2], address[3], address[4], address[5], address[6], address[7], address[8], address[9], address[10], address[11], address[12], address[13], address[14], address[15], address[16], address[17], address[18], address[19]},
+					// Valdator pubkey: 0x(valID)0000...000
+					PublicKey: phase0.BLSPubKey{byte(valsID[i]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+				},
+			},
+		}
+	}
+	return subs
+}
+
+// returns len(valsID) new valid unsubscriptions
+func new_unsubs_slice(address common.Address, valsID []uint64) []Unsubscription {
+	unsubs := make([]Unsubscription, len(valsID))
+	for i := 0; i < len(valsID); i++ {
+		unsubs[i] = Unsubscription{
+			Event: &contract.ContractUnsubscribeValidator{
+				ValidatorID: valsID[i],
+				Raw:         types.Log{TxHash: [32]byte{0x1}},
+				Sender:      address,
+			},
+			Validator: &v1.Validator{
+				Index:  phase0.ValidatorIndex(valsID[i]),
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// withdrawal credentials = 0x(valID)0000..000
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, address[0], address[1], address[2], address[3], address[4], address[5], address[6], address[7], address[8], address[9], address[10], address[11], address[12], address[13], address[14], address[15], address[16], address[17], address[18], address[19]},
+					// Valdator pubkey: 0x(valID)0000...000
+					PublicKey: phase0.BLSPubKey{byte(valsID[i]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+				},
+			},
+		}
+	}
+	return unsubs
 }
