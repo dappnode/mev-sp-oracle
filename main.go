@@ -219,9 +219,6 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			enoughData := oracleInstance.StoreLatestOnchainState()
 			newOracleRoot := oracleInstance.State().LatestCommitedState.MerkleRoot
 
-			// Persist new state in file
-			oracleInstance.State().SaveStateToFile()
-
 			// If we were not in sync and the new root matches the latest onchain root, we are now in sync
 			// meaning that in the next checkpoint we will update the contract
 			if !syncedWithOnchainRoot && oracle.Equals(latestOnchainRoot, newOracleRoot) {
@@ -250,6 +247,9 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 					_ = txHash
 				}
 			}
+
+			// Persist new state in file only if everything went fine
+			oracleInstance.State().SaveStateToFile()
 		}
 	}
 }
