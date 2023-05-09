@@ -1317,178 +1317,162 @@ func Test_IsBanned(t *testing.T) {
 
 // Follows an non happy path with a lot of edge cases and possible misconfigurations
 func Test_Handle_Subscriptions_1(t *testing.T) {
-	/*
-		cfg := &config.Config{
-			PoolFeesAddress: "0xa",
-			PoolFeesPercent: 0,
-			CollateralInWei: big.NewInt(1000000),
-		}
-		state := NewOracleState(cfg)
 
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
 
-
-			// Two subscriptions ok. Third not enough collateral
-			subs := []Subscription{
-				{
-					ValidatorIndex: 1,
-					ValidatorKey:   "0xaa",
-					Collateral:     big.NewInt(1000000), // Enough
-					BlockNumber:    0,
-					TxHash:         "0xab",
-					WithdrawalAddress: "0xac",
+	//Set up 3 new subs (val index 33,34,35), two valid and one invalid (low collateral)
+	subs := []Subscription{
+		{
+			Event: &contract.ContractSubscribeValidator{
+				ValidatorID:            33,
+				SubscriptionCollateral: big.NewInt(1000),
+				Raw:                    types.Log{TxHash: [32]byte{0x1}},
+				Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+			Validator: &v1.Validator{
+				Index:  33,
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+					PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 				},
-				{
-					ValidatorIndex: 2,
-					ValidatorKey:   "0xba",
-					Collateral:     big.NewInt(1000000), // Enough
-					BlockNumber:    0,
-					TxHash:         "0xbb",
-					WithdrawalAddress: "0xbc",
+			},
+		},
+		{
+			Event: &contract.ContractSubscribeValidator{
+				ValidatorID:            34,
+				SubscriptionCollateral: big.NewInt(1000),
+				Raw:                    types.Log{TxHash: [32]byte{0x1}},
+				Sender:                 common.Address{149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+			Validator: &v1.Validator{
+				Index:  34,
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+					PublicKey: phase0.BLSPubKey{130, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 				},
-				{
-					ValidatorIndex: 3,
-					ValidatorKey:   "0xba",
-					Collateral:     big.NewInt(50), // Not enough
-					BlockNumber:    0,
-					TxHash:         "0xbb",
-					WithdrawalAddress: "0xbc",
+			},
+		},
+		{
+			Event: &contract.ContractSubscribeValidator{
+				ValidatorID:            35,
+				SubscriptionCollateral: big.NewInt(50),
+				Raw:                    types.Log{TxHash: [32]byte{0x1}},
+				Sender:                 common.Address{150, 39, 165, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+			Validator: &v1.Validator{
+				Index:  35,
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 150, 39, 165, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+					PublicKey: phase0.BLSPubKey{131, 170, 2, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 				},
-			}
-			state.HandleManualSubscriptions(cfg.CollateralInWei, subs)
+			},
+		},
+	}
 
-			require.Equal(t, 3, len(state.Validators))
-			require.Equal(t, Active, state.Validators[1].ValidatorStatus)
-			require.Equal(t, Active, state.Validators[2].ValidatorStatus)
-			// We keep track of [3] since we returned the rewards, but NotSubscribed
-			require.Equal(t, NotSubscribed, state.Validators[3].ValidatorStatus)
+	state.HandleManualSubscriptions(subs)
 
-			require.Equal(t, big.NewInt(0), state.Validators[1].AccumulatedRewardsWei)
-			require.Equal(t, big.NewInt(0), state.Validators[2].AccumulatedRewardsWei)
-			// Rewards were return
-			require.Equal(t, big.NewInt(50), state.Validators[3].AccumulatedRewardsWei)
+	// 3 validator tried to sub, 2 ok, 1 not enough collateral
+	require.Equal(t, 2, len(state.Validators))
+	require.Equal(t, 2, len(state.Subscriptions))
 
-			// Valid subscriptions have the pending correctly updated
-			require.Equal(t, big.NewInt(1000000), state.Validators[1].PendingRewardsWei)
-			require.Equal(t, big.NewInt(1000000), state.Validators[2].PendingRewardsWei)
-			require.Equal(t, big.NewInt(0), state.Validators[3].PendingRewardsWei)
+	require.Equal(t, subs[0], state.Subscriptions[0])
 
-			// Collateral is updated properly
-			require.Equal(t, big.NewInt(1000000), state.Validators[1].CollateralWei)
-			require.Equal(t, big.NewInt(1000000), state.Validators[2].CollateralWei)
-			// We dont even consider collateral for [3] since it was returned
-			require.Equal(t, big.NewInt(0), state.Validators[3].CollateralWei)
+	//one validator subscribed with wrong collateral --> sent to the pool
+	require.Equal(t, big.NewInt(50), state.PoolAccumulatedFees)
 
-			// Already subscribed validators
-			subs2 := []Subscription{
-				{
-					ValidatorIndex: 1,
-					ValidatorKey:   "0xaa",
-					Collateral:     big.NewInt(5000000), // Too much + already subscribed
-					BlockNumber:    5,
-					TxHash:         "0xab",
-					WithdrawalAddress: "0xac",
+	// We keep track of [33 & 34] since subscription was valid
+	require.Equal(t, Active, state.Validators[33].ValidatorStatus)
+	require.Equal(t, Active, state.Validators[34].ValidatorStatus)
+
+	// Accumulated rewards should be 0
+	require.Equal(t, big.NewInt(0), state.Validators[33].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(0), state.Validators[34].AccumulatedRewardsWei)
+
+	// Collateral should be 1000
+	require.Equal(t, big.NewInt(1000), state.Validators[33].CollateralWei)
+	require.Equal(t, big.NewInt(1000), state.Validators[34].CollateralWei)
+
+	//Set up 2 new subs, both of already subscribed validators one sends configured collateral, the other does not
+	subs2 := []Subscription{
+		{
+			// validator already subscribed sends subscription again with too much collateral
+			Event: &contract.ContractSubscribeValidator{
+				ValidatorID:            33,
+				SubscriptionCollateral: big.NewInt(5000000),
+				Raw:                    types.Log{TxHash: [32]byte{0x1}},
+				Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+			Validator: &v1.Validator{
+				Index:  33,
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+					PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 				},
-				{
-					ValidatorIndex: 2,
-					ValidatorKey:   "0xba",
-					Collateral:     big.NewInt(5000000), // Too much + already subscribed
-					BlockNumber:    5,
-					TxHash:         "0xbb",
-					WithdrawalAddress: "0xbc",
+			},
+		},
+		{
+			// validator already subscribed sends subscription again with correct collateral
+			Event: &contract.ContractSubscribeValidator{
+				ValidatorID:            34,
+				SubscriptionCollateral: big.NewInt(1000),
+				Raw:                    types.Log{TxHash: [32]byte{0x1}},
+				Sender:                 common.Address{149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+			Validator: &v1.Validator{
+				Index:  34,
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+					PublicKey: phase0.BLSPubKey{130, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 				},
-			}
+			},
+		},
+	}
 
-			state.HandleManualSubscriptions(cfg.CollateralInWei, subs2)
+	state.HandleManualSubscriptions(subs2)
 
-			// Still active, nothing changes
-			require.Equal(t, Active, state.Validators[1].ValidatorStatus)
-			require.Equal(t, Active, state.Validators[2].ValidatorStatus)
+	// [33] & [34] should still be active after trying to subscribe again
+	require.Equal(t, Active, state.Validators[33].ValidatorStatus)
+	require.Equal(t, Active, state.Validators[34].ValidatorStatus)
 
-			// We return this extra collateral
-			require.Equal(t, big.NewInt(5000000), state.Validators[1].AccumulatedRewardsWei)
-			require.Equal(t, big.NewInt(5000000), state.Validators[2].AccumulatedRewardsWei)
+	// when an already subscribed validator manually subscribes again, we send the collateral to their accumulated rewards
+	require.Equal(t, big.NewInt(5000000), state.Validators[33].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(1000), state.Validators[34].AccumulatedRewardsWei)
 
-			// Pending still the same
-			require.Equal(t, big.NewInt(1000000), state.Validators[1].PendingRewardsWei)
-			require.Equal(t, big.NewInt(1000000), state.Validators[2].PendingRewardsWei)
+	// Collateral does not change
+	require.Equal(t, big.NewInt(1000), state.Validators[33].CollateralWei)
+	require.Equal(t, big.NewInt(1000), state.Validators[34].CollateralWei)
 
-			// Collateral does not change
-			require.Equal(t, big.NewInt(1000000), state.Validators[1].CollateralWei)
-			require.Equal(t, big.NewInt(1000000), state.Validators[2].CollateralWei)
+	// Ban validator 34
+	state.HandleBanValidator(Block{
+		Slot:           uint64(100),
+		ValidatorIndex: uint64(34),
+	})
 
-			// Validator 3 tries to subscribe again, now with actually more collateral
-			// than needed
-			subs3 := []Subscription{
-				{
-					ValidatorIndex: 3, // Already tracked, wrongly deposited collateral before
-					ValidatorKey:   "0xca",
-					Collateral:     big.NewInt(1000070), // More than enough
-					BlockNumber:    0,
-					TxHash:         "0xcb",
-					WithdrawalAddress: "0xcc",
-				},
-			}
-			state.HandleManualSubscriptions(cfg.CollateralInWei, subs3)
+	// Validator 34 should be banned
+	require.Equal(t, Banned, state.Validators[34].ValidatorStatus)
+	// Accumulated does not change
+	require.Equal(t, big.NewInt(1000), state.Validators[34].AccumulatedRewardsWei)
 
-			// Boilerplate asserts to ensure nothing changed
-
-			// Still active, nothing changes
-			require.Equal(t, Active, state.Validators[1].ValidatorStatus)
-			require.Equal(t, Active, state.Validators[2].ValidatorStatus)
-
-			// We return this extra collateral
-			require.Equal(t, big.NewInt(5000000), state.Validators[1].AccumulatedRewardsWei)
-			require.Equal(t, big.NewInt(5000000), state.Validators[2].AccumulatedRewardsWei)
-
-			// Pending still the same
-			require.Equal(t, big.NewInt(1000000), state.Validators[1].PendingRewardsWei)
-			require.Equal(t, big.NewInt(1000000), state.Validators[2].PendingRewardsWei)
-
-			// Collateral does not change
-			require.Equal(t, big.NewInt(1000000), state.Validators[1].CollateralWei)
-			require.Equal(t, big.NewInt(1000000), state.Validators[2].CollateralWei)
-
-			// Validator [3] asserts
-			require.Equal(t, Active, state.Validators[3].ValidatorStatus)
-			require.Equal(t, big.NewInt(50), state.Validators[3].AccumulatedRewardsWei)
-			require.Equal(t, big.NewInt(1000070), state.Validators[3].PendingRewardsWei)
-			require.Equal(t, big.NewInt(1000070), state.Validators[3].CollateralWei)
-
-			// Ban validator 3
-			state.HandleBanValidator(Block{
-				Slot:           uint64(100),
-				ValidatorIndex: uint64(3),
-				ValidatorKey:   "0xca",
-			})
-
-			require.Equal(t, Banned, state.Validators[3].ValidatorStatus)
-			// Pending rewards are reset to zero
-			require.Equal(t, big.NewInt(0), state.Validators[3].PendingRewardsWei)
-			// Accumulated do not change
-			require.Equal(t, big.NewInt(50), state.Validators[3].AccumulatedRewardsWei)
-
-			// Banned validator tries to add more collateral
-			subs4 := []Subscription{
-				{
-					ValidatorIndex: 3, // Already tracked, wrongly deposited collateral before
-					ValidatorKey:   "0xca",
-					Collateral:     big.NewInt(2500000), // More than enough
-					BlockNumber:    0,
-					TxHash:         "0xcb",
-					WithdrawalAddress: "0xcc",
-				},
-			}
-			state.HandleManualSubscriptions(cfg.CollateralInWei, subs4)
-
-			// Its ignored
-			require.Equal(t, Banned, state.Validators[3].ValidatorStatus)
-			require.Equal(t, big.NewInt(0), state.Validators[3].PendingRewardsWei)
-			// Collateral is returned
-			require.Equal(t, big.NewInt(50+2500000), state.Validators[3].AccumulatedRewardsWei)
-			// Same as before
-			require.Equal(t, big.NewInt(1000070), state.Validators[3].CollateralWei)
-
-	*/
+	// Accumulated rewards of other validators does not change because banned validator didnt have pending rewards
+	require.Equal(t, big.NewInt(5000000), state.Validators[33].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(1000), state.Validators[34].AccumulatedRewardsWei)
 }
 
 func Test_Handle_TODO(t *testing.T) {
