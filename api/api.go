@@ -249,6 +249,7 @@ func (m *ApiService) getRouter() http.Handler {
 
 	//r.HandleFunc(pathLatestCheckpoint, m.handleLatestCheckpoint)
 
+	//not strictly necessary but good to have
 	r.Use(mux.CORSMethodMiddleware(r))
 
 	return r
@@ -263,8 +264,9 @@ func (m *ApiService) StartHTTPServer() {
 	//go m.startBidCacheCleanupTask()
 
 	m.srv = &http.Server{
-		Addr:    m.ApiListenAddr,
-		Handler: m.getRouter(),
+		Addr: m.ApiListenAddr,
+		//wrap handler with corsMiddleware, it passes execution to router handler when finished
+		Handler: corsMiddleware(m.getRouter()),
 
 		//ReadTimeout:       time.Duration(config.ServerReadTimeoutMs) * time.Millisecond,
 		//ReadHeaderTimeout: time.Duration(config.ServerReadHeaderTimeoutMs) * time.Millisecond,
@@ -278,6 +280,29 @@ func (m *ApiService) StartHTTPServer() {
 	if err != nil {
 		log.Fatal("could not start http server: ", err)
 	}
+}
+
+// Checks Origin header of the request and only allows from the desired origin or "" origin.
+// Also adds CORS headers to the HTTP response so that the server indicates which origins and methods are allowed.
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		//only one origin is allowed, hardcoded for now
+		if origin != "" && origin != "https://dappnode-mev-pool.vercel.app" {
+			http.Error(w, "Origin not allowed", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Access-Control-Allow-Origin", "https://dappnode-mev-pool.vercel.app")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		//we do not accept OPTIONS method for now
+		if r.Method == "OPTIONS" {
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (m *ApiService) handleRoot(w http.ResponseWriter, req *http.Request) {
