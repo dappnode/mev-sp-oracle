@@ -322,10 +322,8 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 	return header, receipts, nil
 }
 
-// TODO: Rethink this function. Its not just donations but eth rx to the contract
-// in general
-// TODO:? Unused?
-func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([]Donation, error) {
+// Can be donations or MEV rewards since both of them trigger the event
+func (o *Onchain) GetEtherReceivedEvents(blockNumber uint64, opts ...retry.Option) ([]Donation, error) {
 	log.Fatal("This function is deprecated. Use GetDonations instead")
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
@@ -379,7 +377,6 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
 
-	// TODO: Consider
 	// Not the most effective way, but we just need to advance one by one.
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
 
@@ -719,13 +716,6 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 		log.Fatal("could not get block unsubscriptions: ", err)
 	}
 
-	// TODO: This is wrong, as this event will also be triggered when a validator proposes a MEV block
-	// Fetch donations in this block
-	//blockDonations, err := o.GetDonationEvents(extendedBlock.GetBlockNumber())
-	//if err != nil {
-	//	log.Fatal("could not get block donations: ", err)
-	//}
-
 	blockDonations := extendedBlock.GetDonations(o.CliCfg.PoolAddress)
 
 	return poolBlock, blockSubs, blockUnsubs, blockDonations
@@ -759,7 +749,6 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 	}
 
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
-	fmt.Println(fromAddress.Hex())
 	nonce, err := o.ExecutionClient.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
 		log.Fatal("could not get pending nonce: ", err)
@@ -788,7 +777,6 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 	auth.Value = big.NewInt(0)
 
 	// nil prices automatically estimate prices
-	// TODO: Perhaps overpay to make sure the tx is not stuck forever.
 	auth.GasPrice = nil
 	auth.GasFeeCap = nil
 	auth.GasTipCap = nil
@@ -813,8 +801,8 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 		"NewMerkleRoot": newMerkleRoot,
 	}).Info("Tx sent to Ethereum updating rewards merkle root, wait to be validated")
 
-	// Leave 15 minutes for the tx to be validated
-	deadline := time.Now().Add(15 * time.Minute)
+	// Leave 60 minutes for the tx to be validated
+	deadline := time.Now().Add(60 * time.Minute)
 	ctx, cancelCtx := context.WithDeadline(context.Background(), deadline)
 	defer cancelCtx()
 

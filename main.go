@@ -63,6 +63,7 @@ func main() {
 		log.Info("Found previous state to continue syncing")
 	} else {
 		log.Info("Previous state not found or could not be loaded, syncing from the begining: ", err)
+		log.Info("Starting to process from slot: ", cfg.DeployedSlot)
 	}
 
 	api := api.NewApiService(cfg, oracleInstance, onchain)

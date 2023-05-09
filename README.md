@@ -44,7 +44,7 @@ Running in verifier mode:
 ./mev-sp-oracle \
 --consensus-endpoint="http://127.0.0.1:5051" \
 --execution-endpoint="http://127.0.0.1:8545" \
---pool-address=0x692E1Afbc1b0F9Ad6f67a4868A56D138C822D400 \
+--pool-address=0x88056fFCd65CcD0a275766045448A20158d6bDe7 \
 --dry-run
 ```
 
