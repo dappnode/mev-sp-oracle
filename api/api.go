@@ -503,6 +503,11 @@ func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.
 		return
 	}
 
+	// TODO: Temporal, remove in production.
+	if validator.ValidatorIndex != valIndex {
+		validator.ValidatorIndex = valIndex
+	}
+
 	m.respondOK(w, validator)
 }
 
@@ -580,6 +585,11 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		// Just overwrite the untracked validators with oracle state
 		if AreAddressEqual(validator.WithdrawalAddress, withdrawalAddress) {
 			requestedValidators[valIndex] = validator
+
+			// TODO: Temporal, remove in production.
+			if validator.ValidatorIndex != valIndex {
+				validator.ValidatorIndex = valIndex
+			}
 		}
 	}
 

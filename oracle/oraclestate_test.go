@@ -30,6 +30,34 @@ func Test_AddSubscription(t *testing.T) {
 	require.Equal(t, big.NewInt(100), state.Validators[10].AccumulatedRewardsWei)
 }
 
+func Test_AddSubscriptionIfNotAlready(t *testing.T) {
+	state := NewOracleState(&config.Config{})
+	state.AddSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
+	require.Equal(t, 1, len(state.Validators))
+	require.Equal(t, &ValidatorInfo{
+		ValidatorStatus:         Active,
+		AccumulatedRewardsWei:   big.NewInt(0),
+		PendingRewardsWei:       big.NewInt(0),
+		CollateralWei:           big.NewInt(0),
+		WithdrawalAddress:       "0x3000000000000000000000000000000000000000",
+		ValidatorIndex:          100,
+		ValidatorKey:            "0xkey",
+		ValidatorProposedBlocks: []Block{},
+		ValidatorMissedBlocks:   []Block{},
+		ValidatorWrongFeeBlocks: []Block{},
+	}, state.Validators[100])
+
+	// Modify the validator
+	state.Validators[100].AccumulatedRewardsWei = big.NewInt(334545546)
+	state.Validators[100].PendingRewardsWei = big.NewInt(87653)
+
+	// If we call it again, it shouldnt be overwritten as its already there
+	state.AddSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
+
+	require.Equal(t, big.NewInt(334545546), state.Validators[100].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(87653), state.Validators[100].PendingRewardsWei)
+}
+
 func Test_AddDonation(t *testing.T) {
 	state := NewOracleState(&config.Config{})
 	donations := []Donation{
