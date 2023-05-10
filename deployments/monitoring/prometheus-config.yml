@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: "Monitoring"
+
+scrape_configs:
+  - job_name: geth
+    static_configs:
+    - targets:
+      - geth:6060
+  - job_name: teku
+    static_configs:
+    - targets:
+      - teku:8008

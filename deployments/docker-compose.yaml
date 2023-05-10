@@ -61,9 +61,12 @@ services:
       - --datadir=/geth
       - --port=30303
       - --txlookuplimit=0
+      - --metrics
+      - --metrics.addr=0.0.0.0
     ports:
       - 127.0.0.1:8551:8551
       - 127.0.0.1:8545:8545
+      - 127.0.0.1:6060:6060
       - 30303:30303/tcp
       - 30303:30303/udp
     volumes:
@@ -94,3 +97,31 @@ services:
     volumes:
       - ./teku:/opt/teku/data
       - ./jwtsecret:/jwtsecret
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus-config.yml:/etc/prometheus/prometheus.yml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - 127.0.0.1:9090:9090
+    restart: on-failure
+
+  grafana:
+    image: grafana/grafana:latest
+    env_file:
+      - ./monitoring/configuration/grafana-plugins.env
+    volumes:
+      - ./monitoring/configuration/grafana.ini:/etc/grafana/grafana.ini
+      - ./monitoring/configuration/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./monitoring/configuration/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./monitoring/configuration/dashboards:/var/lib/grafana/dashboards/
+      - ./monitoring/configuration/customizations/custom-logo.svg:/usr/share/grafana/public/img/grafana_icon.svg
+      - ./monitoring/configuration/customizations/custom-logo.svg:/usr/share/grafana/public/img/grafana_typelogo.svg
+      - ./monitoring/configuration/customizations/custom-logo.png:/usr/share/grafana/public/img/fav32.png
+    ports:
+      - 3000:3000
+    restart: on-failure
+    depends_on:
+      - prometheus
