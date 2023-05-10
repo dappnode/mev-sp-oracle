@@ -20,7 +20,7 @@ x-logging: &logging
 
 services:
   oracle:
-    image: "dappnode/mev-sp-oracle:583e6e1"
+    image: "dappnode/mev-sp-oracle:14fc24d"
     restart: "no"
     <<: *logging
     depends_on:
@@ -99,7 +99,7 @@ services:
       - ./jwtsecret:/jwtsecret
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.43.1
     volumes:
       - ./monitoring/prometheus-config.yml:/etc/prometheus/prometheus.yml
     command:
@@ -109,7 +109,7 @@ services:
     restart: on-failure
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:9.5.1
     env_file:
       - ./monitoring/configuration/grafana-plugins.env
     volumes:
