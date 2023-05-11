@@ -7,7 +7,7 @@ global:
 scrape_configs:
   - job_name: "geth"
     static_configs:
-      - targets: ["geth:6060"]
+    - targets: ["geth:6060"]
     metrics_path: /debug/metrics/prometheus
   - job_name: "teku"
     static_configs:
