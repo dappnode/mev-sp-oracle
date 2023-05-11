@@ -84,7 +84,9 @@ services:
       - --ee-endpoint=http://geth:8551
       - --ee-jwt-secret-file=/jwtsecret
       - --metrics-enabled=true
-      - --metrics-host-allowlist="*"
+      - --metrics-host-allowlist=*
+      - --metrics-interface=0.0.0.0
+      - --metrics-port=8008
       - --rest-api-enabled=true
       - --rest-api-host-allowlist=*
       - --data-storage-archive-frequency=128
