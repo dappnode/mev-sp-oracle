@@ -12,6 +12,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1734,4 +1735,103 @@ func Test_CanValidatorSubscribeToPool(t *testing.T) {
 	require.Equal(t, CanValidatorSubscribeToPool(&v1.Validator{
 		Status: v1.ValidatorStateActiveOngoing,
 	}), true)
+}
+
+// how much does the validator info of 2000 validators take in memory?
+// how many validators can we have in memory?
+func Test_ValidatorInfoSize(t *testing.T) {
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	//save state of 2000 validators
+	numValidators := 2000
+
+	//create 2000 validators with index 0-1999
+	valsID := make([]uint64, numValidators)
+	for i := 0; i < numValidators; i++ {
+		valsID[i] = uint64(i)
+	}
+	//subscribe 2000 validators
+	subs := new_subs_slice(common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567"), valsID, big.NewInt(1000))
+	state.HandleManualSubscriptions(subs)
+
+	//make 2000 validators propose a block
+	for i := 0; i < numValidators; i++ {
+		state.HandleCorrectBlockProposal(Block{
+			Slot:              uint64(100),
+			ValidatorIndex:    uint64(valsID[i]),
+			ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+			Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+			RewardType:        MevBlock,
+			WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+		})
+	}
+
+	// //make 2000 validators miss a block
+	// for i := 0; i < numValidators; i++ {
+	// 	state.HandleMissedBlock(Block{
+	// 		Slot:              uint64(100),
+	// 		ValidatorIndex:    uint64(valsID[i]),
+	// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+	// 		Reward:            big.NewInt(5000000000000000000),
+	// 		RewardType:        VanilaBlock,
+	// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+	// 	})
+	// }
+
+	// //make 2000 validators propose a block
+	// for i := 0; i < numValidators; i++ {
+	// 	state.HandleCorrectBlockProposal(Block{
+	// 		Slot:              uint64(100),
+	// 		ValidatorIndex:    uint64(valsID[i]),
+	// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+	// 		Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+	// 		RewardType:        MevBlock,
+	// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+	// 	})
+	// }
+
+	state.SaveStateToFile()
+	filePath := "oracle-data/state.gob"
+
+	// Get file information
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Get file size in bytes
+	fileSize := fileInfo.Size()
+	fileSizeMB := float64(fileSize) / (1024 * 1024)
+
+	// Print the file size
+	log.Info("File size:", fileSizeMB, "MB")
+}
+
+// returns len(valsID) new valid subscriptions
+func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int) []Subscription {
+	subs := make([]Subscription, len(valsID))
+	for i := 0; i < len(valsID); i++ {
+		subs[i] = Subscription{
+			Event: &contract.ContractSubscribeValidator{
+				ValidatorID:            valsID[i],
+				SubscriptionCollateral: collateral,
+				Raw:                    types.Log{TxHash: [32]byte{0x1}},
+				Sender:                 address,
+			},
+			Validator: &v1.Validator{
+				Index:  phase0.ValidatorIndex(valsID[i]),
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// withdrawal credentials = 0x(valID)0000..000
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, address[0], address[1], address[2], address[3], address[4], address[5], address[6], address[7], address[8], address[9], address[10], address[11], address[12], address[13], address[14], address[15], address[16], address[17], address[18], address[19]},
+					// Valdator pubkey: 0x(valID)0000...000
+					PublicKey: phase0.BLSPubKey{byte(valsID[i]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+				},
+			},
+		}
+	}
+	return subs
 }

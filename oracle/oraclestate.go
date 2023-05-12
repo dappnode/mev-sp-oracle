@@ -154,7 +154,9 @@ type OracleState struct {
 	Network              string
 	PoolAddress          string
 	Validators           map[uint64]*ValidatorInfo
-	LatestCommitedState  OnchainState
+
+	LatestCommitedState OnchainState
+	CommitedStates      map[string]OnchainState
 
 	PoolFeesPercent     int
 	PoolFeesAddress     string
@@ -200,6 +202,7 @@ func NewOracleState(cfg *config.Config) *OracleState {
 			Proofs:     make(map[string][]string, 0),
 			Leafs:      make(map[string]RawLeaf, 0),
 		},
+		CommitedStates: make(map[string]OnchainState, 0),
 	}
 }
 
@@ -373,6 +376,10 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 		Leafs:      leafs,
 	}
 
+	// besides the latestCommitedState as a "standalone" state,
+	// we also store it in the commitedStates map, where we keep all
+	// the states that have been commited onchain by hash
+	state.CommitedStates[merkleRootStr] = state.LatestCommitedState
 	return true
 }
 
