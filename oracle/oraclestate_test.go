@@ -1739,10 +1739,82 @@ func Test_CanValidatorSubscribeToPool(t *testing.T) {
 
 // how much does the validator info of 2000 validators take in memory?
 // how many validators can we have in memory?
-func Test_ValidatorInfoSize(t *testing.T) {
+// func Test_ValidatorInfoSize(t *testing.T) {
+// 	for i := 0; i < 3; i++ {
+// 		state := NewOracleState(&config.Config{
+// 			CollateralInWei: big.NewInt(1000),
+// 		})
+
+// 		//save state of 2000 validators
+// 		numValidators := 2000
+
+// 		//create 2000 validators with index 0-1999
+// 		valsID := make([]uint64, numValidators)
+// 		for i := 0; i < numValidators; i++ {
+// 			valsID[i] = uint64(i)
+// 		}
+// 		//subscribe 2000 validators
+// 		subs := new_subs_slice(common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567"), valsID, big.NewInt(1000))
+// 		state.HandleManualSubscriptions(subs)
+
+// 		//make 2000 validators propose a block
+// 		for i := 0; i < numValidators; i++ {
+// 			state.HandleCorrectBlockProposal(Block{
+// 				Slot:              uint64(100),
+// 				ValidatorIndex:    uint64(valsID[i]),
+// 				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+// 				Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+// 				RewardType:        MevBlock,
+// 				WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+// 			})
+// 		}
+
+// 		// //make 2000 validators miss a block
+// 		// for i := 0; i < numValidators; i++ {
+// 		// 	state.HandleMissedBlock(Block{
+// 		// 		Slot:              uint64(100),
+// 		// 		ValidatorIndex:    uint64(valsID[i]),
+// 		// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+// 		// 		Reward:            big.NewInt(5000000000000000000),
+// 		// 		RewardType:        VanilaBlock,
+// 		// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+// 		// 	})
+// 		// }
+
+// 		// //make 2000 validators propose a block
+// 		// for i := 0; i < numValidators; i++ {
+// 		// 	state.HandleCorrectBlockProposal(Block{
+// 		// 		Slot:              uint64(100),
+// 		// 		ValidatorIndex:    uint64(valsID[i]),
+// 		// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+// 		// 		Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+// 		// 		RewardType:        MevBlock,
+// 		// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+// 		// 	})
+// 		// }
+// 		state.SaveStateToFile()
+// 		filePath := "oracle-data/state.gob"
+
+// 		// Get file information
+// 		fileInfo, err := os.Stat(filePath)
+// 		if err != nil {
+// 			log.Fatal(err)
+// 		}
+
+// 		// Get file size in bytes
+// 		fileSize := fileInfo.Size()
+// 		fileSizeMB := float64(fileSize) / (1024 * 1024)
+
+// 		// Print the file size
+// 		log.Info("File size:", fileSizeMB, "MB")
+// 	}
+// }
+
+func Test_SizeMultipleOnchainState(t *testing.T) {
 
 	state := NewOracleState(&config.Config{
 		CollateralInWei: big.NewInt(1000),
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
 	})
 
 	//save state of 2000 validators
@@ -1765,33 +1837,30 @@ func Test_ValidatorInfoSize(t *testing.T) {
 			ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
 			Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
 			RewardType:        MevBlock,
-			WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+			WithdrawalAddress: "0x0100000000000000000000009b3b13d6b6f3f52154a8b00d818392b61e4b42b4",
 		})
 	}
 
-	// //make 2000 validators miss a block
-	// for i := 0; i < numValidators; i++ {
-	// 	state.HandleMissedBlock(Block{
-	// 		Slot:              uint64(100),
-	// 		ValidatorIndex:    uint64(valsID[i]),
-	// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
-	// 		Reward:            big.NewInt(5000000000000000000),
-	// 		RewardType:        VanilaBlock,
-	// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
-	// 	})
-	// }
-
-	// //make 2000 validators propose a block
-	// for i := 0; i < numValidators; i++ {
-	// 	state.HandleCorrectBlockProposal(Block{
-	// 		Slot:              uint64(100),
-	// 		ValidatorIndex:    uint64(valsID[i]),
-	// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
-	// 		Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
-	// 		RewardType:        MevBlock,
-	// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
-	// 	})
-	// }
+	// the "StoreLatestOnchainState" function is responsible of making a deep copy of all
+	// current validator data and storing it in the new "state.CommitedStates" map, which
+	// contains all the past onchain states of the validators.
+	// each time we store a new latestOnchainState, the merkleroot has changed, so we
+	// store a new state of all the validators.
+	// in a year, will update the onchain state 121 times. each time we do this, we will
+	// store the last onchain state, which contains the information of all the validators
+	for i := 0; i < 121; i++ {
+		for j := 0; j < 99; j++ {
+			state.HandleCorrectBlockProposal(Block{
+				Slot:              uint64(100),
+				ValidatorIndex:    uint64(valsID[j]),
+				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+				Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+				RewardType:        MevBlock,
+				WithdrawalAddress: "0x0100000000000000000000009b3b13d6b6f3f52154a8b00d818392b61e4b42b4",
+			})
+		}
+		state.StoreLatestOnchainState()
+	}
 
 	state.SaveStateToFile()
 	filePath := "oracle-data/state.gob"
