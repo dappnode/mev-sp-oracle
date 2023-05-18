@@ -975,13 +975,14 @@ func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 	return merkleRootStr, true
 }
 
+// TODO: Move all this somewhere else + Marshalling
 func RewardTypeToString(rewardType RewardType) string {
 	if rewardType == VanilaBlock {
 		return "vanila"
 	} else if rewardType == MevBlock {
 		return "mev"
 	}
-	log.Fatal("unknown reward type")
+	log.Warn("unknown reward type: ", rewardType)
 	return ""
 }
 
@@ -999,7 +1000,7 @@ func ValidatorStateToString(valState ValidatorStatus) string {
 	} else if valState == Untracked {
 		return "untracked"
 	}
-	log.Fatal("unknown validator state")
+	log.Warn("unknown validator state: ", valState)
 	return ""
 }
 
@@ -1017,7 +1018,7 @@ func EventToString(event Event) string {
 	} else if event == Unsubscribe {
 		return "unsubscribe"
 	}
-	log.Fatal("unknown event")
+	log.Warn("unknown event: ", event)
 	return ""
 }
 
@@ -1029,7 +1030,7 @@ func BlockTypeToString(blockType BlockType) string {
 	} else if blockType == OkPoolProposal {
 		return "okpoolproposal"
 	}
-	log.Fatal("unknown block type")
+	log.Warn("unknown block type: ", blockType)
 	return ""
 }
 
