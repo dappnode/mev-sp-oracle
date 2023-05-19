@@ -35,16 +35,13 @@ func Test_AddSubscriptionIfNotAlready(t *testing.T) {
 	state.AddSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
 	require.Equal(t, 1, len(state.Validators))
 	require.Equal(t, &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(0),
-		PendingRewardsWei:       big.NewInt(0),
-		CollateralWei:           big.NewInt(0),
-		WithdrawalAddress:       "0x3000000000000000000000000000000000000000",
-		ValidatorIndex:          100,
-		ValidatorKey:            "0xkey",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(0),
+		PendingRewardsWei:     big.NewInt(0),
+		CollateralWei:         big.NewInt(0),
+		WithdrawalAddress:     "0x3000000000000000000000000000000000000000",
+		ValidatorIndex:        100,
+		ValidatorKey:          "0xkey",
 	}, state.Validators[100])
 
 	// Modify the validator
@@ -105,16 +102,13 @@ func Test_HandleManualSubscriptions_Valid(t *testing.T) {
 	state.HandleManualSubscriptions([]Subscription{sub1})
 
 	require.Equal(t, state.Validators[33], &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(0),
-		PendingRewardsWei:       big.NewInt(1000),
-		CollateralWei:           big.NewInt(1000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          33,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(0),
+		PendingRewardsWei:     big.NewInt(1000),
+		CollateralWei:         big.NewInt(1000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        33,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	})
 	require.Equal(t, 1, len(state.Validators))
 	require.Equal(t, 1, len(state.Subscriptions))
@@ -184,16 +178,13 @@ func Test_HandleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 	state.HandleManualSubscriptions([]Subscription{sub1, sub1, sub1})
 
 	require.Equal(t, state.Validators[33], &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(2000), // Second and third collateral are returned to the user
-		PendingRewardsWei:       big.NewInt(1000),
-		CollateralWei:           big.NewInt(1000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          33,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(2000), // Second and third collateral are returned to the user
+		PendingRewardsWei:     big.NewInt(1000),
+		CollateralWei:         big.NewInt(1000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        33,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	})
 	require.Equal(t, 1, len(state.Validators))
 }
@@ -237,16 +228,13 @@ func Test_HandleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 	state.HandleManualSubscriptions([]Subscription{sub1, sub1})
 
 	require.Equal(t, state.Validators[33], &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(9000 + 1000*2),
-		PendingRewardsWei:       big.NewInt(44000 + 1000),
-		CollateralWei:           big.NewInt(1000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          33,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(9000 + 1000*2),
+		PendingRewardsWei:     big.NewInt(44000 + 1000),
+		CollateralWei:         big.NewInt(1000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        33,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	})
 	require.Equal(t, 1, len(state.Validators))
 }
@@ -366,16 +354,13 @@ func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
 
 	bannedIndex := uint64(300000)
 	state.Validators[bannedIndex] = &ValidatorInfo{
-		ValidatorStatus:         Banned,
-		AccumulatedRewardsWei:   big.NewInt(0),
-		PendingRewardsWei:       big.NewInt(0),
-		CollateralWei:           big.NewInt(1000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          bannedIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Banned,
+		AccumulatedRewardsWei: big.NewInt(0),
+		PendingRewardsWei:     big.NewInt(0),
+		CollateralWei:         big.NewInt(1000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        bannedIndex,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}
 
 	sub := Subscription{
@@ -401,16 +386,13 @@ func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
 
 	// Note that since we track it, we return the collateral as accumulated rewards
 	require.Equal(t, &ValidatorInfo{
-		ValidatorStatus:         Banned,
-		AccumulatedRewardsWei:   big.NewInt(1000),
-		PendingRewardsWei:       big.NewInt(0),
-		CollateralWei:           big.NewInt(1000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          bannedIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Banned,
+		AccumulatedRewardsWei: big.NewInt(1000),
+		PendingRewardsWei:     big.NewInt(0),
+		CollateralWei:         big.NewInt(1000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        bannedIndex,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}, state.Validators[bannedIndex])
 }
 
@@ -543,16 +525,13 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	state.HandleManualUnsubscriptions([]Unsubscription{unsub})
 
 	require.Equal(t, state.Validators[6], &ValidatorInfo{
-		ValidatorStatus:         NotSubscribed,    // Validator is still tracked but not subscribed
-		AccumulatedRewardsWei:   big.NewInt(3000), // Accumulated rewards are kept
-		PendingRewardsWei:       big.NewInt(0),    // Pending rewards are cleared
-		CollateralWei:           big.NewInt(500000),
-		WithdrawalAddress:       "0x0627a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          6,
-		ValidatorKey:            "0x06aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       NotSubscribed,    // Validator is still tracked but not subscribed
+		AccumulatedRewardsWei: big.NewInt(3000), // Accumulated rewards are kept
+		PendingRewardsWei:     big.NewInt(0),    // Pending rewards are cleared
+		CollateralWei:         big.NewInt(500000),
+		WithdrawalAddress:     "0x0627a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        6,
+		ValidatorKey:          "0x06aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	})
 	require.Equal(t, 4, len(state.Validators))
 	require.Equal(t, 1, len(state.Unsubscriptions))
@@ -621,16 +600,13 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 
 	// Simulate subscription of validator 33
 	state.Validators[33] = &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(9000 + 1000*2), // Second and third collateral are added to accumulated rewards (returned)
-		PendingRewardsWei:       big.NewInt(44000 + 1000),  // First collateral is added to pending (claimable in next block)
-		CollateralWei:           big.NewInt(1000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          33,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(9000 + 1000*2), // Second and third collateral are added to accumulated rewards (returned)
+		PendingRewardsWei:     big.NewInt(44000 + 1000),  // First collateral is added to pending (claimable in next block)
+		CollateralWei:         big.NewInt(1000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        33,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}
 
 	// Receive event of a validator index that doesnt exist in the beacon chain
@@ -648,16 +624,13 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 	// Check that the existing validator is not affected
 	require.Equal(t, 1, len(state.Validators))
 	require.Equal(t, &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(9000 + 1000*2), // Second and third collateral are added to accumulated rewards (returned)
-		PendingRewardsWei:       big.NewInt(44000 + 1000),  // First collateral is added to pending (claimable in next block)
-		CollateralWei:           big.NewInt(1000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          33,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(9000 + 1000*2), // Second and third collateral are added to accumulated rewards (returned)
+		PendingRewardsWei:     big.NewInt(44000 + 1000),  // First collateral is added to pending (claimable in next block)
+		CollateralWei:         big.NewInt(1000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        33,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}, state.Validators[33])
 }
 
@@ -703,16 +676,13 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 	// Simulate subscription of validator 750100
 	valIndex := uint64(750100)
 	state.Validators[valIndex] = &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(5000000000000000000),
-		PendingRewardsWei:       big.NewInt(3000000000000000000),
-		CollateralWei:           big.NewInt(1000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          valIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(5000000000000000000),
+		PendingRewardsWei:     big.NewInt(3000000000000000000),
+		CollateralWei:         big.NewInt(1000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        valIndex,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}
 
 	unsub := Unsubscription{
@@ -736,16 +706,13 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 
 	// Validator remains intact, since unsubscription event was wrong
 	require.Equal(t, &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(5000000000000000000),
-		PendingRewardsWei:       big.NewInt(3000000000000000000),
-		CollateralWei:           big.NewInt(1000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          valIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(5000000000000000000),
+		PendingRewardsWei:     big.NewInt(3000000000000000000),
+		CollateralWei:         big.NewInt(1000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        valIndex,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}, state.Validators[valIndex])
 }
 
@@ -760,16 +727,13 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	// Simulate subscription of validator 750100
 	valIndex := uint64(750100)
 	state.Validators[valIndex] = &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(0),
-		PendingRewardsWei:       big.NewInt(0),
-		CollateralWei:           big.NewInt(500000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          valIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(0),
+		PendingRewardsWei:     big.NewInt(0),
+		CollateralWei:         big.NewInt(500000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        valIndex,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}
 
 	// Add some rewards
@@ -798,16 +762,13 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 
 	// Unsubscription is ok
 	require.Equal(t, &ValidatorInfo{
-		ValidatorStatus:         NotSubscribed,
-		AccumulatedRewardsWei:   big.NewInt(1000000000000000000),
-		PendingRewardsWei:       big.NewInt(0),
-		CollateralWei:           big.NewInt(500000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          valIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       NotSubscribed,
+		AccumulatedRewardsWei: big.NewInt(1000000000000000000),
+		PendingRewardsWei:     big.NewInt(0),
+		CollateralWei:         big.NewInt(500000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        valIndex,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}, state.Validators[valIndex])
 
 	// Now the same validator tries to rejoin
@@ -832,16 +793,13 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 
 	// Its subscribed again with its old accumulated rewards
 	require.Equal(t, &ValidatorInfo{
-		ValidatorStatus:         Active,
-		AccumulatedRewardsWei:   big.NewInt(1000000000000000000),
-		PendingRewardsWei:       big.NewInt(500000),
-		CollateralWei:           big.NewInt(500000),
-		WithdrawalAddress:       "0x9427a30991170f917d7b83def6e44d26577871ed",
-		ValidatorIndex:          valIndex,
-		ValidatorKey:            "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
-		ValidatorProposedBlocks: []Block{},
-		ValidatorMissedBlocks:   []Block{},
-		ValidatorWrongFeeBlocks: []Block{},
+		ValidatorStatus:       Active,
+		AccumulatedRewardsWei: big.NewInt(1000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		CollateralWei:         big.NewInt(500000),
+		WithdrawalAddress:     "0x9427a30991170f917d7b83def6e44d26577871ed",
+		ValidatorIndex:        valIndex,
+		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}, state.Validators[valIndex])
 }
 
@@ -857,18 +815,6 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 		AccumulatedRewardsWei: big.NewInt(1000000000000000000),
 		PendingRewardsWei:     big.NewInt(500000),
 		WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
-		ValidatorProposedBlocks: []Block{
-			{
-				Slot:   1,
-				Block:  1,
-				Reward: big.NewInt(1),
-			},
-			{
-				Slot:   2,
-				Block:  2,
-				Reward: big.NewInt(2),
-			},
-		},
 	}
 
 	valInfo2 := &ValidatorInfo{
@@ -878,13 +824,6 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 		PendingRewardsWei:     big.NewInt(500000),
 		// same withdrawal address as valInfo3
 		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
-		ValidatorMissedBlocks: []Block{
-			{
-				Slot:   10,
-				Block:  10,
-				Reward: big.NewInt(1),
-			},
-		},
 	}
 
 	valInfo3 := &ValidatorInfo{
@@ -894,13 +833,6 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 		PendingRewardsWei:     big.NewInt(500000),
 		// same withdrawal address as valInfo2
 		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
-		ValidatorMissedBlocks: []Block{
-			{
-				Slot:   50,
-				Block:  50,
-				Reward: big.NewInt(10000),
-			},
-		},
 	}
 
 	state.Validators[1] = valInfo1
@@ -932,12 +864,10 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 	// and we want a frozen snapshot of the state at that moment.
 
 	// Do some changes in validators
-	state.Validators[1].ValidatorProposedBlocks[0].Slot = 3
 	state.Validators[2].AccumulatedRewardsWei = big.NewInt(22)
 	state.Validators[3].PendingRewardsWei = big.NewInt(22)
 
 	// And assert the frozen state is not changes
-	require.Equal(t, uint64(1), state.LatestCommitedState.Validators[1].ValidatorProposedBlocks[0].Slot)
 	require.Equal(t, big.NewInt(2000000000000000000), state.LatestCommitedState.Validators[2].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(500000), state.LatestCommitedState.Validators[3].PendingRewardsWei)
 }
@@ -1288,38 +1218,6 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 		WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        10,
 		ValidatorKey:          "0xc", // TODO: Fix this, should be uint64
-		ValidatorProposedBlocks: []Block{
-			Block{
-				Reward:     big.NewInt(1000),
-				RewardType: VanilaBlock,
-				Slot:       1000,
-			}, Block{
-				Reward:     big.NewInt(12000),
-				RewardType: VanilaBlock,
-				Slot:       3000,
-			}, Block{
-				Reward:     big.NewInt(7000),
-				RewardType: MevBlock,
-				Slot:       6000,
-			}},
-		ValidatorMissedBlocks: []Block{Block{
-			Reward:     big.NewInt(1000),
-			RewardType: VanilaBlock,
-			Slot:       500,
-		}, Block{
-			Reward:     big.NewInt(1000),
-			RewardType: VanilaBlock,
-			Slot:       12000,
-		}},
-		ValidatorWrongFeeBlocks: []Block{Block{
-			Reward:     big.NewInt(1000),
-			RewardType: VanilaBlock,
-			Slot:       500,
-		}, Block{
-			Reward:     big.NewInt(1000),
-			RewardType: VanilaBlock,
-			Slot:       12000,
-		}},
 	}
 
 	state.Validators[20] = &ValidatorInfo{
@@ -1330,38 +1228,6 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 		WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        20,
 		ValidatorKey:          "0xc",
-		ValidatorProposedBlocks: []Block{
-			Block{
-				Reward:     big.NewInt(1000),
-				RewardType: VanilaBlock,
-				Slot:       1000,
-			}, Block{
-				Reward:     big.NewInt(12000),
-				RewardType: VanilaBlock,
-				Slot:       3000,
-			}, Block{
-				Reward:     big.NewInt(7000),
-				RewardType: MevBlock,
-				Slot:       6000,
-			}},
-		ValidatorMissedBlocks: []Block{Block{
-			Reward:     big.NewInt(33000),
-			RewardType: VanilaBlock,
-			Slot:       800,
-		}, Block{
-			Reward:     big.NewInt(11000),
-			RewardType: VanilaBlock,
-			Slot:       15000,
-		}},
-		ValidatorWrongFeeBlocks: []Block{Block{
-			Reward:     big.NewInt(14000),
-			RewardType: VanilaBlock,
-			Slot:       700,
-		}, Block{
-			Reward:     big.NewInt(18000),
-			RewardType: VanilaBlock,
-			Slot:       19000,
-		}},
 	}
 
 	state.Validators[30] = &ValidatorInfo{
@@ -1372,21 +1238,6 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 		WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
 		ValidatorIndex:        30,
 		ValidatorKey:          "0xc",
-		// Empty Proposed blocks
-		ValidatorMissedBlocks: []Block{Block{
-			Reward:     big.NewInt(303000),
-			RewardType: VanilaBlock,
-			Slot:       12200,
-		}},
-		ValidatorWrongFeeBlocks: []Block{Block{
-			Reward:     big.NewInt(15000),
-			RewardType: VanilaBlock,
-			Slot:       800,
-		}, Block{
-			Reward:     big.NewInt(189000),
-			RewardType: VanilaBlock,
-			Slot:       232000,
-		}},
 	}
 
 	defer os.Remove(filepath.Join(StateFileName, StateFolder))
