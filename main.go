@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/ecdsa"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/dappnode/mev-sp-oracle/api"
 	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/metrics"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 
 	log "github.com/sirupsen/logrus"
@@ -71,6 +73,7 @@ func main() {
 
 	api := api.NewApiService(cfg, oracleInstance, onchain)
 
+	metrics.RunMetrics(8008)
 	go api.StartHTTPServer()
 	go mainLoop(oracleInstance, onchain, cfg)
 
@@ -161,8 +164,12 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			}
 			slotToLatestFinalized := finalizedSlot - oracleInstance.State().LatestProcessedSlot
 
+			// Update metrics
+			metrics.DistanceFromFinalizedSlot.Set(float64(slotToLatestFinalized))
+			metrics.LatestProcessedSlot.Set(float64(oracleInstance.State().LatestProcessedSlot))
+			metrics.LatestProcessedBlock.Set(float64(oracleInstance.State().LatestProcessedBlock))
+
 			_ = processedSlot
-			_ = slotToLatestFinalized
 
 			// Do not log progress every slot, it is too much. See api for progress
 			// Log progress every x slots when syncing
@@ -224,6 +231,10 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 
 			// Persist new state in file
 			oracleInstance.State().SaveStateToFile()
+			// Update metrics
+			metrics.KnownRootAndSlot.WithLabelValues(
+				fmt.Sprintf("%d", oracleInstance.State().LatestCommitedState.Slot),
+				newOracleRoot).Set(1)
 
 			// If we were not in sync and the new root matches the latest onchain root, we are now in sync
 			// meaning that in the next checkpoint we will update the contract
