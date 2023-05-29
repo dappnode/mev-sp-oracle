@@ -414,6 +414,78 @@ func Test_HandleManualSubscriptions_BannedValidator(t *testing.T) {
 	}, state.Validators[bannedIndex])
 }
 
+func Test_SubThenUnsubThenAuto(t *testing.T) {
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(500000),
+		PoolFeesPercent: 0,
+	})
+
+	// Subscribe a validator
+	valIdx := uint64(9000)
+	sub := Subscription{
+		Event: &contract.ContractSubscribeValidator{
+			ValidatorID:            valIdx,
+			SubscriptionCollateral: big.NewInt(500000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+		Validator: &v1.Validator{
+			Index:  phase0.ValidatorIndex(valIdx),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{7, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+	state.HandleManualSubscriptions([]Subscription{sub})
+
+	// Share some rewards with it
+	state.Validators[valIdx].PendingRewardsWei = big.NewInt(10000)
+	state.Validators[valIdx].AccumulatedRewardsWei = big.NewInt(20000)
+
+	// Unsubscribe it
+	unsub := Unsubscription{
+		Event: &contract.ContractUnsubscribeValidator{
+			ValidatorID: valIdx,
+			Sender:      common.Address{3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			Raw:         types.Log{TxHash: [32]byte{0x1}},
+		},
+		Validator: &v1.Validator{
+			Index:  phase0.ValidatorIndex(valIdx),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{7, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	state.HandleManualUnsubscriptions([]Unsubscription{unsub})
+
+	// Check is no longer subscribed and balances are kept (pending is reset)
+	require.Equal(t, big.NewInt(0), state.Validators[valIdx].PendingRewardsWei)
+	require.Equal(t, big.NewInt(20000), state.Validators[valIdx].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, state.Validators[valIdx].ValidatorStatus)
+
+	// Force automatic subscription
+	block1 := Block{
+		Slot:              0,
+		ValidatorIndex:    valIdx,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(90000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0327a30991170f917d7b83def6e44d26577871ed",
+	}
+	state.HandleCorrectBlockProposal(block1)
+
+	// Pending are 0 because the 90000000 are instantly consolidated
+	require.Equal(t, big.NewInt(0), state.Validators[valIdx].PendingRewardsWei)
+	// We have the new plus old ones
+	require.Equal(t, big.NewInt(20000+90000000), state.Validators[valIdx].AccumulatedRewardsWei)
+	require.Equal(t, Active, state.Validators[valIdx].ValidatorStatus)
+}
+
 func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	// Unsubscribe an existing subscribed validator correctly, checking that the event is
 	// sent from the withdrawal address of the validator. Check also that when unsubscribing

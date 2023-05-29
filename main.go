@@ -229,8 +229,6 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			enoughData := oracleInstance.StoreLatestOnchainState()
 			newOracleRoot := oracleInstance.State().LatestCommitedState.MerkleRoot
 
-			// Persist new state in file
-			oracleInstance.State().SaveStateToFile()
 			// Update metrics
 			metrics.KnownRootAndSlot.WithLabelValues(
 				fmt.Sprintf("%d", oracleInstance.State().LatestCommitedState.Slot),
@@ -264,6 +262,9 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 					_ = txHash
 				}
 			}
+
+			// Persist new state in file only if everything went fine
+			oracleInstance.State().SaveStateToFile()
 		}
 	}
 }

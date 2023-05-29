@@ -41,9 +41,6 @@ type RawLeaf struct {
 	AccumulatedBalance *big.Int
 }
 
-// TODO: Add checks:
-// -New balance to claim matches what was sent to the pool, etc.
-
 // Aggregates all validators indexes that belong to the same withdrawal address. This
 // allows the merkle tree to hold all validators balance belonging to the same set
 // of validators, that makes claiming cheaper since only one proof is needed for n validators
@@ -57,12 +54,12 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 	// Iterate all validators
 	for _, validator := range state.Validators {
 
-		// That match some criteria
+		// If the withdrawal addresd was found before
 		found := false
 
 		// If the leaf already exists, add the balance to the existing leaf (by withdrawal address)
 		for _, leaf := range allLeafs {
-			if leaf.WithdrawalAddress == validator.WithdrawalAddress {
+			if Equals(leaf.WithdrawalAddress, validator.WithdrawalAddress) {
 				leaf.AccumulatedBalance.Add(leaf.AccumulatedBalance, validator.AccumulatedRewardsWei)
 				found = true
 				continue
@@ -156,9 +153,9 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 		"Leafs": len(orderedRawLeafs),
 	}).Info("Generating tree")
 
-	// TODO: refactor this.
 	// Stores the withdrawal address -> hashed leaf
 	withdrawalToLeaf := make(map[string]mt.DataBlock, 0)
+
 	// Stores te withdrawal address -> raw leaf
 	withdrawalToRawLeaf := make(map[string]RawLeaf, 0)
 
@@ -193,25 +190,6 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	// TODO: Improve logs, use debug. TODO: unused?
-	for i := 0; i < len(blocks); i++ {
-		serialized, err := blocks[i].Serialize()
-		if err != nil {
-			log.Fatal(err)
-		}
-		_ = serialized
-		//log.Info("Proof of block index :", i, " blockhash:  ", hex.EncodeToString(serialized))
-		proof0, err := tree.GenerateProof(blocks[i])
-		if err != nil {
-			log.Fatal(err)
-		}
-		for j, proof := range proof0.Siblings {
-			_ = j
-			_ = proof
-			//log.Info("proof: ", hex.EncodeToString(proof))
-		}
 	}
 
 	return withdrawalToLeaf, withdrawalToRawLeaf, tree, true

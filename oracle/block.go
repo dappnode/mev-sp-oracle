@@ -203,54 +203,6 @@ func (b *VersionedSignedBeaconBlock) GetProposerTip(blockHeader *types.Header, t
 	return proposerReward, nil
 }
 
-// Note that this does not detect tx made from smart contract, just plain eth txs
-// This function is called on everyblock and MevRewardInWei, which iterate the same
-// set of transactions. As a TODO: we can refactor this to only iterate once and get
-// both information.
-func (b *VersionedSignedBeaconBlock) GetDonations(poolAddress string) []Donation {
-	donations := []Donation{}
-
-	for _, rawTx := range b.GetBlockTransactions() {
-		tx, msg, err := DecodeTx(rawTx)
-		if err != nil {
-			log.Fatal("could not decode tx: ", err)
-		}
-		// If a transaction was sent to the pool
-		// And the sender is not the fee recipient (exclude MEV transactions)
-		// Note that msg.To() is nil for contract creation transactions
-		if msg.To() == nil {
-			continue
-		}
-
-		// This just detect normal eth transactions sent to the pool address, not via
-		// smart conrtacts interactions.
-		// It also ignores txs made by the fee recipient (MEV txs)
-		if Equals(msg.To().String(), poolAddress) && !Equals(msg.From().String(), b.GetFeeRecipient()) {
-
-			// We want pure eth transactions. If its a smart contract interaction (eg subscription)
-			// we skip it. Otherwise subscriptions would be detected as donations.
-			if len(msg.Data()) > 0 {
-				continue
-			}
-
-			log.WithFields(log.Fields{
-				"RewardWei":   msg.Value(),
-				"BlockNumber": b.GetBlockNumber(),
-				"Type":        "Donation",
-				"TxHash":      tx.Hash().String(),
-			}).Info("[Reward]")
-
-			donations = append(donations, Donation{
-				AmountWei: msg.Value(),
-				Block:     b.GetBlockNumber(),
-				TxHash:    tx.Hash().String(),
-			},
-			)
-		}
-	}
-	return donations
-}
-
 // Returns the fee recipient of the block, depending on the fork version
 func (b *VersionedSignedBeaconBlock) GetFeeRecipient() string {
 	var feeRecipient string

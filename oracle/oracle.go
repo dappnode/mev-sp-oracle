@@ -62,25 +62,19 @@ func (or *Oracle) AdvanceStateToNextSlot(
 		or.state.HandleMissedBlock(blockPool)
 	}
 
-	// If a block was proposed in the slot (not missed)
-	if blockPool.BlockType != MissedProposal {
+	// If we have a successful block proposal BUT the validator has BLS keys, we cant auto subscribe it
+	if blockPool.BlockType == OkPoolProposalBlsKeys {
+		or.state.HandleBlsCorrectBlockProposal(blockPool)
+	}
 
-		if blockPool.BlockType == OkPoolProposalBlsKeys {
-			// TODO: This is a bit hackish
-			log.Warn("Block proposal was ok but bls keys are not supported, sending rewards to pool")
-			or.state.SendRewardToPool(blockPool.Reward)
-			// TODO: Send rewards to pool as we dont know any validator address to give it
-		}
+	// Manual subscription. If feeRec is ok, means the reward was sent to the pool
+	if blockPool.BlockType == OkPoolProposal {
+		or.state.HandleCorrectBlockProposal(blockPool)
+	}
 
-		// Manual subscription. If feeRec is ok, means the reward was sent to the pool
-		if blockPool.BlockType == OkPoolProposal {
-			or.state.HandleCorrectBlockProposal(blockPool)
-		}
-		// If the validator was subscribed but the fee recipient was wrong
-		// we ban the validator as it is not following the protocol rules
-		if blockPool.BlockType == WrongFeeRecipient && or.state.IsSubscribed(blockPool.ValidatorIndex) {
-			or.state.HandleBanValidator(blockPool)
-		}
+	// If the validator was subscribed but the fee recipient was wrong we ban the validator
+	if blockPool.BlockType == WrongFeeRecipient && or.state.IsSubscribed(blockPool.ValidatorIndex) {
+		or.state.HandleBanValidator(blockPool)
 	}
 
 	// Handle unsubscriptions the last thing after distributing rewards
