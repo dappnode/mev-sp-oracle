@@ -304,11 +304,13 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 	return header, receipts, nil
 }
 
-// TODO: Rethink this function. Its not just donations but eth rx to the contract
-// in general
-// TODO:? Unused?
-func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([]Donation, error) {
-	log.Fatal("This function is deprecated. Use GetDonations instead")
+// Get donations in a given block number. Support both normal tx
+// and internal txs donating via a smart contract.
+// The block is inputed to filter out mev rewards from donations since EtherReceived event
+// is triggered by both donations and mev rewards.
+// normal eth tx: https://goerli.etherscan.io/tx/0xfeda23c2e9db46e69615a8bec74c4a9f3f9f7eb650659a13c9ad1f394c13698d
+// via sc: https://goerli.etherscan.io/tx/0x277cec5bcb60852b160a29dc9082b7e18a44333194cbe9c7d7b664e4b89b8c46
+func (o *Onchain) GetDonationEvents(blockNumber uint64, block Block, opts ...retry.Option) ([]Donation, error) {
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
 
@@ -334,8 +336,18 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64, opts ...retry.Option) ([
 
 	// Loop over all found events
 	donations := make([]Donation, 0)
+	alreadyMatched := false
 	for itr.Next() {
 		event := itr.Event
+
+		// We skip this event since it was triggered by a mev reward as
+		// this event is triggered by both donations and mev rewards.
+		// alreadyMatched prevents to filter out a donation with the same
+		// amount as a mev reward, rare but to be safe.
+		if event.DonationAmount.Cmp(block.Reward) == 0 && !alreadyMatched {
+			alreadyMatched = true
+			continue
+		}
 
 		log.WithFields(log.Fields{
 			"RewardWei":   event.DonationAmount,
@@ -613,14 +625,11 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 		log.Fatal("could not get block unsubscriptions: ", err)
 	}
 
-	// TODO: This is wrong, as this event will also be triggered when a validator proposes a MEV block
 	// Fetch donations in this block
-	//blockDonations, err := o.GetDonationEvents(extendedBlock.GetBlockNumber())
-	//if err != nil {
-	//	log.Fatal("could not get block donations: ", err)
-	//}
-
-	blockDonations := extendedBlock.GetDonations(o.Cfg.PoolAddress)
+	blockDonations, err := o.GetDonationEvents(extendedBlock.GetBlockNumber(), poolBlock)
+	if err != nil {
+		log.Fatal("could not get block donations: ", err)
+	}
 
 	return poolBlock, blockSubs, blockUnsubs, blockDonations
 }
@@ -653,7 +662,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	}
 
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
-	fmt.Println(fromAddress.Hex())
+	log.Info("Preparing tx from address: ", fromAddress.Hex())
 	nonce, err := o.ExecutionClient.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
 		log.Fatal("could not get pending nonce: ", err)

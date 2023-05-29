@@ -70,7 +70,7 @@ const (
 	MissedProposal        BlockType = 1
 	WrongFeeRecipient     BlockType = 2
 	OkPoolProposal        BlockType = 3
-	OkPoolProposalBlsKeys BlockType = 4 // TODO: this state is a bit hackish
+	OkPoolProposalBlsKeys BlockType = 4
 )
 
 // Represents a block with information relevant for the pool
@@ -117,7 +117,7 @@ type ValidatorInfo struct {
 	AccumulatedRewardsWei   *big.Int        `json:"accumulated_rewards_wei"`
 	PendingRewardsWei       *big.Int        `json:"pending_rewards_wei"`
 	CollateralWei           *big.Int        `json:"collateral_wei"`
-	WithdrawalAddress       string          `json:"withdrawal_address"` // TODO: Rename to: withdrawal_address (keeping it for backwards compatibility by now)
+	WithdrawalAddress       string          `json:"withdrawal_address"`
 	ValidatorIndex          uint64          `json:"validator_index"`
 	ValidatorKey            string          `json:"validator_key"`
 	ValidatorProposedBlocks []Block         `json:"proposed_block"`
@@ -317,7 +317,6 @@ func (state *OracleState) StoreLatestOnchainState() bool {
 	DeepCopy(state.Validators, &validatorsCopy)
 
 	mk := NewMerklelizer()
-	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
 	withdrawalToLeaf, withdrawalToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(state)
 	if !enoughData {
 		return false
@@ -424,6 +423,18 @@ func (state *OracleState) HandleCorrectBlockProposal(block Block) {
 	state.ConsolidateBalance(block.ValidatorIndex)
 	state.Validators[block.ValidatorIndex].ValidatorProposedBlocks = append(state.Validators[block.ValidatorIndex].ValidatorProposedBlocks, block)
 	state.ProposedBlocks = append(state.ProposedBlocks, block)
+}
+
+func (state *OracleState) HandleBlsCorrectBlockProposal(block Block) {
+	if block.BlockType != OkPoolProposalBlsKeys {
+		log.Fatal("Block type is not OkPoolProposalBlsKeys, BlockType: ", block.BlockType)
+	}
+	log.WithFields(log.Fields{
+		"BlockNumber":    block.Block,
+		"Slot":           block.Slot,
+		"ValidatorIndex": block.ValidatorIndex,
+	}).Warn("Block proposal was ok but bls keys are not supported, sending rewards to pool")
+	state.SendRewardToPool(block.Reward)
 }
 
 func (state *OracleState) HandleManualSubscriptions(
@@ -712,8 +723,13 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, Withdrawa
 		state.Validators[valIndex] = validator
 
 		// And update it state according to the event
-		// TODO: Perhaps remove this and just use ValidatorStatus: Active
 		state.AdvanceStateMachine(valIndex, AutoSubscription)
+	} else {
+		// If we found the validator and is not subscribed, advance the state machine
+		// Most likely it was subscribed before, then unsubscribed and now auto subscribes
+		if !state.IsSubscribed(valIndex) {
+			state.AdvanceStateMachine(valIndex, AutoSubscription)
+		}
 	}
 }
 
