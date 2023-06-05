@@ -156,8 +156,31 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 
 		if finalizedSlot >= oracleInstance.State().NextSlotToProcess {
 
-			// Get all the information of the block that was proposed in this slot
-			poolBlock, blockSubs, blockUnsubs, blockDonations := onchain.GetAllBlockInfo(oracleInstance.State().NextSlotToProcess)
+			// Fetch block information
+			poolBlock, err := onchain.GetBlock(oracleInstance.State().NextSlotToProcess, oracleInstance.State())
+			if err != nil {
+				log.Fatal("could not get block: ", err)
+			}
+
+			// Fetch subscription data
+			blockSubs, err := onchain.GetBlockSubscriptions(poolBlock.Block)
+			if err != nil {
+				log.Fatal("could not get block subscriptions: ", err)
+			}
+
+			// Fetch unsubscription data
+			blockUnsubs, err := onchain.GetBlockUnsubscriptions(poolBlock.Block)
+			if err != nil {
+				log.Fatal("could not get block unsubscriptions: ", err)
+			}
+
+			// Fetch donations in this block
+			blockDonations, err := onchain.GetDonationEvents(poolBlock.Block, poolBlock) // TODO: Redundant
+			if err != nil {
+				log.Fatal("could not get block donations: ", err)
+			}
+
+			// Advance state to next slot based on the information we got from the block
 			processedSlot, err := oracleInstance.AdvanceStateToNextSlot(poolBlock, blockSubs, blockUnsubs, blockDonations)
 			if err != nil {
 				log.Fatal(err)

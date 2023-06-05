@@ -44,6 +44,8 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
 
+	// TODO: Ensure blockPool is == nextSlot to process? or smlt
+
 	if or.state.NextSlotToProcess != (or.state.LatestProcessedSlot + 1) {
 		log.Fatal("Next slot to process is not the last processed slot + 1",
 			or.state.NextSlotToProcess, " ", or.state.LatestProcessedSlot)

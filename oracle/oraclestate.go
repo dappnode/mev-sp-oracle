@@ -29,11 +29,14 @@ type RewardType uint8
 type ValidatorStatus uint8
 type Event uint8
 type BlockType uint8
+type WithdrawalType uint8
 
 const DefaultRoot = "0x0000000000000000000000000000000000000000000000000000000000000000"
 const DefaultAddress = "0x0000000000000000000000000000000000000000"
 
 // TODO: Dont export functions and variables that are not used outside the package
+
+// TODO: Move this to a types file? or constants?
 
 // Types of block rewards
 const (
@@ -71,6 +74,11 @@ const (
 	WrongFeeRecipient     BlockType = 2
 	OkPoolProposal        BlockType = 3
 	OkPoolProposalBlsKeys BlockType = 4
+)
+
+const (
+	BlsWithdrawal  WithdrawalType = 0
+	Eth1Withdrawal WithdrawalType = 1
 )
 
 // Represents a block with information relevant for the pool
