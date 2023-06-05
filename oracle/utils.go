@@ -125,7 +125,7 @@ func IsBlsType(withdrawalCred string) bool {
 		return false
 	}
 
-	/* BLS_WITHDRAWAL_PREFIX */
+	// BLS_WITHDRAWAL_PREFIX
 	if strings.HasPrefix(withdrawalCred, "00") {
 		return true
 	}
@@ -139,7 +139,7 @@ func IsEth1Type(withdrawalCred string) bool {
 		return false
 	}
 
-	/* ETH1_ADDRESS_WITHDRAWAL_PREFIX*/
+	// ETH1_ADDRESS_WITHDRAWAL_PREFIX
 	if strings.HasPrefix(withdrawalCred, "010000000000000000000000") {
 		return true
 	}
@@ -153,7 +153,7 @@ func GetEth1Address(withdrawalCred string) (string, error) {
 	if len(withdrawalCred) != 64 {
 		return "", errors.New("Withdrawal credentials are not a valid length")
 	}
-	/* ETH1_ADDRESS_WITHDRAWAL_PREFIX*/
+	// ETH1_ADDRESS_WITHDRAWAL_PREFIX
 	if !strings.HasPrefix(withdrawalCred, "010000000000000000000000") {
 		return "", errors.New("Withdrawal credentials prefix does not match the spec")
 	}
@@ -165,18 +165,33 @@ func GetEth1AddressByte(withdrawalCredByte []byte) (string, error) {
 	if len(withdrawalCred) != 64 {
 		return "", errors.New("Withdrawal credentials are not a valid length")
 	}
-	/* ETH1_ADDRESS_WITHDRAWAL_PREFIX*/
+	// ETH1_ADDRESS_WITHDRAWAL_PREFIX
 	if !strings.HasPrefix(withdrawalCred, "010000000000000000000000") {
 		return "", errors.New("Withdrawal credentials prefix does not match the spec")
 	}
 	return "0x" + withdrawalCred[24:], nil
 }
 
+// Returns the 0x prefixed withdrawal credentials and its type: BlsWithdrawal or Eth1Withdrawal
+func GetWithdrawalAndType(validator *v1.Validator) (string, WithdrawalType) {
+	withdrawalCred := hex.EncodeToString(validator.Validator.WithdrawalCredentials)
+	if len(withdrawalCred) != 64 {
+		log.Fatal("withdrawal credentials are not a valid length: ", len(withdrawalCred))
+	}
+
+	if IsBlsType(withdrawalCred) {
+		return "0x" + withdrawalCred[2:], BlsWithdrawal
+	} else if IsEth1Type(withdrawalCred) {
+		return "0x" + withdrawalCred[24:], Eth1Withdrawal
+	}
+	log.Fatal("withdrawal credentials are not a valid type: ", withdrawalCred)
+	return "", 0
+}
+
 func Equals(a string, b string) bool {
 	if len(a) != len(b) {
 		log.Fatal("values length mismatch: ",
-			"a: ", a,
-			"b: ", b)
+			"len(a): ", len(a), " len(b): ", len(b), " a: ", a, " b: ", b)
 	}
 	if strings.ToLower(a) == strings.ToLower(b) {
 		return true

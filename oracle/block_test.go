@@ -33,8 +33,8 @@ var block1 = &bellatrix.SignedBeaconBlock{
 
 func Test_FeeRecipientAndSlot(t *testing.T) {
 	// Check that existing methods are inherited and new ones are extended
-	extendedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: block1}
-	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Bellatrix: block1}
+	myBlock := NewFullBlock(extendedBlock, nil, nil)
 	require.Equal(t, "0x388c818ca8b9251b393131c08a736a67ccb19297", myBlock.GetFeeRecipient())
 	require.Equal(t, uint64(5214140), uint64(myBlock.GetSlot()))
 }
@@ -119,11 +119,11 @@ func Test_GetProperTip_Mainnet_Slot_5320341(t *testing.T) {
 	// Decode a a hardcode block/header/receipts
 	fileName := "bellatrix_slot_5320341_mainnet"
 	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &block}
-	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Bellatrix: &block}
+	myBlock := NewFullBlock(extendedBlock, &header, receipts)
 
 	// Get proposer tip
-	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
+	proposerTip, err := myBlock.GetProposerTip()
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(1944763730864393), proposerTip)
 }
@@ -134,21 +134,15 @@ func Test_GetProperTip_Mainnet_Slot_5320341(t *testing.T) {
 func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
 	fileName := "bellatrix_slot_5344344_mainnet"
 	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &block}
-	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Bellatrix: &block}
+	myBlock := NewFullBlock(extendedBlock, &header, receipts)
 
-	mevReward, numTxs, err := myBlock.MevRewardInWei("0x388c818ca8b9251b393131c08a736a67ccb19297")
-	require.NoError(t, err)
+	mevReward, mev, mevFeeRecipient := myBlock.MevRewardInWei()
 	require.Equal(t, big.NewInt(99952842017043014), mevReward)
-	require.Equal(t, numTxs, 1)
+	require.Equal(t, mev, true)
+	require.Equal(t, mevFeeRecipient, "0x388c818ca8b9251b393131c08a736a67ccb19297")
 
-	// Same for mixed case
-	mevReward2, numTxs2, err2 := myBlock.MevRewardInWei("0x388C818CA8B9251b393131C08a736A67ccB19297")
-	require.NoError(t, err2)
-	require.Equal(t, big.NewInt(99952842017043014), mevReward2)
-	require.Equal(t, numTxs2, 1)
-
-	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
+	proposerTip, err := myBlock.GetProposerTip()
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(95434044627649514), proposerTip)
 }
@@ -157,9 +151,9 @@ func Test_GetProperTip_Goerli_Slot_5214302(t *testing.T) {
 	fileName := "capella_slot_5214302_goerli"
 	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
 	extendedBlock := spec.VersionedSignedBeaconBlock{Capella: &block}
-	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+	myBlock := NewFullBlock(&extendedBlock, &header, receipts)
 
-	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
+	proposerTip, err := myBlock.GetProposerTip()
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(38657065851824731), proposerTip)
 }
@@ -167,17 +161,17 @@ func Test_GetProperTip_Goerli_Slot_5214302(t *testing.T) {
 func Test_GetMevReward_Goerli_Slot_5214321(t *testing.T) {
 	fileName := "capella_slot_5214321_goerli"
 	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
-	extendedBlock := spec.VersionedSignedBeaconBlock{Capella: &block}
-	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Capella: &block}
+	myBlock := NewFullBlock(extendedBlock, &header, receipts)
 
 	// Gets the MEV reward that was sent to a specific address
-	mevReward, numTxs, err := myBlock.MevRewardInWei("0x4d496ccc28058b1d74b7a19541663e21154f9c84")
-	require.NoError(t, err)
+	mevReward, mev, mevFeeRecipient := myBlock.MevRewardInWei()
 	require.Equal(t, big.NewInt(15867629069461526), mevReward)
-	require.Equal(t, numTxs, 1)
+	require.Equal(t, mev, true)
+	require.Equal(t, mevFeeRecipient, "0x4d496ccc28058b1d74b7a19541663e21154f9c84")
 
 	// This block was a MEV block, but we can also test the tip
-	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
+	proposerTip, err := myBlock.GetProposerTip()
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(15992505660349526), proposerTip)
 }
@@ -185,18 +179,19 @@ func Test_GetMevReward_Goerli_Slot_5214321(t *testing.T) {
 func Test_GetMevReward_Goerli_Slot_5307527(t *testing.T) {
 	// This block contains a tx to 0x553bd5a94bcc09ffab6550274d5db140a95ae9bc
 	// but its a normal tx not an MEV one. Detect it doesnt produce a false positive
+	// https://prater.beaconcha.in/slot/5307527
 	fileName := "capella_slot_5307527_goerli"
 	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
-	extendedBlock := spec.VersionedSignedBeaconBlock{Capella: &block}
-	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Capella: &block}
+	myBlock := NewFullBlock(extendedBlock, &header, receipts)
 
-	mevReward, numTxs, err := myBlock.MevRewardInWei("0x553bd5a94bcc09ffab6550274d5db140a95ae9bc")
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(0), mevReward)
-	require.Equal(t, numTxs, 0)
+	// No mev reward
+	_, mev, mevFeeRecipient := myBlock.MevRewardInWei()
+	require.Equal(t, mev, false)
+	require.Equal(t, mevFeeRecipient, "")
 
 	// This block was a MEV block, but we can also test the tip
-	proposerTip, err := myBlock.GetProposerTip(&header, receipts)
+	proposerTip, err := myBlock.GetProposerTip()
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(105735750887810922), proposerTip)
 }
@@ -204,27 +199,14 @@ func Test_GetMevReward_Goerli_Slot_5307527(t *testing.T) {
 func Test_MevReward_Slot_5320342(t *testing.T) {
 	fileName := "bellatrix_slot_5320342_mainnet"
 	block, _, _ := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := spec.VersionedSignedBeaconBlock{Bellatrix: &block}
-	myBlock := VersionedSignedBeaconBlock{&extendedBlock}
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Bellatrix: &block}
+	myBlock := NewFullBlock(extendedBlock, nil, nil)
 
 	// Check that mev reward is correct and sent to the address
-	mevReward1, numTxs1, err := myBlock.MevRewardInWei("0xf8636377b7a998b51a3cf2bd711b870b3ab0ad56")
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(65184406499820485), mevReward1)
-	require.Equal(t, numTxs1, 1)
-
-	// Test that it also work for mixed case addresses EIP-55
-	mevReward2, numTxs2, err := myBlock.MevRewardInWei("0xf8636377b7a998B51a3Cf2BD711B870B3Ab0Ad56")
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(65184406499820485), mevReward2)
-	require.Equal(t, numTxs2, 1)
-
-	// Check that no mev was sent to a different address
-	mevReward3, numTxs3, err := myBlock.MevRewardInWei("0x4de23f3f0fb3318287378adbde030cf61714b2f3")
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(0), mevReward3)
-	require.Equal(t, numTxs3, 0)
-	require.Equal(t, "0xdafea492d9c6733ae3d56b7ed1adb60692c98bc5", myBlock.GetFeeRecipient())
+	mevReward, mev, mevFeeRecipient := myBlock.MevRewardInWei()
+	require.Equal(t, big.NewInt(65184406499820485), mevReward)
+	require.Equal(t, mev, true)
+	require.Equal(t, mevFeeRecipient, "0xf8636377b7a998b51a3cf2bd711b870b3ab0ad56")
 }
 
 // Util to load from file

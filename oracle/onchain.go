@@ -18,7 +18,6 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
 	"github.com/ethereum/go-ethereum"
@@ -258,28 +257,29 @@ func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.Propo
 
 // This function is expensive as gets every tx receipt from the block. Use only if needed
 func (o *Onchain) GetExecHeaderAndReceipts(
-	blockNumber *big.Int,
-	rawTxs []bellatrix.Transaction,
+	block *FullBlock,
 	opts ...retry.Option) (*types.Header, []*types.Receipt, error) {
 
 	var header *types.Header
 	var err error
 
+	//block.GetBlockNumberBigInt(), block.GetBlockTransactions()
+
 	err = retry.Do(func() error {
-		header, err = o.ExecutionClient.HeaderByNumber(context.Background(), blockNumber)
+		header, err = o.ExecutionClient.HeaderByNumber(context.Background(), block.GetBlockNumberBigInt())
 		if err != nil {
-			log.Warn("Failed attempt to fetch header for block ", blockNumber.String(), ": ", err.Error(), " Retrying...")
-			return errors.New("Error fetching header for block " + blockNumber.String() + ": " + err.Error())
+			log.Warn("Failed attempt to fetch header for block ", block.GetBlockNumberBigInt().String(), ": ", err.Error(), " Retrying...")
+			return errors.New("Error fetching header for block " + block.GetBlockNumberBigInt().String() + ": " + err.Error())
 		}
 		return nil
 	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
-		return nil, nil, errors.New("Could not fetch header for block " + blockNumber.String() + ": " + err.Error())
+		return nil, nil, errors.New("Could not fetch header for block " + block.GetBlockNumberBigInt().String() + ": " + err.Error())
 	}
 
 	var receipts []*types.Receipt
-	for _, rawTx := range rawTxs {
+	for _, rawTx := range block.GetBlockTransactions() {
 		// This should never happen
 		tx, _, err := DecodeTx(rawTx)
 		if err != nil {
@@ -546,7 +546,7 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 
 // Given a slot number, this function fetches all the information that the oracle need to process
 // the block (if not missed) that was proposed in this slot.
-func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubscription, []Donation) {
+func (o *Onchain) GetBlock(slot uint64, state *OracleState) (Block, error) {
 
 	// Get who should propose the block
 	slotDuty, err := o.GetProposalDuty(slot)
@@ -561,77 +561,118 @@ func (o *Onchain) GetAllBlockInfo(slot uint64) (Block, []Subscription, []Unsubsc
 	// The validator that should propose the block
 	valPublicKey := strings.ToLower("0x" + hex.EncodeToString(slotDuty.PubKey[:]))
 
+	// Fetch the consensus block at this slot
 	proposedBlock, err := o.GetConsensusBlockAtSlot(slot)
 	if err != nil {
 		log.Fatal("could not get block at slot:", err)
 	}
 
-	// Only populated if a valid block was proposed
-	var extendedBlock *VersionedSignedBeaconBlock
+	// Get the withdrawal address and type
+	withdrawalAddress, withdrawalType := GetWithdrawalAndType(o.validators[slotDuty.ValidatorIndex])
 
-	// Init pool block, with relevant information to the pool
-	poolBlock := Block{
-		Slot:           uint64(slotDuty.Slot),
-		ValidatorIndex: uint64(slotDuty.ValidatorIndex),
-		ValidatorKey:   valPublicKey,
-	}
-
-	// Fetch block info
+	// A nil block = missed proposal by validator
 	if proposedBlock == nil {
-		// A nil block means that the validator did not propose a block (missed proposal)
-		poolBlock.BlockType = MissedProposal
+		return Block{
+			Slot:           uint64(slotDuty.Slot),
+			ValidatorIndex: uint64(slotDuty.ValidatorIndex),
+			ValidatorKey:   valPublicKey,
+			BlockType:      MissedProposal,
 
-		// Return early, a missed block wont contain any information
-		return poolBlock, []Subscription{}, []Unsubscription{}, []Donation{}
+			Reward:            big.NewInt(0),     // Default value (unknown for missed block)
+			Block:             0,                 // Default value (unknown for missed block)
+			RewardType:        UnknownRewardType, // Default value (unknown for missed block)
+			WithdrawalAddress: withdrawalAddress, // Default value (unknown for missed block)
+		}, nil
+	}
 
-	} else {
-		// Cast the block to our extended version with utils functions
-		extendedBlock = &VersionedSignedBeaconBlock{proposedBlock}
-		// If the proposal was succesfull, we check if this block contained a reward for the pool
-		reward, correctFeeRec, rewardType, err := extendedBlock.GetSentRewardAndType(o.Cfg.PoolAddress, *o)
-		if err != nil {
-			log.Fatal("could not get reward and type: ", err)
-		}
+	// If the block was proposed, fetch the information we need from the chain
+	fullBlock := NewFullBlock(proposedBlock, nil, nil)
 
-		// We populate the parameters of the pool block
-		poolBlock.Reward = reward
-		poolBlock.RewardType = rewardType
-		poolBlock.Block = extendedBlock.GetBlockNumber()
+	// Sanity check to ensure the block is from the correct duty slot
+	if fullBlock.GetSlotUint64() != uint64(slotDuty.Slot) {
+		log.Fatal("slot duty slot does not match requested slot: ",
+			fullBlock.GetSlotUint64(), " vs ", slotDuty.Slot)
+	}
 
-		// And check if it contained a reward for the pool or not
-		if correctFeeRec {
-			poolBlock.BlockType = OkPoolProposal
-			withdrawalAddress, err := GetEth1AddressByte(o.validators[slotDuty.ValidatorIndex].Validator.WithdrawalCredentials)
-			if err != nil {
-				poolBlock.BlockType = OkPoolProposalBlsKeys
-			} else {
-				poolBlock.BlockType = OkPoolProposal
-				poolBlock.WithdrawalAddress = withdrawalAddress
-			}
+	// Sanity check to ensure the block is from the correct duty validator index
+	if fullBlock.GetProposerIndexUint64() != uint64(slotDuty.ValidatorIndex) {
+		log.Fatal("slot duty validator index does not match requested validator index: ",
+			fullBlock.GetProposerIndexUint64(), " vs ", slotDuty.ValidatorIndex)
+	}
+
+	// Check if the proposer is from the subscriber set
+	isFromSubscriber := state.IsSubscribed(fullBlock.GetProposerIndexUint64())
+
+	// If not, we dont care about the block
+	if !isFromSubscriber {
+		return Block{
+			Slot:              uint64(slotDuty.Slot),
+			ValidatorIndex:    uint64(slotDuty.ValidatorIndex),
+			ValidatorKey:      valPublicKey,
+			BlockType:         WrongFeeRecipient,
+			Block:             fullBlock.GetBlockNumber(),
+			WithdrawalAddress: withdrawalAddress,
+
+			Reward:     big.NewInt(0),     // Default value (unknown for missed block)
+			RewardType: UnknownRewardType, // Default value (unknown for missed block)
+		}, nil
+	}
+
+	// If the proposer is from the subscriber set, we need to fetch the header and receipts
+	header, receipts, err := o.GetExecHeaderAndReceipts(fullBlock)
+	if err != nil {
+		log.Fatal("could not get header and receipts: ", err)
+	}
+	fullBlock = NewFullBlock(proposedBlock, header, receipts)
+
+	reward, rewardRecipient, rewardType, err := fullBlock.GetRewardAndRecipient()
+	if err != nil {
+		log.Fatal("could not get reward and type: ", err)
+	}
+
+	// If the reward was sent to the pool
+	if Equals(rewardRecipient, o.Cfg.PoolAddress) {
+		if withdrawalType == BlsWithdrawal {
+			// If it was sent to the pool but the validator has BLS withdrawal credentials
+			return Block{
+				Slot:              uint64(slotDuty.Slot),
+				ValidatorIndex:    uint64(slotDuty.ValidatorIndex),
+				ValidatorKey:      valPublicKey,
+				BlockType:         OkPoolProposalBlsKeys,
+				Reward:            reward,
+				Block:             fullBlock.GetBlockNumber(),
+				RewardType:        rewardType,
+				WithdrawalAddress: withdrawalAddress,
+			}, nil
+		} else if withdrawalType == Eth1Withdrawal {
+			// If the block was proposed by a validator with "normal" withdrawal credentials
+			return Block{
+				Slot:              uint64(slotDuty.Slot),
+				ValidatorIndex:    uint64(slotDuty.ValidatorIndex),
+				ValidatorKey:      valPublicKey,
+				BlockType:         OkPoolProposal,
+				Reward:            reward,
+				Block:             fullBlock.GetBlockNumber(),
+				RewardType:        rewardType,
+				WithdrawalAddress: withdrawalAddress,
+			}, nil
 		} else {
-			poolBlock.BlockType = WrongFeeRecipient
+			return Block{}, errors.New(fmt.Sprintf("unknown withdrawal type: %d", withdrawalType))
 		}
 	}
 
-	// Fetch subscription data
-	blockSubs, err := o.GetBlockSubscriptions(extendedBlock.GetBlockNumber())
-	if err != nil {
-		log.Fatal("could not get block subscriptions: ", err)
-	}
+	// If the validator did not send the reward to the pool
+	return Block{
+		Slot:              uint64(slotDuty.Slot),
+		ValidatorIndex:    uint64(slotDuty.ValidatorIndex),
+		ValidatorKey:      valPublicKey,
+		BlockType:         WrongFeeRecipient,
+		Reward:            reward,
+		Block:             fullBlock.GetBlockNumber(),
+		RewardType:        rewardType,
+		WithdrawalAddress: withdrawalAddress,
+	}, nil
 
-	// Fetch unsubscription data
-	blockUnsubs, err := o.GetBlockUnsubscriptions(extendedBlock.GetBlockNumber())
-	if err != nil {
-		log.Fatal("could not get block unsubscriptions: ", err)
-	}
-
-	// Fetch donations in this block
-	blockDonations, err := o.GetDonationEvents(extendedBlock.GetBlockNumber(), poolBlock)
-	if err != nil {
-		log.Fatal("could not get block donations: ", err)
-	}
-
-	return poolBlock, blockSubs, blockUnsubs, blockDonations
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {

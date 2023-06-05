@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"testing"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
@@ -161,4 +162,27 @@ func Test_WithdrawalCredentials(t *testing.T) {
 func Test_AreAddressEqual(t *testing.T) {
 	require.Equal(t, true, Equals("0x0000", "0x0000"))
 	require.Equal(t, false, Equals("0x0000", "0x0001"))
+}
+
+func Test_GetWithdrawalAndType(t *testing.T) {
+	// Test eth1 credentials
+	validator1 := &v1.Validator{
+		Validator: &phase0.Validator{
+			WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+	with1, type1 := GetWithdrawalAndType(validator1)
+
+	require.Equal(t, with1, "0x9427a30991170f917d7b83def6e44d26577871ed")
+	require.Equal(t, type1, Eth1Withdrawal)
+
+	validator2 := &v1.Validator{
+		Validator: &phase0.Validator{
+			WithdrawalCredentials: []byte{0, 237, 117, 12, 189, 237, 170, 57, 218, 105, 83, 46, 238, 100, 154, 93, 58, 32, 43, 49, 13, 226, 166, 100, 90, 241, 221, 125, 172, 160, 253, 34},
+		},
+	}
+	with2, type2 := GetWithdrawalAndType(validator2)
+
+	require.Equal(t, with2, "0xed750cbdedaa39da69532eee649a5d3a202b310de2a6645af1dd7daca0fd22")
+	require.Equal(t, type2, BlsWithdrawal)
 }
