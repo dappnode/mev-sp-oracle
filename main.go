@@ -30,15 +30,15 @@ func main() {
 	log.Info("Version: ", config.ReleaseVersion)
 
 	// Load config from cli
-	cfg, err := config.NewCliConfig()
+	cliCfg, err := config.NewCliConfig()
 	if err != nil {
 		log.Fatal("error parsing the cli config: ", err)
 	}
 
 	// Load key with rights to update the oracle (if not dry run)
 	var updaterKey *ecdsa.PrivateKey
-	if !cfg.DryRun {
-		keystore, err := oracle.DecryptKey(cfg)
+	if !cliCfg.DryRun {
+		keystore, err := oracle.DecryptKey(cliCfg)
 		if err != nil {
 			log.Fatal("Could not decrypt updater key: ", err)
 		}
@@ -47,28 +47,23 @@ func main() {
 	}
 
 	// Instance of the onchain object to handle onchain interactions
-	onchain, err := oracle.NewOnchain(cfg, updaterKey)
+	onchain, err := oracle.NewOnchain(cliCfg, updaterKey)
 	if err != nil {
 		log.Fatal("Could not create new onchain object: ", err)
 	}
 
+	// Populate config, most of the parameters are loaded from the smart contract
+	cfg := onchain.GetConfigFromContract(cliCfg)
+
 	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)
-
-	balance, err := onchain.GetEthBalance(cfg.PoolAddress)
-	if err != nil {
-		log.Fatal("Could not get pool address balance: " + err.Error())
-	}
-	log.WithFields(log.Fields{
-		"Address":    cfg.PoolAddress,
-		"BalanceWei": balance,
-	}).Info("Pool Address Balance")
 
 	err = oracleInstance.State().LoadStateFromFile()
 	if err == nil {
 		log.Info("Found previous state to continue syncing")
 	} else {
 		log.Info("Previous state not found or could not be loaded, syncing from the begining: ", err)
+		log.Info("Starting to process from slot: ", cfg.DeployedSlot)
 	}
 
 	api := api.NewApiService(cfg, oracleInstance, onchain)
@@ -281,7 +276,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 			} else {
 				if !cfg.DryRun && syncedWithOnchainRoot && !oracle.Equals(latestOnchainRoot, newOracleRoot) {
-					txHash := onchain.UpdateContractMerkleRoot(newOracleRoot)
+					txHash := onchain.UpdateContractMerkleRoot(oracleInstance.State().LatestCommitedState.Slot, newOracleRoot)
 					_ = txHash
 				}
 			}

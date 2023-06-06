@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/hako/durafmt"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -199,7 +200,7 @@ func Equals(a string, b string) bool {
 	return false
 }
 
-func DecryptKey(cfg *config.Config) (*keystore.Key, error) {
+func DecryptKey(cfg *config.CliConfig) (*keystore.Key, error) {
 	// Only parse it not in dry run mode
 	if !cfg.DryRun {
 		jsonBytes, err := ioutil.ReadFile(cfg.UpdaterKeyPath)
@@ -256,4 +257,9 @@ func GetActivationSlotOfLatestProcessedValidator(
 
 	SlotsInEpoch := uint64(32)
 	return latestEpoch * SlotsInEpoch
+}
+
+// TODO: unit test
+func WeiToEther(wei *big.Int) *big.Float {
+	return new(big.Float).Quo(new(big.Float).SetInt(wei), big.NewFloat(params.Ether))
 }

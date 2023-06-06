@@ -268,19 +268,23 @@ func (state *OracleState) LoadStateFromFile() error {
 	}
 
 	if readState.Config.Network != state.Config.Network {
-		log.Fatal("Network mismatch. Expected: ", state.Config.Network, " Got: ", readState.Config.Network)
+		log.Fatal("Error loading state from file. Network mismatch. Expected: ",
+			state.Config.Network, " Got: ", readState.Config.Network)
 	}
 
 	if readState.Config.PoolAddress != state.Config.PoolAddress {
-		log.Fatal("PoolAddress mismatch. Expected: ", state.Config.PoolAddress, " Got: ", readState.Config.PoolAddress)
+		log.Fatal("Error loading state from file. PoolAddress mismatch. Expected: ",
+			state.Config.PoolAddress, " Got: ", readState.Config.PoolAddress)
 	}
 
 	if readState.Config.PoolFeesAddress != state.Config.PoolFeesAddress {
-		log.Fatal("PoolFeesAddress mismatch. Expected: ", state.Config.PoolFeesAddress, " Got: ", readState.Config.PoolFeesAddress)
+		log.Fatal("Error loading state from file. PoolFeesAddress mismatch. Expected: ",
+			state.Config.PoolFeesAddress, " Got: ", readState.Config.PoolFeesAddress)
 	}
 
 	if readState.Config.PoolFeesPercent != state.Config.PoolFeesPercent {
-		log.Fatal("PoolFeesPercent mismatch. Expected: ", state.Config.PoolFeesPercent, " Got: ", readState.Config.PoolFeesPercent)
+		log.Fatal("Error loading state from file. PoolFeesPercent mismatch. Expected: ",
+			state.Config.PoolFeesPercent, " Got: ", readState.Config.PoolFeesPercent)
 	}
 
 	mRoot, enoughData := readState.GetMerkleRootIfAny()
@@ -773,14 +777,23 @@ func (state *OracleState) IncreaseAllPendingRewards(
 		return
 	}
 
+	if state.PoolFeesPercent > 100*100 {
+		log.Fatal("Pool fees percent cannot be greater than 100% (10000) value: ", state.PoolFeesPercent)
+	}
+
+	// 100 is the % and the other 100 is because we use two decimals
+	// eg 1000 is 10%
+	// eg 50 is 0.5%
+	over := big.NewInt(100 * 100)
+
 	// The pool takes PoolFeesPercent cut of the rewards
 	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(state.PoolFeesPercent)))
 
 	// Calculate the pool cut
-	poolCut := big.NewInt(0).Div(aux, big.NewInt(100))
+	poolCut := big.NewInt(0).Div(aux, over)
 
 	// And remainder of above operation
-	remainder1 := big.NewInt(0).Mod(aux, big.NewInt(100))
+	remainder1 := big.NewInt(0).Mod(aux, over)
 
 	// The amount to share is the reward minus the pool cut + remainder
 	toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
