@@ -19,7 +19,7 @@ Latest master is available and identified by its first 7 commit digits.
 dappnode/mev-sp-oracle:583e6e1
 ```
 
-## Roles
+## Roles
 
 The oracle can run in two modes:
 * Updater: Recreates the state of all validator balances and every `checkpoint-size` updates the onchain contract with the new merkle root. Note that this mode requires to be configured with a valid keystore (containing the encrypted key) and this address must be allowed to update the contract onchain. Said account requires gas to pay for gas fees.
@@ -33,15 +33,9 @@ Running in `updater` mode:
 ./mev-sp-oracle \
 --consensus-endpoint="http://127.0.0.1:5051" \
 --execution-endpoint="http://127.0.0.1:8545" \
---deployed-slot=5536400 \
---pool-address=0x553BD5a94bcC09FFab6550274d5db140a95AE9bC \
---checkpoint-size=10000 \
---pool-fees-percent=10 \
---pool-fees-address=0x692E1Afbc1b0F9Ad6f67a4868A56D138C822D400 \
---network=goerli \
---collateral-in-wei=10000000000000000 \
---updater-keystore-path=yyy \
---updater-keystore-pass=xxx
+--pool-address=0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243 \
+--updater-keystore-path=xxx \
+--updater-keystore-pass=yyy
 ```
 
 Running in verifier mode:
@@ -50,19 +44,13 @@ Running in verifier mode:
 ./mev-sp-oracle \
 --consensus-endpoint="http://127.0.0.1:5051" \
 --execution-endpoint="http://127.0.0.1:8545" \
---deployed-slot=5536700 \
---pool-address=0x553BD5a94bcC09FFab6550274d5db140a95AE9bC \
---checkpoint-size=3000 \
---pool-fees-percent=10 \
---pool-fees-address=0x692E1Afbc1b0F9Ad6f67a4868A56D138C822D400 \
---network=goerli \
---collateral-in-wei=10000000000000000 \
+--pool-address=0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243 \
 --dry-run
 ```
 
 ## How to deploy
 
-### Goerli Testnet
+### Goerli Testnet
 
 Debug tools:
 * https://prater.beaconcha.in

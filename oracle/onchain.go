@@ -46,17 +46,17 @@ var ProposalDutyCache EpochDuties
 type Onchain struct {
 	ConsensusClient *http.Service
 	ExecutionClient *ethclient.Client
-	Cfg             *config.Config
+	CliCfg          *config.CliConfig
 	Contract        *contract.Contract
 	NumRetries      int
 	updaterKey      *ecdsa.PrivateKey
 	validators      map[phase0.ValidatorIndex]*v1.Validator
 }
 
-func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
+func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
 
 	// Dial the execution client
-	executionClient, err := ethclient.Dial(cfg.ExecutionEndpoint)
+	executionClient, err := ethclient.Dial(cliCfg.ExecutionEndpoint)
 	if err != nil {
 		return nil, errors.New("Error dialing execution client: " + err.Error())
 	}
@@ -71,7 +71,7 @@ func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, err
 	// Dial the consensus client
 	client, err := http.New(context.Background(),
 		http.WithTimeout(120*time.Second),
-		http.WithAddress(cfg.ConsensusEndpoint),
+		http.WithAddress(cliCfg.ConsensusEndpoint),
 		http.WithLogLevel(zerolog.WarnLevel),
 	)
 	if err != nil {
@@ -85,7 +85,7 @@ func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, err
 		return nil, errors.New("Error fetching deposit contract from consensus client: " + err.Error())
 	}
 	log.Info("Connected succesfully to consensus client. ChainId: ", depositContract.ChainID,
-		" DepositContract: ", hex.EncodeToString(depositContract.Address[:]))
+		" DepositContract: ", "0x"+hex.EncodeToString(depositContract.Address[:]))
 
 	if depositContract.ChainID != uint64(chainId.Int64()) {
 		return nil, fmt.Errorf("ChainId from consensus and execution client do not match: %d vs %d", depositContract.ChainID, uint64(chainId.Int64()))
@@ -119,9 +119,8 @@ func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, err
 		log.Info("Consensus client is NOT in sync, slots behind: ", consSync.SyncDistance)
 	}
 
-	// TODO: Get this from Config.
 	// Instantiate the smoothing pool contract to run get/set operations on it
-	address := common.HexToAddress(cfg.PoolAddress)
+	address := common.HexToAddress(cliCfg.PoolAddress)
 	contract, err := contract.NewContract(address, executionClient)
 	if err != nil {
 		return nil, errors.New("Error instantiating contract: " + err.Error())
@@ -130,7 +129,7 @@ func NewOnchain(cfg *config.Config, updaterKey *ecdsa.PrivateKey) (*Onchain, err
 	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
-		Cfg:             cfg,
+		CliCfg:          cliCfg,
 		Contract:        contract,
 		updaterKey:      updaterKey,
 	}, nil
@@ -214,6 +213,25 @@ func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.Valid
 	return validators, err
 }
 
+func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*types.Block, error) {
+	var err error
+	var block *types.Block
+
+	err = retry.Do(func() error {
+		block, err = o.ExecutionClient.BlockByNumber(context.Background(), blockNumber)
+		if err != nil {
+			log.Warn("Failed attempt to fetch block by number: ", err.Error(), " Retrying...")
+			return errors.New("Error fetching block by number: " + err.Error())
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Could not fetch block by number: " + err.Error())
+	}
+	return block, err
+}
+
 func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
 	// Hardcoded value, slots in an epoch
 	slotsInEpoch := uint64(32)
@@ -263,8 +281,6 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 	var header *types.Header
 	var err error
 
-	//block.GetBlockNumberBigInt(), block.GetBlockTransactions()
-
 	err = retry.Do(func() error {
 		header, err = o.ExecutionClient.HeaderByNumber(context.Background(), block.GetBlockNumberBigInt())
 		if err != nil {
@@ -280,7 +296,6 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 
 	var receipts []*types.Receipt
 	for _, rawTx := range block.GetBlockTransactions() {
-		// This should never happen
 		tx, _, err := DecodeTx(rawTx)
 		if err != nil {
 			log.Fatal(err)
@@ -310,6 +325,7 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 // is triggered by both donations and mev rewards.
 // normal eth tx: https://goerli.etherscan.io/tx/0xfeda23c2e9db46e69615a8bec74c4a9f3f9f7eb650659a13c9ad1f394c13698d
 // via sc: https://goerli.etherscan.io/tx/0x277cec5bcb60852b160a29dc9082b7e18a44333194cbe9c7d7b664e4b89b8c46
+// TODO: Test it
 func (o *Onchain) GetDonationEvents(blockNumber uint64, block Block, opts ...retry.Option) ([]Donation, error) {
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
@@ -373,7 +389,6 @@ func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
 
-	// TODO: Consider
 	// Not the most effective way, but we just need to advance one by one.
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
 
@@ -448,6 +463,78 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 	return blockUnsubscriptions, nil
 }
 
+func (o *Onchain) IsAddressWhitelisted(
+	deployedBlock uint64,
+	address string,
+	opts ...retry.Option) (bool, error) {
+
+	var err error
+
+	latestBlock, err := o.ExecutionClient.BlockNumber(context.Background())
+	if err != nil {
+		return false, errors.New("Error getting latest block number: " + err.Error())
+	}
+
+	if deployedBlock > latestBlock {
+		return false, errors.New(fmt.Sprintf("Deployed block is higher than latest block: %d > %d",
+			deployedBlock, latestBlock))
+	}
+
+	// How many blocks to check at once. A very high value can choke the node
+	// Around 10k to 30k should be a reasonable value. 30k is around 4 days of
+	// events in one call.
+	chunkSize := uint64(30000)
+
+	// Listen for even since the deployed block till the latest block in
+	// increments of chunkSize
+	for start := deployedBlock; start < latestBlock; start += chunkSize {
+		end := start + chunkSize - 1
+
+		if end > latestBlock {
+			end = latestBlock
+		}
+
+		log.Info("Checking whitelist events from block ", start, " to ", end)
+
+		filterOpts := &bind.FilterOpts{Context: context.Background(), Start: start, End: &end}
+
+		var itr *contract.ContractAddOracleMemberIterator
+
+		err = retry.Do(func() error {
+			itr, err = o.Contract.FilterAddOracleMember(filterOpts)
+			if err != nil {
+				log.Warn("Failed attempt to filter AddOracleMember event. Retrying...")
+				return errors.New("Failed attempt to filter AddOracleMember event. Retrying...")
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+		if err != nil {
+			return false, errors.New("Error getting AddOracleMember events")
+		}
+
+		// Loop over all found events
+		for itr.Next() {
+			newOracleMember := itr.Event.NewOracleMember.String()
+
+			// If we found an event with the address we are looking for, return true
+			// as it means the address is whitelisted
+			if Equals(address, newOracleMember) {
+				log.WithFields(log.Fields{
+					"TxHash":          itr.Event.Raw.TxHash.String(),
+					"NewOracleMember": itr.Event.NewOracleMember.String(),
+				}).Info("Detected AddOracleMember with selected account")
+				return true, nil
+			}
+		}
+		err = itr.Close()
+		if err != nil {
+			log.Fatal("could not close iterator for new donation events", err)
+		}
+	}
+	return false, nil
+}
+
 func (o *Onchain) GetContractCollateral(opts ...retry.Option) (*big.Int, error) {
 	subscriptionCollateral := new(big.Int)
 	err := retry.Do(
@@ -466,6 +553,94 @@ func (o *Onchain) GetContractCollateral(opts ...retry.Option) (*big.Int, error) 
 		return nil, errors.New("could not get subscription collateral from contract: " + err.Error())
 	}
 	return subscriptionCollateral, nil
+}
+
+func (o *Onchain) GetSlotCheckpointSize(opts ...retry.Option) (uint64, error) {
+	var slotCheckpointSize uint64
+	var err error
+
+	err = retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			slotCheckpointSize, err = o.Contract.CheckpointSlotSize(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get slot checkpoint size from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get slot checkpoint size from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return 0, errors.New("could not get claimed balance from contract: " + err.Error())
+	}
+
+	return slotCheckpointSize, nil
+}
+
+func (o *Onchain) GetContractDeploymentBlock(opts ...retry.Option) (*big.Int, error) {
+	var deploymentBlock *big.Int
+	var err error
+
+	err = retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			deploymentBlock, err = o.Contract.DeploymentBlockNumber(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get deployment block from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get deployment block from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("could not get deployment block from contract: " + err.Error())
+	}
+
+	return deploymentBlock, nil
+}
+
+func (o *Onchain) GetPoolFee(opts ...retry.Option) (*big.Int, error) {
+	var poolFee *big.Int
+	var err error
+
+	err = retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			poolFee, err = o.Contract.PoolFee(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get pool fee from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get pool fee from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("could not get pool fee from contract: " + err.Error())
+	}
+
+	return poolFee, nil
+}
+
+func (o *Onchain) GetPoolFeeAddress(opts ...retry.Option) (string, error) {
+	var poolFeeAddress common.Address
+	var err error
+
+	err = retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			poolFeeAddress, err = o.Contract.PoolFeeRecipient(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get pool fee address from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get pool fee address from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return "", errors.New("could not get pool fee address from contract: " + err.Error())
+	}
+
+	return poolFeeAddress.Hex(), nil
 }
 
 func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
@@ -631,7 +806,7 @@ func (o *Onchain) GetBlock(slot uint64, state *OracleState) (Block, error) {
 	}
 
 	// If the reward was sent to the pool
-	if Equals(rewardRecipient, o.Cfg.PoolAddress) {
+	if Equals(rewardRecipient, o.CliCfg.PoolAddress) {
 		if withdrawalType == BlsWithdrawal {
 			// If it was sent to the pool but the validator has BLS withdrawal credentials
 			return Block{
@@ -675,7 +850,132 @@ func (o *Onchain) GetBlock(slot uint64, state *OracleState) (Block, error) {
 
 }
 
-func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
+func (onchain *Onchain) GetConfigFromContract(
+	cliCfg *config.CliConfig) *config.Config {
+
+	MainnetChainId := uint64(1)
+	GoerliChainId := uint64(5)
+
+	chainId, err := onchain.ExecutionClient.ChainID(context.Background())
+	if err != nil {
+		log.Fatal("Could not get chainid: " + err.Error())
+	}
+
+	depositContract, err := onchain.ConsensusClient.DepositContract(context.Background())
+	if err != nil {
+		log.Fatal("Could not get deposit contract: " + err.Error())
+	}
+
+	if depositContract.ChainID != uint64(chainId.Int64()) {
+		log.Fatal("ChainID from consensus and execution client dont match: ",
+			depositContract.ChainID, " != ", chainId.Int64())
+	}
+
+	network := ""
+	if depositContract.ChainID == MainnetChainId {
+		network = "mainnet"
+	} else if depositContract.ChainID == GoerliChainId {
+		network = "goerli"
+	} else {
+		log.Fatal("ChainID not supported: ", depositContract.ChainID)
+	}
+
+	genesis, err := onchain.ConsensusClient.Genesis(context.Background())
+	if err != nil {
+		log.Fatal("Could not get genesis: " + err.Error())
+	}
+
+	genesisTime := uint64(genesis.GenesisTime.Unix())
+
+	log.Info("Configured smoothing pool address: ", cliCfg.PoolAddress, " in network: ", network)
+
+	balance, err := onchain.GetEthBalance(cliCfg.PoolAddress)
+	if err != nil {
+		log.Fatal("Could not get pool address balance: " + err.Error())
+	}
+	log.Info("Pool address balance: ", WeiToEther(balance), " Eth")
+
+	deployedBlock, err := onchain.GetContractDeploymentBlock()
+	if err != nil {
+		log.Fatal("Could not get contract deployment block: " + err.Error())
+	}
+	log.Info("[Loaded from contract] Contract deployed at block: ", deployedBlock)
+
+	block, err := onchain.BlockByNumber(deployedBlock)
+	if err != nil {
+		log.Fatal("Could not get block by number: " + err.Error())
+	}
+
+	blockTime := block.Time()
+	SecondsInSlot := uint64(12)
+	deployedSlot := (blockTime - genesisTime) / SecondsInSlot
+
+	/*
+		blockAtSlot, err := onchain.GetConsensusBlockAtSlot(deployedSlot)
+		if err != nil {
+			log.Fatal("Could not get block at slot: " + err.Error())
+		}
+
+		customBlockAtSlot := oracle.VersionedSignedBeaconBlock{blockAtSlot}
+		if customBlockAtSlot.GetBlockNumber() != deployedBlock.Uint64() {
+			log.Fatal("Could not map the deployed block with a slot, missmatch: ",
+				customBlockAtSlot.GetBlockNumber(), " != ", deployedBlock)
+		}*/
+
+	log.Info("[Loaded from contract] Contract deployed in slot: ", deployedSlot)
+
+	checkPointSizeInSlots, err := onchain.GetSlotCheckpointSize()
+	if err != nil {
+		log.Fatal("Could not get slot checkpoint size: " + err.Error())
+	}
+	log.Info("[Loaded from contract] Checkpoints will be created every ", checkPointSizeInSlots, " slots (", SlotsToTime(checkPointSizeInSlots), ")")
+
+	poolFeesPercentTwoDecimals, err := onchain.GetPoolFee()
+	if err != nil {
+		log.Fatal("Could not get pool fee: " + err.Error())
+	}
+	log.Info("[Loaded from contract] Pool fees percent: ", float64(poolFeesPercentTwoDecimals.Uint64())/100, "% (raw value: ", poolFeesPercentTwoDecimals, ")")
+
+	poolFeesAddress, err := onchain.GetPoolFeeAddress()
+	if err != nil {
+		log.Fatal("Could not get pool fee address: " + err.Error())
+	}
+	log.Info("[Loaded from contract] Pool fees address: ", poolFeesAddress, " (ensure you control its private key)")
+
+	ethCollateralInWei, err := onchain.GetContractCollateral()
+	if err != nil {
+		log.Fatal("Could not get contract collateral: " + err.Error())
+	}
+	log.Info("[Loaded from contract] Required collateral to join the pool: ",
+		ethCollateralInWei, " wei (", WeiToEther(ethCollateralInWei), " Eth)")
+
+	if cliCfg.DryRun {
+		log.Warn("The pool contract WILL NOT be updated, running in dry-run mode")
+	} else {
+		log.Warn("The pool contract WILL BE updated, running in normal mode")
+	}
+
+	conf := &config.Config{
+		ConsensusEndpoint:     cliCfg.ConsensusEndpoint,
+		ExecutionEndpoint:     cliCfg.ExecutionEndpoint,
+		Network:               network,
+		PoolAddress:           cliCfg.PoolAddress,
+		DeployedSlot:          deployedSlot,
+		DeployedBlock:         deployedBlock.Uint64(),
+		CheckPointSizeInSlots: checkPointSizeInSlots,
+		PoolFeesPercent:       int(poolFeesPercentTwoDecimals.Uint64()),
+		PoolFeesAddress:       poolFeesAddress,
+		CollateralInWei:       ethCollateralInWei,
+		DryRun:                cliCfg.DryRun,
+		NumRetries:            cliCfg.NumRetries,
+		UpdaterKeyPass:        cliCfg.UpdaterKeyPass,
+		UpdaterKeyPath:        cliCfg.UpdaterKeyPath,
+	}
+
+	return conf
+}
+
+func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) string {
 
 	// Support both 0x prefixed and non prefixed merkle roots
 	if strings.HasPrefix(newMerkleRoot, "0x") {
@@ -732,14 +1032,13 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	auth.Value = big.NewInt(0)
 
 	// nil prices automatically estimate prices
-	// TODO: Perhaps overpay to make sure the tx is not stuck forever.
 	auth.GasPrice = nil
 	auth.GasFeeCap = nil
 	auth.GasTipCap = nil
 	auth.NoSend = false
 	auth.Context = context.Background()
 
-	address := common.HexToAddress(o.Cfg.PoolAddress)
+	address := common.HexToAddress(o.CliCfg.PoolAddress)
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)
 	if err != nil {
@@ -747,7 +1046,7 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 	}
 
 	// Create a tx calling the update rewards root function with the new merkle root
-	tx, err := instance.UpdateRewardsRoot(auth, newMerkleRootBytes)
+	tx, err := instance.SubmitReport(auth, slot, newMerkleRootBytes)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -757,8 +1056,8 @@ func (o *Onchain) UpdateContractMerkleRoot(newMerkleRoot string) string {
 		"NewMerkleRoot": newMerkleRoot,
 	}).Info("Tx sent to Ethereum updating rewards merkle root, wait to be validated")
 
-	// Leave 15 minutes for the tx to be validated
-	deadline := time.Now().Add(15 * time.Minute)
+	// Leave 60 minutes for the tx to be validated
+	deadline := time.Now().Add(60 * time.Minute)
 	ctx, cancelCtx := context.WithDeadline(context.Background(), deadline)
 	defer cancelCtx()
 
@@ -817,7 +1116,7 @@ func (o *Onchain) GetRetryOpts(opts []retry.Option) []retry.Option {
 	// to override the default retry options
 	if len(opts) == 0 {
 		return []retry.Option{
-			retry.Attempts(uint(o.Cfg.NumRetries)),
+			retry.Attempts(uint(o.CliCfg.NumRetries)),
 			retry.Delay(15 * time.Second),
 		}
 	} else {

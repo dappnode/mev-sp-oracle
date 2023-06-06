@@ -24,7 +24,7 @@ var skip = true
 // Fetches the balance of a given address
 func Test_FetchFromExecution(t *testing.T) {
 	t.Skip("Skipping test")
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
@@ -42,7 +42,7 @@ func Test_FetchFromExecution(t *testing.T) {
 func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	t.Skip("Skipping test")
 
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 	}
@@ -110,7 +110,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 func Test_GetBlock(t *testing.T) {
 	t.Skip("Skipping test")
 
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 		PoolAddress:       "0xf29ff96aaea6c9a1fba851f74737f3c069d4f1a9",
@@ -143,7 +143,7 @@ func Test_GetBlock_WrongFee(t *testing.T) {
 		t.Skip("Skipping test")
 	}
 
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 		PoolAddress:       "0x0000000000000000000000000000000000000000",
@@ -180,7 +180,7 @@ func Test_GetBlock_OkProposal_Mev(t *testing.T) {
 		t.Skip("Skipping test")
 	}
 
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 		PoolAddress:       "0x94750381bE1AbA0504C666ee1DB118F68f0780D4",
@@ -218,7 +218,7 @@ func Test_GetBlock_OkProposal_Vanila(t *testing.T) {
 		t.Skip("Skipping test")
 	}
 
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 		PoolAddress:       "0x94750381bE1AbA0504C666ee1DB118F68f0780D4",
@@ -255,7 +255,7 @@ func Test_GetBlock_WrongFee_NotSubscribed(t *testing.T) {
 		t.Skip("Skipping test")
 	}
 
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 		PoolAddress:       "0x0000000000000000000000000000000000000000",
@@ -290,7 +290,7 @@ func Test_GetBlock_Missed_Subscribed(t *testing.T) {
 		t.Skip("Skipping test")
 	}
 
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 		PoolAddress:       "0x0000000000000000000000000000000000000000",
@@ -326,7 +326,7 @@ func Test_GetBlock_Irrelevant_Vanila(t *testing.T) {
 		t.Skip("Skipping test")
 	}
 
-	var cfgOnchain = &config.Config{
+	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
 		PoolAddress:       "0x0000000000000000000000000000000000000000",
@@ -353,4 +353,24 @@ func Test_GetBlock_Irrelevant_Vanila(t *testing.T) {
 
 	require.Equal(t, expectedBlock, &block)
 	log.Info(block)
+}
+
+func Test_IsAddressWhitelisted(t *testing.T) {
+	if skip {
+		t.Skip("Skipping test")
+	}
+
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:5051",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       "0x8eba4a4a8d4dfa78bcb734efd1ea9f33b61e3243",
+	}
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+
+	// Hardcoded for this contract: https://goerli.etherscan.io/address/0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243
+	deployedBlock := uint64(9094304)
+	isWhitelisted, err := onchain.IsAddressWhitelisted(deployedBlock, "0x14264aD0471ee1f068CFAC40A9FcC352274ced56")
+	require.NoError(t, err)
+	require.Equal(t, true, isWhitelisted)
 }
