@@ -281,8 +281,6 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 	var header *types.Header
 	var err error
 
-	//block.GetBlockNumberBigInt(), block.GetBlockTransactions()
-
 	err = retry.Do(func() error {
 		header, err = o.ExecutionClient.HeaderByNumber(context.Background(), block.GetBlockNumberBigInt())
 		if err != nil {
@@ -298,7 +296,6 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 
 	var receipts []*types.Receipt
 	for _, rawTx := range block.GetBlockTransactions() {
-		// This should never happen
 		tx, _, err := DecodeTx(rawTx)
 		if err != nil {
 			log.Fatal(err)
@@ -328,6 +325,7 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 // is triggered by both donations and mev rewards.
 // normal eth tx: https://goerli.etherscan.io/tx/0xfeda23c2e9db46e69615a8bec74c4a9f3f9f7eb650659a13c9ad1f394c13698d
 // via sc: https://goerli.etherscan.io/tx/0x277cec5bcb60852b160a29dc9082b7e18a44333194cbe9c7d7b664e4b89b8c46
+// TODO: Test it
 func (o *Onchain) GetDonationEvents(blockNumber uint64, block Block, opts ...retry.Option) ([]Donation, error) {
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
@@ -463,6 +461,78 @@ func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Opti
 		log.Fatal("could not close iterator for new donation events", err)
 	}
 	return blockUnsubscriptions, nil
+}
+
+func (o *Onchain) IsAddressWhitelisted(
+	deployedBlock uint64,
+	address string,
+	opts ...retry.Option) (bool, error) {
+
+	var err error
+
+	latestBlock, err := o.ExecutionClient.BlockNumber(context.Background())
+	if err != nil {
+		return false, errors.New("Error getting latest block number: " + err.Error())
+	}
+
+	if deployedBlock > latestBlock {
+		return false, errors.New(fmt.Sprintf("Deployed block is higher than latest block: %d > %d",
+			deployedBlock, latestBlock))
+	}
+
+	// How many blocks to check at once. A very high value can choke the node
+	// Around 10k to 30k should be a reasonable value. 30k is around 4 days of
+	// events in one call.
+	chunkSize := uint64(30000)
+
+	// Listen for even since the deployed block till the latest block in
+	// increments of chunkSize
+	for start := deployedBlock; start < latestBlock; start += chunkSize {
+		end := start + chunkSize - 1
+
+		if end > latestBlock {
+			end = latestBlock
+		}
+
+		log.Info("Checking whitelist events from block ", start, " to ", end)
+
+		filterOpts := &bind.FilterOpts{Context: context.Background(), Start: start, End: &end}
+
+		var itr *contract.ContractAddOracleMemberIterator
+
+		err = retry.Do(func() error {
+			itr, err = o.Contract.FilterAddOracleMember(filterOpts)
+			if err != nil {
+				log.Warn("Failed attempt to filter AddOracleMember event. Retrying...")
+				return errors.New("Failed attempt to filter AddOracleMember event. Retrying...")
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+		if err != nil {
+			return false, errors.New("Error getting AddOracleMember events")
+		}
+
+		// Loop over all found events
+		for itr.Next() {
+			newOracleMember := itr.Event.NewOracleMember.String()
+
+			// If we found an event with the address we are looking for, return true
+			// as it means the address is whitelisted
+			if Equals(address, newOracleMember) {
+				log.WithFields(log.Fields{
+					"TxHash":          itr.Event.Raw.TxHash.String(),
+					"NewOracleMember": itr.Event.NewOracleMember.String(),
+				}).Info("Detected AddOracleMember with selected account")
+				return true, nil
+			}
+		}
+		err = itr.Close()
+		if err != nil {
+			log.Fatal("could not close iterator for new donation events", err)
+		}
+	}
+	return false, nil
 }
 
 func (o *Onchain) GetContractCollateral(opts ...retry.Option) (*big.Int, error) {
@@ -883,7 +953,6 @@ func (onchain *Onchain) GetConfigFromContract(
 		log.Warn("The pool contract WILL NOT be updated, running in dry-run mode")
 	} else {
 		log.Warn("The pool contract WILL BE updated, running in normal mode")
-		// TODO: Check key matches with the oracle.
 	}
 
 	conf := &config.Config{
@@ -892,6 +961,7 @@ func (onchain *Onchain) GetConfigFromContract(
 		Network:               network,
 		PoolAddress:           cliCfg.PoolAddress,
 		DeployedSlot:          deployedSlot,
+		DeployedBlock:         deployedBlock.Uint64(),
 		CheckPointSizeInSlots: checkPointSizeInSlots,
 		PoolFeesPercent:       int(poolFeesPercentTwoDecimals.Uint64()),
 		PoolFeesAddress:       poolFeesAddress,

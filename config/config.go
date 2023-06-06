@@ -18,6 +18,7 @@ type Config struct {
 	Network               string   `json:"network"`
 	PoolAddress           string   `json:"pool_address"`
 	DeployedSlot          uint64   `json:"deployed_slot"`
+	DeployedBlock         uint64   `json:"deployed_block"`
 	CheckPointSizeInSlots uint64   `json:"checkpoint_size"`
 	PoolFeesPercent       int      `json:"pool_fees_percent"` // With 2 decimals (eg 1.5% = 150)
 	PoolFeesAddress       string   `json:"pool_fees_address"`

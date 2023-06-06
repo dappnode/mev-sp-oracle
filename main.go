@@ -37,13 +37,15 @@ func main() {
 
 	// Load key with rights to update the oracle (if not dry run)
 	var updaterKey *ecdsa.PrivateKey
+	var updaterAddress string
 	if !cliCfg.DryRun {
 		keystore, err := oracle.DecryptKey(cliCfg)
 		if err != nil {
 			log.Fatal("Could not decrypt updater key: ", err)
 		}
 		updaterKey = keystore.PrivateKey
-		log.Info("Oracle contract will be update with address: ", keystore.Address.String(), " ensure it has permissions to update the contract")
+		updaterAddress = keystore.Address.String()
+		log.Info("Oracle contract will be update with address: ", updaterAddress)
 	}
 
 	// Instance of the onchain object to handle onchain interactions
@@ -54,6 +56,19 @@ func main() {
 
 	// Populate config, most of the parameters are loaded from the smart contract
 	cfg := onchain.GetConfigFromContract(cliCfg)
+
+	// If we are not in dry run mode, means this instance will update the contract
+	if !cfg.DryRun {
+		log.Info("Checking if configured address ", updaterAddress, " is whitelisted to update the contract")
+		isWhitelisted, err := onchain.IsAddressWhitelisted(cfg.DeployedBlock, updaterAddress)
+		if err != nil {
+			log.Fatal("Could not get whitelist status: " + err.Error())
+		}
+		if !isWhitelisted {
+			log.Fatal("Pool address is not whitelisted, please run the 'whitelist' command first")
+		}
+		log.Info("Ok ", updaterAddress, " is whitelisted")
+	}
 
 	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)

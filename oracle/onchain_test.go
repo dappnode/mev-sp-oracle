@@ -354,3 +354,23 @@ func Test_GetBlock_Irrelevant_Vanila(t *testing.T) {
 	require.Equal(t, expectedBlock, &block)
 	log.Info(block)
 }
+
+func Test_IsAddressWhitelisted(t *testing.T) {
+	if skip {
+		t.Skip("Skipping test")
+	}
+
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:5051",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       "0x8eba4a4a8d4dfa78bcb734efd1ea9f33b61e3243",
+	}
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+
+	// Hardcoded for this contract: https://goerli.etherscan.io/address/0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243
+	deployedBlock := uint64(9094304)
+	isWhitelisted, err := onchain.IsAddressWhitelisted(deployedBlock, "0x14264aD0471ee1f068CFAC40A9FcC352274ced56")
+	require.NoError(t, err)
+	require.Equal(t, true, isWhitelisted)
+}
