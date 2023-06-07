@@ -563,16 +563,13 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		}
 
 		requestedValidators[uint64(valIndex)] = &oracle.ValidatorInfo{
-			ValidatorStatus:         oracle.Untracked,
-			AccumulatedRewardsWei:   big.NewInt(0),
-			PendingRewardsWei:       big.NewInt(0),
-			CollateralWei:           big.NewInt(0),
-			WithdrawalAddress:       eth1Add,
-			ValidatorIndex:          uint64(validator.Index),
-			ValidatorKey:            "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
-			ValidatorProposedBlocks: make([]oracle.Block, 0),
-			ValidatorMissedBlocks:   make([]oracle.Block, 0),
-			ValidatorWrongFeeBlocks: make([]oracle.Block, 0),
+			ValidatorStatus:       oracle.Untracked,
+			AccumulatedRewardsWei: big.NewInt(0),
+			PendingRewardsWei:     big.NewInt(0),
+			CollateralWei:         big.NewInt(0),
+			WithdrawalAddress:     eth1Add,
+			ValidatorIndex:        uint64(validator.Index),
+			ValidatorKey:          "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
 		}
 	}
 

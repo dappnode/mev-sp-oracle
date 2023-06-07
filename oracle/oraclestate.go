@@ -121,17 +121,13 @@ type Unsubscription struct {
 
 // Represents all the information that is stored of a validator
 type ValidatorInfo struct {
-	ValidatorStatus         ValidatorStatus `json:"status"`
-	AccumulatedRewardsWei   *big.Int        `json:"accumulated_rewards_wei"`
-	PendingRewardsWei       *big.Int        `json:"pending_rewards_wei"`
-	CollateralWei           *big.Int        `json:"collateral_wei"`
-	WithdrawalAddress       string          `json:"withdrawal_address"`
-	ValidatorIndex          uint64          `json:"validator_index"`
-	ValidatorKey            string          `json:"validator_key"`
-	ValidatorProposedBlocks []Block         `json:"proposed_block"`
-	ValidatorMissedBlocks   []Block         `json:"missed_blocks"`
-	ValidatorWrongFeeBlocks []Block         `json:"wrong_fee_blocks"`
-
+	ValidatorStatus       ValidatorStatus `json:"status"`
+	AccumulatedRewardsWei *big.Int        `json:"accumulated_rewards_wei"`
+	PendingRewardsWei     *big.Int        `json:"pending_rewards_wei"`
+	CollateralWei         *big.Int        `json:"collateral_wei"`
+	WithdrawalAddress     string          `json:"withdrawal_address"` // TODO: Rename to: withdrawal_address (keeping it for backwards compatibility by now)
+	ValidatorIndex        uint64          `json:"validator_index"`
+	ValidatorKey          string          `json:"validator_key"`
 	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
 }
 
@@ -440,7 +436,6 @@ func (state *OracleState) HandleCorrectBlockProposal(block Block) {
 	state.AdvanceStateMachine(block.ValidatorIndex, ProposalOk)
 	state.IncreaseAllPendingRewards(block.Reward)
 	state.ConsolidateBalance(block.ValidatorIndex)
-	state.Validators[block.ValidatorIndex].ValidatorProposedBlocks = append(state.Validators[block.ValidatorIndex].ValidatorProposedBlocks, block)
 	state.ProposedBlocks = append(state.ProposedBlocks, block)
 }
 
@@ -576,16 +571,13 @@ func (state *OracleState) HandleManualSubscriptions(
 			if !state.IsTracked(valIdx) {
 				// If its not tracked, we create a new subscription
 				state.Validators[valIdx] = &ValidatorInfo{
-					ValidatorStatus:         NotSubscribed,
-					AccumulatedRewardsWei:   big.NewInt(0),
-					PendingRewardsWei:       big.NewInt(0),
-					CollateralWei:           collateral,
-					WithdrawalAddress:       validatorWithdrawal,
-					ValidatorIndex:          valIdx,
-					ValidatorKey:            "0x" + hex.EncodeToString(sub.Validator.Validator.PublicKey[:]),
-					ValidatorProposedBlocks: make([]Block, 0),
-					ValidatorMissedBlocks:   make([]Block, 0),
-					ValidatorWrongFeeBlocks: make([]Block, 0),
+					ValidatorStatus:       NotSubscribed,
+					AccumulatedRewardsWei: big.NewInt(0),
+					PendingRewardsWei:     big.NewInt(0),
+					CollateralWei:         collateral,
+					WithdrawalAddress:     validatorWithdrawal,
+					ValidatorIndex:        valIdx,
+					ValidatorKey:          "0x" + hex.EncodeToString(sub.Validator.Validator.PublicKey[:]),
 				}
 			}
 			log.WithFields(log.Fields{
@@ -624,13 +616,11 @@ func (state *OracleState) HandleBanValidator(block Block) {
 	state.ResetPendingRewards(block.ValidatorIndex)
 
 	// Store the proof of the wrong fee block. Reason why it was banned
-	state.Validators[block.ValidatorIndex].ValidatorWrongFeeBlocks = append(state.Validators[block.ValidatorIndex].ValidatorWrongFeeBlocks, block)
 	state.WrongFeeBlocks = append(state.WrongFeeBlocks, block)
 }
 
 func (state *OracleState) HandleMissedBlock(block Block) {
 	state.AdvanceStateMachine(block.ValidatorIndex, ProposalMissed)
-	state.Validators[block.ValidatorIndex].ValidatorMissedBlocks = append(state.Validators[block.ValidatorIndex].ValidatorMissedBlocks, block)
 	state.MissedBlocks = append(state.MissedBlocks, block)
 }
 
@@ -728,16 +718,13 @@ func (state *OracleState) AddSubscriptionIfNotAlready(valIndex uint64, Withdrawa
 		// If not found and not manually subscribed, we trigger the AutoSubscription event
 		// Instantiate the validator
 		validator = &ValidatorInfo{
-			ValidatorStatus:         NotSubscribed,
-			AccumulatedRewardsWei:   big.NewInt(0),
-			PendingRewardsWei:       big.NewInt(0),
-			CollateralWei:           big.NewInt(0),
-			WithdrawalAddress:       WithdrawalAddress,
-			ValidatorIndex:          valIndex,
-			ValidatorKey:            validatorKey,
-			ValidatorProposedBlocks: make([]Block, 0),
-			ValidatorMissedBlocks:   make([]Block, 0),
-			ValidatorWrongFeeBlocks: make([]Block, 0),
+			ValidatorStatus:       NotSubscribed,
+			AccumulatedRewardsWei: big.NewInt(0),
+			PendingRewardsWei:     big.NewInt(0),
+			CollateralWei:         big.NewInt(0),
+			WithdrawalAddress:     WithdrawalAddress,
+			ValidatorIndex:        valIndex,
+			ValidatorKey:          validatorKey,
 		}
 		state.Validators[valIndex] = validator
 
