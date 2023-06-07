@@ -18,7 +18,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 4,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -159,7 +158,7 @@
       },
       "id": 75,
       "options": {
-        "colorMode": "value",
+        "colorMode": "none",
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
@@ -221,7 +220,44 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 192
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "instance"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 115
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 74
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 9,
@@ -240,7 +276,8 @@
           ],
           "show": false
         },
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": []
       },
       "pluginVersion": "9.5.1",
       "targets": [
@@ -249,14 +286,33 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "editorMode": "builder",
-          "expr": "known_root_and_slot",
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "oracle_known_root_and_slot",
+          "format": "table",
+          "instant": true,
           "legendFormat": "__auto",
-          "range": true,
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "Oracle: Known Root and Slot (TODO)",
+      "title": "Oracle: Known Root and Slot",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "Time",
+                "instance",
+                "job",
+                "merkle_root",
+                "slot"
+              ]
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
@@ -382,7 +438,7 @@
       },
       "id": 76,
       "options": {
-        "colorMode": "value",
+        "colorMode": "none",
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
@@ -604,7 +660,7 @@
       },
       "id": 47,
       "options": {
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
@@ -616,7 +672,7 @@
           "values": false
         },
         "text": {},
-        "textMode": "value"
+        "textMode": "auto"
       },
       "pluginVersion": "9.5.1",
       "targets": [
@@ -2166,13 +2222,13 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Oracle Dashboard",
   "uid": "d77f0d6f-9d36-4c92-8189-4dda39cc6a0e",
-  "version": 13,
+  "version": 1,
   "weekStart": ""
 }
