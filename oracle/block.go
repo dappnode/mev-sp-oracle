@@ -5,12 +5,11 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -49,10 +48,7 @@ func NewFullBlock(
 	return fb
 }
 
-// Note that the MEV rewards usually goes in the last tx of each block
-// from the protocol fee recipient to the validator mev fee recipient
-// we check all just in case.
-
+// Returns if there was an mev reward and its amount and fee recipient if any
 // Example: this block https://prater.beaconcha.in/slot/5307417
 // Contains a mev reward of 0.53166 Ether
 // With the MEV Reward Recipient (mrr): 0x4D496CcC28058B1D74B7a19541663E21154f9c84
@@ -60,8 +56,7 @@ func NewFullBlock(
 // Note how the last tx of the block contains a tx pfr->mrr of 0.53166 Ether
 // Returns if a mev reward was present, its amount and the mev reward recipient
 func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
-	// We detect a MEV reward as the last tx of the block. If this last tx has a transfer
-	// from the protocol fee recipient to any address, we consider that a MEV reward.
+
 	txs := b.GetBlockTransactions()
 	lastTx := txs[len(txs)-1]
 
@@ -75,19 +70,7 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 		return big.NewInt(0), false, ""
 	}
 
-	// Last tx is from the protocol fee recipient to an address.
 	if Equals(b.GetFeeRecipient(), msg.From().String()) {
-		// TODO: Better to not log here
-		log.WithFields(log.Fields{
-			"Slot":            b.GetSlot(),
-			"Block":           b.GetBlockNumber(),
-			"ValIndex":        b.GetProposerIndex(),
-			"FeeRecipient":    b.GetFeeRecipient(),
-			"MEVFeeRecipient": msg.To().String(),
-			"Reward":          msg.Value(),
-			"TxHash":          tx.Hash().String(),
-			"Type":            "MevBlock",
-		}).Info("[Reward]")
 		return msg.Value(), true, strings.ToLower(tx.To().String())
 	}
 
@@ -100,55 +83,71 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 // the onchain to get the receipts from the consensus layer.s
 // Note that that this call is cheaper when the block is a MEV block, as there is no
 // need to reconstruct the tip from the txs.
-func (b *FullBlock) GetRewardAndRecipient() (*big.Int, string, RewardType, error) {
+func (b *FullBlock) GetSentRewardAndType(
+	poolAddress string,
+	isSubscriber bool) (*big.Int, bool, RewardType) {
 
-	var rewardAmount *big.Int = big.NewInt(0)
-	var rewardRecipient string = ""
-	var vanilaReward *big.Int = big.NewInt(0)
+	var reward *big.Int = big.NewInt(0)
 	var txType RewardType = UnknownRewardType
+	var wasRewardSent bool = false
 
-	// start checking if its a mev block, since its cheaper to check
-	mevReward, mevRewardPresent, mevRecipient := b.MevRewardInWei()
-
-	if mevRewardPresent {
-		txType = MevBlock
-		rewardAmount = mevReward
-		rewardRecipient = mevRecipient
-	}
-
-	// if its not a mev block, check if its a vanila block. note that this requires
-	// header and receipts fields to be populated, which is very expensive in terms
-	// of queries to the execution layer.
-	if !mevRewardPresent {
+	// We only calculate the tip for automatic subscribers or subscribed validators
+	// since its very expensive to calculate the tip for block we are not interested
+	if Equals(b.GetFeeRecipient(), poolAddress) || isSubscriber {
 		vanilaReward, err := b.GetProposerTip()
 		if err != nil {
 			log.Fatal("could not get proposer tip: ", err)
 		}
-		// TODO: Better to not log here
-		log.WithFields(log.Fields{
-			"Slot":         b.GetSlot(),
-			"Block":        b.GetBlockNumber(),
-			"ValIndex":     b.GetProposerIndex(),
-			"Reward":       vanilaReward.String(),
-			"Type":         "VanilaBlock",
-			"FeeRecipient": b.GetFeeRecipient(),
-		}).Info("[Reward]")
-
+		if Equals(b.GetFeeRecipient(), poolAddress) {
+			log.WithFields(log.Fields{
+				"Slot":         b.GetSlot(),
+				"Block":        b.GetBlockNumber(),
+				"ValIndex":     b.GetProposerIndex(),
+				"PoolAddress":  poolAddress,
+				"Reward":       reward.String(),
+				"Type":         "VanilaBlock",
+				"FeeRecipient": b.GetFeeRecipient(),
+			}).Info("[Reward]")
+			wasRewardSent = true
+		}
 		txType = VanilaBlock
-		rewardAmount = vanilaReward
-		rewardRecipient = b.GetFeeRecipient()
+		reward = vanilaReward
 	}
 
-	// sanity check. I assume we can't have both mev and vanila rewards. if we do, fail and revisit
-	// this happened in goerli, but a very weird scenario that should never happen in mainnet.
-	// can only occur if the pool address is the same as the fee recipient, aka our pool address
-	// is the same as the fee recipient sent by the builders.
-	if (mevReward.Cmp(big.NewInt(0)) == 1) && (vanilaReward.Cmp(big.NewInt(0)) == 1) {
-		log.Warn("Both VanilaReward and MevReward are !=0. ",
-			"mevReward: ", mevReward, "vanilaReward: ", vanilaReward, ". This should never happen in mainnet.")
+	// possible mev block
+	var mevReward *big.Int = big.NewInt(0)
+	mevReward, mevPresent, mevRecipient := b.MevRewardInWei()
+
+	if mevPresent {
+		txType = MevBlock
+		reward = mevReward
 	}
 
-	return rewardAmount, rewardRecipient, txType, nil
+	if mevPresent && Equals(mevRecipient, poolAddress) {
+		wasRewardSent = true
+		log.WithFields(log.Fields{
+			"Slot":            b.GetSlot(),
+			"Block":           b.GetBlockNumber(),
+			"ValIndex":        b.GetProposerIndex(),
+			"FeeRecipient":    b.GetFeeRecipient(),
+			"MEVFeeRecipient": mevRecipient,
+			"Reward":          mevReward,
+			"Type":            "MevBlock",
+		}).Info("[Reward]")
+	}
+	return reward, wasRewardSent, txType
+}
+
+func (b *FullBlock) IsAddressRewarded(address string) bool {
+	if Equals(b.GetFeeRecipient(), address) {
+		return true
+	}
+
+	_, isMev, mevRec := b.MevRewardInWei()
+	if isMev && Equals(mevRec, address) {
+		return true
+	}
+	return false
 }
 
 // Get proposer the proposer tip that went to the fee recepient.
@@ -211,6 +210,55 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 	proposerReward := new(big.Int).Sub(tips, burnt)
 
 	return proposerReward, nil
+}
+
+// Note that this does not detect tx made from smart contract, just plain eth txs
+// This function is called on everyblock and MevRewardInWei, which iterate the same
+// set of transactions. As a TODO: we can refactor this to only iterate once and get
+// both information.
+// TODO: Unused, only works for normal tx not internal
+func (b *FullBlock) GetDonations(poolAddress string) []Donation {
+	donations := []Donation{}
+
+	for _, rawTx := range b.GetBlockTransactions() {
+		tx, msg, err := DecodeTx(rawTx)
+		if err != nil {
+			log.Fatal("could not decode tx: ", err)
+		}
+		// If a transaction was sent to the pool
+		// And the sender is not the fee recipient (exclude MEV transactions)
+		// Note that msg.To() is nil for contract creation transactions
+		if msg.To() == nil {
+			continue
+		}
+
+		// This just detect normal eth transactions sent to the pool address, not via
+		// smart conrtacts interactions.
+		// It also ignores txs made by the fee recipient (MEV txs)
+		if Equals(msg.To().String(), poolAddress) && !Equals(msg.From().String(), b.GetFeeRecipient()) {
+
+			// We want pure eth transactions. If its a smart contract interaction (eg subscription)
+			// we skip it. Otherwise subscriptions would be detected as donations.
+			if len(msg.Data()) > 0 {
+				continue
+			}
+
+			log.WithFields(log.Fields{
+				"RewardWei":   msg.Value(),
+				"BlockNumber": b.GetBlockNumber(),
+				"Type":        "Donation",
+				"TxHash":      tx.Hash().String(),
+			}).Info("[Reward]")
+
+			donations = append(donations, Donation{
+				AmountWei: msg.Value(),
+				Block:     b.GetBlockNumber(),
+				TxHash:    tx.Hash().String(),
+			},
+			)
+		}
+	}
+	return donations
 }
 
 // Returns the fee recipient of the block, depending on the fork version
