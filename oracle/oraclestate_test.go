@@ -12,6 +12,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1734,4 +1735,173 @@ func Test_CanValidatorSubscribeToPool(t *testing.T) {
 	require.Equal(t, CanValidatorSubscribeToPool(&v1.Validator{
 		Status: v1.ValidatorStateActiveOngoing,
 	}), true)
+}
+
+// Test to estimate how much memory the validator state will take with 2000 validators,
+// each one proposing a block
+func Test_ValidatorInfoSize(t *testing.T) {
+	for i := 0; i < 3; i++ {
+		state := NewOracleState(&config.Config{
+			CollateralInWei: big.NewInt(1000),
+		})
+
+		//save state of 2000 validators
+		numValidators := 2000
+
+		//create 2000 validators with index 0-1999
+		valsID := make([]uint64, numValidators)
+		for i := 0; i < numValidators; i++ {
+			valsID[i] = uint64(i)
+		}
+		//subscribe 2000 validators
+		subs := new_subs_slice(common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567"), valsID, big.NewInt(1000))
+		state.HandleManualSubscriptions(subs)
+
+		//make 2000 validators propose a block
+		for i := 0; i < numValidators; i++ {
+			state.HandleCorrectBlockProposal(Block{
+				Slot:              uint64(i),
+				ValidatorIndex:    uint64(valsID[0]),
+				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+				Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+				RewardType:        MevBlock,
+				WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+			})
+		}
+
+		// //make 2000 validators miss a block
+		// for i := 0; i < numValidators; i++ {
+		// 	state.HandleMissedBlock(Block{
+		// 		Slot:              uint64(100),
+		// 		ValidatorIndex:    uint64(valsID[i]),
+		// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+		// 		Reward:            big.NewInt(5000000000000000000),
+		// 		RewardType:        VanilaBlock,
+		// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+		// 	})
+		// }
+
+		// //make 2000 validators propose a block
+		// for i := 0; i < numValidators; i++ {
+		// 	state.HandleCorrectBlockProposal(Block{
+		// 		Slot:              uint64(100),
+		// 		ValidatorIndex:    uint64(valsID[i]),
+		// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+		// 		Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+		// 		RewardType:        MevBlock,
+		// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+		// 	})
+		// }
+		state.SaveStateToFile()
+		filePath := "oracle-data/state.gob"
+
+		// Get file information
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Get file size in bytes
+		fileSize := fileInfo.Size()
+		fileSizeMB := float64(fileSize) / (1024 * 1024)
+
+		// Print the file size
+		log.Info("File size:", fileSizeMB, "MB")
+	}
+}
+
+// This test tries to mock a real time scenario where 2000 validators are tracked by the pool,
+// and tries check how much memory the oracleState takes.
+// In this scenario, the oracle uploads a new state to the chain once every 3 days.
+// Since we have 2000 validators, each time the state is uploaded to the chain,
+// a rough estimate of 100 blocks will have been proposed by the validators.
+func Test_SizeMultipleOnchainState(t *testing.T) {
+
+	state := NewOracleState(&config.Config{
+		CollateralInWei: big.NewInt(1000),
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
+	})
+
+	//prepare 2000 validators
+	numValidators := 2000
+
+	//create 2000 validators with index 0-1999
+	valsID := make([]uint64, numValidators)
+	for i := 0; i < numValidators; i++ {
+		valsID[i] = uint64(i)
+	}
+	//subscribe 2000 validators. All validators will have the same withdrawal address.
+	subs := new_subs_slice(common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567"), valsID, big.NewInt(1000))
+
+	//oracle handles the subscriptions.
+	state.HandleManualSubscriptions(subs)
+
+	//simulate the scenario. In one year, we will commit 121 states to the chain.
+	//each time the state is commited, a rough estimate of 100 blocks will have been proposed by the validators.
+	for i := 0; i < 121; i++ {
+		for j := 0; j < 100; j++ {
+			state.HandleCorrectBlockProposal(Block{
+				Slot:              uint64(100),
+				ValidatorIndex:    uint64(valsID[j]),
+				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+				Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+				RewardType:        MevBlock,
+				WithdrawalAddress: "0x0100000000000000000000009b3b13d6b6f3f52154a8b00d818392b61e4b42b4",
+			})
+		}
+		// the "StoreLatestOnchainState" function is responsible of making a deep copy of all
+		// current validator data and storing it in the new "state.CommitedStates" map, which
+		// contains all the past onchain states of the validators.
+		// each time we store a new latestOnchainState, the merkleroot has changed, so we
+		// store a new state of all the validators.
+		// in a year, will update the onchain state 121 times. each time we do this, we will
+		// store the last onchain state, which contains the information of all the validators
+		state.StoreLatestOnchainState()
+	}
+
+	//after 1 year, we will have 121 states in the "state.CommitedStates" map.
+	//each state contains the information of 2000 validators.
+
+	//save the state to a file
+	state.SaveStateToFile()
+	filePath := "oracle-data/state.gob"
+
+	// Get file information
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Get file size in bytes
+	fileSize := fileInfo.Size()
+	fileSizeMB := float64(fileSize) / (1024 * 1024)
+
+	// Print the file size
+	log.Info("File size:", fileSizeMB, "MB")
+}
+
+// returns len(valsID) new valid subscriptions
+func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int) []Subscription {
+	subs := make([]Subscription, len(valsID))
+	for i := 0; i < len(valsID); i++ {
+		subs[i] = Subscription{
+			Event: &contract.ContractSubscribeValidator{
+				ValidatorID:            valsID[i],
+				SubscriptionCollateral: collateral,
+				Raw:                    types.Log{TxHash: [32]byte{0x1}},
+				Sender:                 address,
+			},
+			Validator: &v1.Validator{
+				Index:  phase0.ValidatorIndex(valsID[i]),
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// withdrawal credentials = 0x(valID)0000..000
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, address[0], address[1], address[2], address[3], address[4], address[5], address[6], address[7], address[8], address[9], address[10], address[11], address[12], address[13], address[14], address[15], address[16], address[17], address[18], address[19]},
+					// Valdator pubkey: 0x(valID)0000...000
+					PublicKey: phase0.BLSPubKey{byte(valsID[i]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+				},
+			},
+		}
+	}
+	return subs
 }
