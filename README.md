@@ -14,7 +14,7 @@ go build
 
 ## Docker images
 
-Latest master is available and identified by its first 7 commit digits.
+Latest master is available and identified by its first 7 commit digits. Example:
 ```
 dappnode/mev-sp-oracle:583e6e1
 ```
@@ -66,13 +66,7 @@ Goerli deposit contract is `0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b` but some
 Store in `.env` so that it's picked up by `docker-compose`
 
 ```
-export NETWORK=goerli
-export DEPLOYED_SLOT=5279081
-export CHECKPOINT_SIZE=10000
-export POOL_ADDRESS=0x553BD5a94bcC09FFab6550274d5db140a95AE9bC
-export POOL_FEES_ADDRESS=0x692E1Afbc1b0F9Ad6f67a4868A56D138C822D400
-export POOL_FEES_PERCENT=10
-export COLLATERAL_IN_WEI=10000000000000000
+export POOL_ADDRESS=0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243
 export UPDATER_KEYSTORE_PASS=xxx
 ```
 

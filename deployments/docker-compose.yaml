@@ -27,18 +27,12 @@ services:
       - geth
       - teku
     command:
-      - --checkpoint-size=${CHECKPOINT_SIZE}
       - --consensus-endpoint=http://teku:5051
-      - --deployed-slot=${DEPLOYED_SLOT}
       - --execution-endpoint=http://geth:8545
-      - --network=${NETWORK}
       - --pool-address=${POOL_ADDRESS}
-      - --pool-fees-address=${POOL_FEES_ADDRESS}
-      - --pool-fees-percent=${POOL_FEES_PERCENT}
-      - --collateral-in-wei=${COLLATERAL_IN_WEI}
-      - --updater-keystore-path=/keystore
-      - --updater-keystore-pass=${UPDATER_KEYSTORE_PASS}
-      #- --dry-run
+      #- --updater-keystore-path=/keystore
+      #- --updater-keystore-pass=${UPDATER_KEYSTORE_PASS}
+      - --dry-run
     ports:
       - 7300:7300
     volumes:
