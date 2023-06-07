@@ -1,5 +1,7 @@
 package api
 
+import "github.com/dappnode/mev-sp-oracle/oracle"
+
 type httpErrorResp struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -129,4 +131,11 @@ type httpOkValidatorInfo struct {
 	WithdrawalAddress     string `json:"withdrawal_address"`
 	ValidatorIndex        uint64 `json:"validator_index"`
 	ValidatorKey          string `json:"validator_key"`
+}
+
+type httpOkValBlocks struct {
+	ValidatorIndex uint64                   `json:"validator_index"`
+	ProposedBlocks []oracle.SummarizedBlock `json:"proposed_blocks"`
+	MissedBlocks   []oracle.SummarizedBlock `json:"missed_blocks"`
+	WrongFeeBlocks []oracle.SummarizedBlock `json:"wrong_fee_blocks"`
 }
