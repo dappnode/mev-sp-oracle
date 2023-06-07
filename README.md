@@ -66,6 +66,7 @@ Goerli deposit contract is `0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b` but some
 Store in `.env` so that it's picked up by `docker-compose`
 
 ```
+export NETWORK=goerli
 export POOL_ADDRESS=0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243
 export UPDATER_KEYSTORE_PASS=xxx
 ```

@@ -58,6 +58,12 @@ func NewFullBlock(
 func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 
 	txs := b.GetBlockTransactions()
+
+	// Check if block is empty (no txs)
+	if len(txs) == 0 {
+		return big.NewInt(0), false, ""
+	}
+
 	lastTx := txs[len(txs)-1]
 
 	tx, msg, err := DecodeTx(lastTx)
