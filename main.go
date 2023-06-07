@@ -167,10 +167,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		if finalizedSlot >= oracleInstance.State().NextSlotToProcess {
 
 			// Fetch block information
-			poolBlock, err := onchain.GetBlock(oracleInstance.State().NextSlotToProcess, oracleInstance.State())
-			if err != nil {
-				log.Fatal("could not get block: ", err)
-			}
+			poolBlock := onchain.GetBlockFromSlot(oracleInstance.State().NextSlotToProcess, oracleInstance.State())
 
 			// Fetch subscription data
 			blockSubs, err := onchain.GetBlockSubscriptions(poolBlock.Block)

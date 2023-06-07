@@ -1013,7 +1013,6 @@ func RewardTypeToString(rewardType RewardType) string {
 	} else if rewardType == MevBlock {
 		return "mev"
 	}
-	log.Warn("unknown reward type: ", rewardType)
 	return ""
 }
 
@@ -1031,7 +1030,6 @@ func ValidatorStateToString(valState ValidatorStatus) string {
 	} else if valState == Untracked {
 		return "untracked"
 	}
-	log.Warn("unknown validator state: ", valState)
 	return ""
 }
 
@@ -1049,7 +1047,6 @@ func EventToString(event Event) string {
 	} else if event == Unsubscribe {
 		return "unsubscribe"
 	}
-	log.Warn("unknown event: ", event)
 	return ""
 }
 
@@ -1061,7 +1058,6 @@ func BlockTypeToString(blockType BlockType) string {
 	} else if blockType == OkPoolProposal {
 		return "okpoolproposal"
 	}
-	log.Warn("unknown block type: ", blockType)
 	return ""
 }
 
