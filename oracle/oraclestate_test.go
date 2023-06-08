@@ -1188,7 +1188,7 @@ func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
 		Network:         "mainnet",
 	})
 
-	state.SaveStateToFile()
+	state.SaveStateToFile(false)
 	defer os.Remove(filepath.Join(StateFileName, StateFolder))
 	defer os.RemoveAll(StateFolder)
 
@@ -1244,7 +1244,7 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 
 	defer os.Remove(filepath.Join(StateFileName, StateFolder))
 	defer os.RemoveAll(StateFolder)
-	state.SaveStateToFile()
+	state.SaveStateToFile(false)
 
 	err := state.LoadStateFromFile()
 	require.NoError(t, err)
@@ -1644,7 +1644,7 @@ func Test_ValidatorInfoSize(t *testing.T) {
 		// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
 		// 	})
 		// }
-		state.SaveStateToFile()
+		state.SaveStateToFile(false)
 		filePath := "oracle-data/state.gob"
 
 		// Get file information
@@ -1715,7 +1715,7 @@ func Test_SizeMultipleOnchainState(t *testing.T) {
 	//each state contains the information of 2000 validators.
 
 	//save the state to a file
-	state.SaveStateToFile()
+	state.SaveStateToFile(false)
 	filePath := "oracle-data/state.gob"
 
 	// Get file information
@@ -1745,6 +1745,9 @@ func TestSaveStateToFile(t *testing.T) {
 
 	// Create an instance of OracleState
 	state := &OracleState{
+		LatestCommitedState: OnchainState{
+			Slot: 42,
+		},
 		LatestProcessedSlot:  0,
 		LatestProcessedBlock: 0,
 		NextSlotToProcess:    1,
@@ -1773,7 +1776,7 @@ func TestSaveStateToFile(t *testing.T) {
 	}
 
 	// Test saving state without a slot parameter
-	state.SaveStateToFile()
+	state.SaveStateToFile(false)
 
 	// Verify that the file was saved with the correct name
 	defaultFileName := filepath.Join(tempDir, StateFileName)
@@ -1783,7 +1786,7 @@ func TestSaveStateToFile(t *testing.T) {
 	}
 
 	// Test saving state with a slot parameter
-	state.SaveStateToFile(42)
+	state.SaveStateToFile(true)
 
 	// Verify that the file was saved with the correct name
 	slotFileName := filepath.Join(tempDir, "state_slot42.gob")

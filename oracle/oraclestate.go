@@ -203,11 +203,11 @@ func NewOracleState(cfg *config.Config) *OracleState {
 	}
 }
 
-func (state *OracleState) SaveStateToFile(slot ...uint64) {
+func (state *OracleState) SaveStateToFile(saveslot bool) {
 	var path string
-	if len(slot) > 0 {
+	if saveslot {
 		//format uint64 to string. Uint is in base 10
-		slotName := "state_slot" + strconv.FormatUint(slot[0], 10) + ".gob"
+		slotName := "state_slot" + strconv.FormatUint(state.LatestCommitedState.Slot, 10) + ".gob"
 		path = filepath.Join(StateFolder, slotName)
 	} else {
 		path = filepath.Join(StateFolder, StateFileName)
