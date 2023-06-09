@@ -3,7 +3,6 @@ package oracle
 import (
 	"encoding/gob"
 	"encoding/hex"
-	"encoding/json"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -102,9 +101,9 @@ type Block struct {
 // Represents a donation made to the pool
 // TODO: deprecate this? donations are detected from the block content
 type Donation struct {
-	AmountWei *big.Int `json:"amount_wei"`
-	Block     uint64   `json:"block_number"`
-	TxHash    string   `json:"tx_hash"`
+	AmountWei *big.Int
+	Block     uint64
+	TxHash    string
 }
 
 // Subscription event and the associated validator (if any)
@@ -125,7 +124,7 @@ type ValidatorInfo struct {
 	AccumulatedRewardsWei *big.Int        `json:"accumulated_rewards_wei"`
 	PendingRewardsWei     *big.Int        `json:"pending_rewards_wei"`
 	CollateralWei         *big.Int        `json:"collateral_wei"`
-	WithdrawalAddress     string          `json:"withdrawal_address"` // TODO: Rename to: withdrawal_address (keeping it for backwards compatibility by now)
+	WithdrawalAddress     string          `json:"withdrawal_address"`
 	ValidatorIndex        uint64          `json:"validator_index"`
 	ValidatorKey          string          `json:"validator_key"`
 	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
@@ -1006,61 +1005,7 @@ func (state *OracleState) GetMerkleRootIfAny() (string, bool) {
 	return merkleRootStr, true
 }
 
-// TODO: Move all this somewhere else + Marshalling
-func RewardTypeToString(rewardType RewardType) string {
-	if rewardType == VanilaBlock {
-		return "vanila"
-	} else if rewardType == MevBlock {
-		return "mev"
-	}
-	return ""
-}
-
-func ValidatorStateToString(valState ValidatorStatus) string {
-	if valState == Active {
-		return "active"
-	} else if valState == YellowCard {
-		return "yellowcard"
-	} else if valState == RedCard {
-		return "redcard"
-	} else if valState == NotSubscribed {
-		return "notsubscribed"
-	} else if valState == Banned {
-		return "banned"
-	} else if valState == Untracked {
-		return "untracked"
-	}
-	return ""
-}
-
-func EventToString(event Event) string {
-	if event == ProposalOk {
-		return "proposalok"
-	} else if event == ProposalMissed {
-		return "proposalmissed"
-	} else if event == ProposalWrongFee {
-		return "proposalwrongfee"
-	} else if event == ManualSubscription {
-		return "manualsubscription"
-	} else if event == AutoSubscription {
-		return "autosubscription"
-	} else if event == Unsubscribe {
-		return "unsubscribe"
-	}
-	return ""
-}
-
-func BlockTypeToString(blockType BlockType) string {
-	if blockType == MissedProposal {
-		return "missedproposal"
-	} else if blockType == WrongFeeRecipient {
-		return "wrongfeerecipient"
-	} else if blockType == OkPoolProposal {
-		return "okpoolproposal"
-	}
-	return ""
-}
-
+/*
 func (s RewardType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(RewardTypeToString(s))
 }
@@ -1072,4 +1017,62 @@ func (s Event) MarshalJSON() ([]byte, error) {
 }
 func (s BlockType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(BlockTypeToString(s))
+}
+*/
+
+// TODO: move this
+
+func (r RewardType) String() string {
+	if r == VanilaBlock {
+		return "vanila"
+	} else if r == MevBlock {
+		return "mev"
+	}
+	return "unknownrewardtype"
+}
+
+func (v ValidatorStatus) String() string {
+	if v == Active {
+		return "active"
+	} else if v == YellowCard {
+		return "yellowcard"
+	} else if v == RedCard {
+		return "redcard"
+	} else if v == NotSubscribed {
+		return "notsubscribed"
+	} else if v == Banned {
+		return "banned"
+	} else if v == Untracked {
+		return "untracked"
+	}
+	return "unknownstate"
+}
+
+func (b BlockType) String() string {
+	if b == MissedProposal {
+		return "missedproposal"
+	} else if b == WrongFeeRecipient {
+		return "wrongfeerecipient"
+	} else if b == OkPoolProposal {
+		return "okpoolproposal"
+	}
+	return "unknownblocktype"
+}
+
+// is this needed?
+func (e Event) EventToString() string {
+	if e == ProposalOk {
+		return "proposalok"
+	} else if e == ProposalMissed {
+		return "proposalmissed"
+	} else if e == ProposalWrongFee {
+		return "proposalwrongfee"
+	} else if e == ManualSubscription {
+		return "manualsubscription"
+	} else if e == AutoSubscription {
+		return "autosubscription"
+	} else if e == Unsubscribe {
+		return "unsubscribe"
+	}
+	return "unknownevent"
 }
