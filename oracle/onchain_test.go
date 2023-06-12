@@ -179,15 +179,15 @@ func Test_GetBlock(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		state := NewOracleState(&config.Config{})
-		state.Config.PoolAddress = tt.PoolAddress
+		oracle := NewOracle(&config.Config{})
+		oracle.state.Config.PoolAddress = tt.PoolAddress
 		onchain.CliCfg.PoolAddress = tt.PoolAddress
 
 		if tt.ProposerSubscribed {
-			state.AddSubscriptionIfNotAlready(tt.ExpectedValidatorIndex, "0x", "0x")
+			oracle.AddSubscriptionIfNotAlready(tt.ExpectedValidatorIndex, "0x", "0x")
 		}
 
-		block := onchain.GetBlockFromSlot(tt.Slot, state)
+		block := onchain.GetBlockFromSlot(tt.Slot, oracle)
 
 		require.Equal(t, tt.Slot, block.Slot)
 		require.Equal(t, tt.ExpectedBlock, block.Block)
@@ -233,7 +233,8 @@ func Test_GetDonationEvents(t *testing.T) {
 	onchain, err := NewOnchain(cfgOnchain, nil)
 	require.NoError(t, err)
 
-	state := NewOracleState(&config.Config{})
+	oracle := NewOracle(&config.Config{})
+
 	onchain.RefreshBeaconValidators()
 
 	// 1) contains a donation
@@ -250,17 +251,17 @@ func Test_GetDonationEvents(t *testing.T) {
 	slotNum3 := uint64(5798095)
 	blockNum3 := uint64(9134612)
 
-	block1 := onchain.GetBlockFromSlot(slotNum1, state)
+	block1 := onchain.GetBlockFromSlot(slotNum1, oracle)
 	require.NoError(t, err)
 	require.Equal(t, blockNum1, block1.Block)
 	require.Equal(t, slotNum1, block1.Slot)
 	require.Equal(t, uint64(466564), block1.ValidatorIndex)
 	require.Equal(t, "0xdc62f9e8c34be08501cdef4ebde0a280f576d762", block1.WithdrawalAddress)
 
-	block2 := onchain.GetBlockFromSlot(slotNum2, state)
+	block2 := onchain.GetBlockFromSlot(slotNum2, oracle)
 	require.NoError(t, err)
 
-	block3 := onchain.GetBlockFromSlot(slotNum3, state)
+	block3 := onchain.GetBlockFromSlot(slotNum3, oracle)
 	require.NoError(t, err)
 
 	donatons1, err := onchain.GetDonationEvents(blockNum1, block1)
@@ -317,7 +318,7 @@ func Test_EndToEnd(t *testing.T) {
 		oracleInstance.State().LatestProcessedSlot = slot - 1
 
 		// Fetch block information
-		poolBlock := onchain.GetBlockFromSlot(oracleInstance.State().NextSlotToProcess, oracleInstance.State())
+		poolBlock := onchain.GetBlockFromSlot(oracleInstance.State().NextSlotToProcess, oracleInstance)
 
 		// Fetch subscription data
 		blockSubs, err := onchain.GetBlockSubscriptions(poolBlock.Block)

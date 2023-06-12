@@ -73,7 +73,7 @@ func main() {
 	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)
 
-	err = oracleInstance.State().LoadStateFromFile()
+	err = oracleInstance.LoadStateFromFile()
 	if err == nil {
 		log.Info("Found previous state to continue syncing")
 	} else {
@@ -95,7 +95,7 @@ func main() {
 
 		// Save state in SIGINT or SIGTERM
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM {
-			oracleInstance.State().SaveStateToFile()
+			oracleInstance.SaveStateToFile()
 		}
 
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM || sig == os.Interrupt || sig == os.Kill {
@@ -167,7 +167,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		if finalizedSlot >= oracleInstance.State().NextSlotToProcess {
 
 			// Fetch block information
-			poolBlock := onchain.GetBlockFromSlot(oracleInstance.State().NextSlotToProcess, oracleInstance.State())
+			poolBlock := onchain.GetBlockFromSlot(oracleInstance.State().NextSlotToProcess, oracleInstance)
 
 			// Fetch subscription data
 			blockSubs, err := onchain.GetBlockSubscriptions(poolBlock.Block)
@@ -199,7 +199,8 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			metrics.LatestProcessedSlot.Set(float64(oracleInstance.State().LatestProcessedSlot))
 			metrics.LatestProcessedBlock.Set(float64(oracleInstance.State().LatestProcessedBlock))
 
-			_ = processedSlot
+			log.Debug("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
+				slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
 
 			// Do not log progress every slot, it is too much. See api for progress
 			// Log progress every x slots when syncing
@@ -294,7 +295,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			}
 
 			// Persist new state in file only if everything went fine
-			oracleInstance.State().SaveStateToFile()
+			oracleInstance.SaveStateToFile()
 		}
 	}
 }

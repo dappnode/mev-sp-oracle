@@ -724,7 +724,7 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 
 // Given a slot number, this function fetches all the information that the oracle need to process
 // the block (if not missed) that was proposed in this slot.
-func (o *Onchain) GetBlockFromSlot(slot uint64, state *OracleState) Block {
+func (o *Onchain) GetBlockFromSlot(slot uint64, oracle *Oracle) Block {
 
 	// Get who should propose the block
 	slotDuty, err := o.GetProposalDuty(slot)
@@ -765,7 +765,7 @@ func (o *Onchain) GetBlockFromSlot(slot uint64, state *OracleState) Block {
 		extendedBlock := NewFullBlock(proposedBlock, nil, nil)
 
 		// Check if the proposal is from a subscribed validator
-		isFromSubscriber := state.IsSubscribed(extendedBlock.GetProposerIndexUint64())
+		isFromSubscriber := oracle.isSubscribed(extendedBlock.GetProposerIndexUint64())
 
 		// Check if the reward was sent to the pool
 		isPoolRewarded := extendedBlock.IsAddressRewarded(o.CliCfg.PoolAddress)
@@ -1043,6 +1043,7 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 
 // Loads all validator from the beacon chain into the oracle, must be called periodically
 func (o *Onchain) RefreshBeaconValidators() {
+	// TODO: protect with mutex?
 	log.Info("Loading existing validators from the beacon chain")
 	vals, err := o.GetFinalizedValidators()
 	if err != nil {
@@ -1061,6 +1062,7 @@ func (o *Onchain) RefreshBeaconValidators() {
 }
 
 func (o *Onchain) Validators() map[phase0.ValidatorIndex]*v1.Validator {
+	// TODO: protect with mutex?
 	return o.validators
 }
 

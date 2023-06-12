@@ -737,13 +737,13 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 	m.respondOK(w, httpOkProofs{
 		LeafWithdrawalAddress:      leafs.WithdrawalAddress,
-		LeafAccumulatedBalance:     leafs.AccumulatedBalance.String(),
+		LeafAccumulatedBalance:     leafs.AccumulatedBalanceWei.String(),
 		MerkleRoot:                 m.oracle.State().LatestCommitedState.MerkleRoot,
 		CheckpointSlot:             m.oracle.State().LatestCommitedState.Slot,
 		Proofs:                     proofs,
 		RegisteredValidators:       registeredValidators,
-		TotalAccumulatedRewardsWei: leafs.AccumulatedBalance.String(),
-		ClaimableRewardsWei:        new(big.Int).Sub(leafs.AccumulatedBalance, claimed).String(),
+		TotalAccumulatedRewardsWei: leafs.AccumulatedBalanceWei.String(),
+		ClaimableRewardsWei:        new(big.Int).Sub(leafs.AccumulatedBalanceWei, claimed).String(),
 		AlreadyClaimedRewardsWei:   claimed.String(),
 		PendingRewardsWei:          totalPending.String(),
 	})

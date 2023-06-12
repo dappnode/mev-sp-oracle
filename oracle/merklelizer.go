@@ -36,11 +36,6 @@ func NewMerklelizer() *Merklelizer {
 	return merklelizer
 }
 
-type RawLeaf struct {
-	WithdrawalAddress  string
-	AccumulatedBalance *big.Int
-}
-
 // Aggregates all validators indexes that belong to the same withdrawal address. This
 // allows the merkle tree to hold all validators balance belonging to the same set
 // of validators, that makes claiming cheaper since only one proof is needed for n validators
@@ -60,7 +55,7 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 		// If the leaf already exists, add the balance to the existing leaf (by withdrawal address)
 		for _, leaf := range allLeafs {
 			if Equals(leaf.WithdrawalAddress, validator.WithdrawalAddress) {
-				leaf.AccumulatedBalance.Add(leaf.AccumulatedBalance, validator.AccumulatedRewardsWei)
+				leaf.AccumulatedBalanceWei.Add(leaf.AccumulatedBalanceWei, validator.AccumulatedRewardsWei)
 				found = true
 				continue
 			}
@@ -72,7 +67,7 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 				// In lowercase to avoid confusion when claiming
 				WithdrawalAddress: strings.ToLower(validator.WithdrawalAddress),
 				// Copy the value
-				AccumulatedBalance: new(big.Int).Set(validator.AccumulatedRewardsWei),
+				AccumulatedBalanceWei: new(big.Int).Set(validator.AccumulatedRewardsWei),
 			})
 		}
 	}
@@ -86,7 +81,7 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 
 	allAccumulatedFromwithdrawals := big.NewInt(0)
 	for _, WithdrawalAddressAccumulated := range allLeafs {
-		allAccumulatedFromwithdrawals.Add(allAccumulatedFromwithdrawals, WithdrawalAddressAccumulated.AccumulatedBalance)
+		allAccumulatedFromwithdrawals.Add(allAccumulatedFromwithdrawals, WithdrawalAddressAccumulated.AccumulatedBalanceWei)
 	}
 
 	if allAccumulatedFromValidators.Cmp(allAccumulatedFromwithdrawals) != 0 {
@@ -109,8 +104,8 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 
 	// Prepend the leaf with the pool fees to the list of leafs. Always the first
 	poolFeesLeaf := RawLeaf{
-		WithdrawalAddress:  strings.ToLower(state.PoolFeesAddress),
-		AccumulatedBalance: new(big.Int).Set(state.PoolAccumulatedFees),
+		WithdrawalAddress:     strings.ToLower(state.PoolFeesAddress),
+		AccumulatedBalanceWei: new(big.Int).Set(state.PoolAccumulatedFees),
 	}
 
 	// Pool rewards leaf (address + balance) is the first. Note that the WithdrawalAddress name is reused
@@ -162,16 +157,16 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 	for _, leaf := range orderedRawLeafs {
 		leafHash := solsha3.SoliditySHA3(
 			solsha3.Address(leaf.WithdrawalAddress),
-			solsha3.Uint256(leaf.AccumulatedBalance),
+			solsha3.Uint256(leaf.AccumulatedBalanceWei),
 		)
 		blocks = append(blocks, &testData{data: leafHash})
 		withdrawalToLeaf[leaf.WithdrawalAddress] = &testData{data: leafHash}
 		withdrawalToRawLeaf[leaf.WithdrawalAddress] = leaf
 
 		log.WithFields(log.Fields{
-			"WithdrawalAddress":  leaf.WithdrawalAddress,
-			"AccumulatedBalance": leaf.AccumulatedBalance,
-			"LeafHash":           hex.EncodeToString(leafHash),
+			"WithdrawalAddress":     leaf.WithdrawalAddress,
+			"AccumulatedBalanceWei": leaf.AccumulatedBalanceWei,
+			"LeafHash":              hex.EncodeToString(leafHash),
 		}).Info("Leaf information")
 	}
 
