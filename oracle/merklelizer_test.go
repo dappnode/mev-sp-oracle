@@ -12,9 +12,10 @@ import (
 
 func Test_GenerateTreeFromState(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	state := NewOracleState(&config.Config{
+	oracle := NewOracle(&config.Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
+	state := oracle.state
 
 	// Note that the leafs contain also PoolAddress at the begining
 
@@ -51,9 +52,10 @@ func Test_GenerateTreeFromState(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_NoAggregation(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	state := NewOracleState(&config.Config{
+	oracle := NewOracle(&config.Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
+	state := oracle.state
 
 	state.PoolAccumulatedFees = big.NewInt(999999999999999)
 
@@ -84,32 +86,32 @@ func Test_AggregateValidatorsIndexes_NoAggregation(t *testing.T) {
 
 	expected := []RawLeaf{
 		{
-			WithdrawalAddress:  "0x0000000000000000000000000000000000000000",
-			AccumulatedBalance: big.NewInt(999999999999999),
+			WithdrawalAddress:     "0x0000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: big.NewInt(999999999999999),
 		},
 		{
-			WithdrawalAddress:  "0x1000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(10000),
+			WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(10000),
 		},
 		{
-			WithdrawalAddress:  "0x2000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(20000),
+			WithdrawalAddress:     "0x2000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(20000),
 		},
 		{
-			WithdrawalAddress:  "0x3000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(30000),
+			WithdrawalAddress:     "0x3000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(30000),
 		},
 		{
-			WithdrawalAddress:  "0x4000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(40000),
+			WithdrawalAddress:     "0x4000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(40000),
 		},
 		{
-			WithdrawalAddress:  "0x5000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(50000),
+			WithdrawalAddress:     "0x5000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(50000),
 		},
 		{
-			WithdrawalAddress:  "0x6000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(60000),
+			WithdrawalAddress:     "0x6000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(60000),
 		},
 	}
 
@@ -120,9 +122,10 @@ func Test_AggregateValidatorsIndexes_NoAggregation(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_NoAggregationOrdered(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	state := NewOracleState(&config.Config{
+	oracle := NewOracle(&config.Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
+	state := oracle.state
 
 	state.PoolAccumulatedFees = big.NewInt(2345678987654)
 
@@ -153,32 +156,32 @@ func Test_AggregateValidatorsIndexes_NoAggregationOrdered(t *testing.T) {
 
 	expected := []RawLeaf{
 		{
-			WithdrawalAddress:  "0x0000000000000000000000000000000000000000",
-			AccumulatedBalance: big.NewInt(2345678987654),
+			WithdrawalAddress:     "0x0000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: big.NewInt(2345678987654),
 		},
 		{
-			WithdrawalAddress:  "0x1000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(10000),
+			WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(10000),
 		},
 		{
-			WithdrawalAddress:  "0x2000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(20000),
+			WithdrawalAddress:     "0x2000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(20000),
 		},
 		{
-			WithdrawalAddress:  "0x3000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(30000),
+			WithdrawalAddress:     "0x3000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(30000),
 		},
 		{
-			WithdrawalAddress:  "0x4000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(40000),
+			WithdrawalAddress:     "0x4000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(40000),
 		},
 		{
-			WithdrawalAddress:  "0x5000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(50000),
+			WithdrawalAddress:     "0x5000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(50000),
 		},
 		{
-			WithdrawalAddress:  "0x6000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(60000),
+			WithdrawalAddress:     "0x6000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(60000),
 		},
 	}
 
@@ -191,9 +194,10 @@ func Test_AggregateValidatorsIndexes_NoAggregationOrdered(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_AggregationAll(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	state := NewOracleState(&config.Config{
+	oracle := NewOracle(&config.Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
+	state := oracle.state
 
 	state.PoolAccumulatedFees = big.NewInt(0)
 
@@ -224,12 +228,12 @@ func Test_AggregateValidatorsIndexes_AggregationAll(t *testing.T) {
 
 	expected := []RawLeaf{
 		{
-			WithdrawalAddress:  "0x0000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(0),
+			WithdrawalAddress:     "0x0000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(0),
 		},
 		{
-			WithdrawalAddress:  "0xaa00000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(210000),
+			WithdrawalAddress:     "0xaa00000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(210000),
 		},
 	}
 
@@ -241,9 +245,10 @@ func Test_AggregateValidatorsIndexes_AggregationAll(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_Aggregation_And_Leftover(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	state := NewOracleState(&config.Config{
+	oracle := NewOracle(&config.Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
+	state := oracle.state
 
 	state.PoolAccumulatedFees = new(big.Int).SetUint64(1)
 
@@ -275,16 +280,16 @@ func Test_AggregateValidatorsIndexes_Aggregation_And_Leftover(t *testing.T) {
 
 	expected := []RawLeaf{
 		{
-			WithdrawalAddress:  "0x0000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(1),
+			WithdrawalAddress:     "0x0000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(1),
 		},
 		{
-			WithdrawalAddress:  "0xaa00000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(190000),
+			WithdrawalAddress:     "0xaa00000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(190000),
 		},
 		{
-			WithdrawalAddress:  "0xbb00000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(500000),
+			WithdrawalAddress:     "0xbb00000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(500000),
 		},
 	}
 
@@ -294,9 +299,10 @@ func Test_AggregateValidatorsIndexes_Aggregation_And_Leftover(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_Aggregation_NoOrder(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	state := NewOracleState(&config.Config{
+	oracle := NewOracle(&config.Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
+	state := oracle.state
 
 	state.PoolAccumulatedFees = big.NewInt(234567)
 
@@ -343,20 +349,20 @@ func Test_AggregateValidatorsIndexes_Aggregation_NoOrder(t *testing.T) {
 
 	expected := []RawLeaf{
 		{
-			WithdrawalAddress:  "0x0000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(234567),
+			WithdrawalAddress:     "0x0000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(234567),
 		},
 		{
-			WithdrawalAddress:  "0xa000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(130000),
+			WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(130000),
 		},
 		{
-			WithdrawalAddress:  "0xb000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(160000),
+			WithdrawalAddress:     "0xb000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(160000),
 		},
 		{
-			WithdrawalAddress:  "0xc000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(140000),
+			WithdrawalAddress:     "0xc000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(140000),
 		},
 	}
 
@@ -369,47 +375,47 @@ func Test_OrderByWithdrawalAddress(t *testing.T) {
 
 	leafs := []RawLeaf{
 		{
-			WithdrawalAddress:  "0x3000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(1),
+			WithdrawalAddress:     "0x3000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(1),
 		},
 		{
-			WithdrawalAddress:  "0x5000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(3),
+			WithdrawalAddress:     "0x5000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(3),
 		},
 		{
-			WithdrawalAddress:  "0x1000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(5),
+			WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(5),
 		},
 		{
-			WithdrawalAddress:  "0xa000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(5),
+			WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(5),
 		},
 		{
-			WithdrawalAddress:  "0x9900000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(5),
+			WithdrawalAddress:     "0x9900000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(5),
 		},
 	}
 
 	expected := []RawLeaf{
 		{
-			WithdrawalAddress:  "0x1000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(5),
+			WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(5),
 		},
 		{
-			WithdrawalAddress:  "0x3000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(1),
+			WithdrawalAddress:     "0x3000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(1),
 		},
 		{
-			WithdrawalAddress:  "0x5000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(3),
+			WithdrawalAddress:     "0x5000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(3),
 		},
 		{
-			WithdrawalAddress:  "0x9900000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(5),
+			WithdrawalAddress:     "0x9900000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(5),
 		},
 		{
-			WithdrawalAddress:  "0xa000000000000000000000000000000000000000",
-			AccumulatedBalance: new(big.Int).SetUint64(5),
+			WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
+			AccumulatedBalanceWei: new(big.Int).SetUint64(5),
 		},
 	}
 
