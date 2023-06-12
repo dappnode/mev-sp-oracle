@@ -70,114 +70,6 @@ const (
 	pathOnchainMerkleProof            = "/onchain/proof/{withdrawalAddress}"
 )
 
-type httpErrorResp struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-type httpOkStatus struct {
-	IsConsensusInSync           bool   `json:"is_consensus_in_sync"`
-	IsExecutionInSync           bool   `json:"is_execution_in_sync"`
-	IsOracleInSync              bool   `json:"is_oracle_in_sync"`
-	LatestProcessedSlot         uint64 `json:"latest_processed_slot"`
-	LatestProcessedBlock        uint64 `json:"latest_processed_block"`
-	LatestFinalizedEpoch        uint64 `json:"latest_finalized_epoch"`
-	LatestFinalizedSlot         uint64 `json:"latest_finalized_slot"`
-	OracleHeadDistance          uint64 `json:"oracle_sync_distance_slots"`
-	NextCheckpointSlot          uint64 `json:"next_checkpoint_slot"`
-	NextCheckpointTime          string `json:"next_checkpoint_time"`
-	NextCheckpointRemaining     string `json:"next_checkpoint_remaining"`
-	NextCheckpointRemainingUnix uint64 `json:"next_checkpoint_remaining_unix"`
-	PreviousCheckpointSlot      uint64 `json:"previous_checkpoint_slot"`
-	PreviousCheckpointTime      string `json:"previous_checkpoint_time"`
-	PreviousCheckpointAge       string `json:"previous_checkpoint_age"`
-	PreviousCheckpointAgeUnix   uint64 `json:"previous_checkpoint_age_unix"`
-	ConsensusChainId            string `json:"consensus_chainid"`
-	ExecutionChainId            string `json:"execution_chainid"`
-	DepositContact              string `json:"depositcontract"`
-}
-
-type httpOkRelayersState struct {
-	CorrectFeeRecipients bool        `json:"correct_fee_recipients"`
-	CorrectFeeRelays     []httpRelay `json:"correct_fee_relayers"`
-	WrongFeeRelays       []httpRelay `json:"wrong_fee_relayers"`
-	UnregisteredRelays   []httpRelay `json:"unregistered_relayers"`
-}
-
-type httpRelay struct {
-	RelayAddress string `json:"relay_address"`
-	FeeRecipient string `json:"fee_recipient"`
-	Timestamp    string `json:"timestamp"`
-}
-
-type httpOkWithdrawalAddress struct {
-	WithdrawalAddress string `json:"withdrawal_address"`
-	ValidatorIndex    uint64 `json:"validator_index"`
-	ValidatorAddress  string `json:"validator_address"`
-}
-
-type httpOkLatestCheckpoint struct {
-	MerkleRoot     string `json:"merkleroot"`
-	CheckpointSlot uint64 `json:"checkpointslot"`
-}
-
-type httpOkMerkleRoot struct {
-	MerkleRoot string `json:"merkle_root"`
-}
-
-type httpOkMemoryStatistics struct {
-	TotalSubscribed    uint64 `json:"total_subscribed_validators"`
-	TotalActive        uint64 `json:"total_active_validators"`
-	TotalYellowCard    uint64 `json:"total_yellowcard_validators"`
-	TotalRedCard       uint64 `json:"total_redcard_validators"`
-	TotalBanned        uint64 `json:"total_banned_validators"`
-	TotalNotSubscribed uint64 `json:"total_notsubscribed_validators"`
-
-	LatestCheckpointSlot       uint64 `json:"latest_checkpoint_slot"`
-	NextCheckpointSlot         uint64 `json:"next_checkpoint_slot"`
-	TotalAccumulatedRewardsWei string `json:"total_accumulated_rewards_wei"`
-	TotalPendingRewaradsWei    string `json:"total_pending_rewards_wei"`
-
-	TotalRewardsSentWei string `json:"total_rewards_sent_wei"`
-	TotalDonationsWei   string `json:"total_donations_wei"`
-	AvgBlockRewardWei   string `json:"avg_block_reward_wei"`
-
-	// TODO: Split Proposed in Vanila/Mev
-	//TotalVanilaBlocks   uint64
-	//TotalMevBlocks      uint64
-	TotalProposedBlocks uint64 `json:"total_proposed_blocks"`
-	TotalMissedBlocks   uint64 `json:"total_missed_blocks"`
-	TotalWrongFeeBlocks uint64 `json:"total_wrongfee_blocks"`
-}
-
-type httpOkValidatorState struct {
-	ValidatorStatus       string `json:"status"`
-	AccumulatedRewardsWei string `json:"accumulated_rewards_wei"`
-	PendingRewardsWei     string `json:"pending_rewards_wei"`
-	CollateralWei         string `json:"collateral_rewards_wei"`
-	WithdrawalAddress     string `json:"withdrawal_address"`
-	ValidatorIndex        uint64 `json:"validator_index"`
-	ValidatorKey          string `json:"validator_key"`
-	//ValidatorProposedBlocks   []BlockState
-	//ValidatorMissedBlocks     []BlockState
-	//ValidatorWrongFeeBlocks   []BlockState
-
-	// TODO: Include ClaimedSoFar from the smart contract for reconciliation
-}
-
-type httpOkProofs struct {
-	LeafWithdrawalAddress      string   `json:"leaf_withdrawal_address"`
-	LeafAccumulatedBalance     string   `json:"leaf_accumulated_balance"`
-	MerkleRoot                 string   `json:"merkleroot"`
-	CheckpointSlot             uint64   `json:"checkpoint_slot"`
-	Proofs                     []string `json:"merkle_proofs"`
-	RegisteredValidators       []uint64 `json:"registered_validators"`
-	TotalAccumulatedRewardsWei string   `json:"total_accumulated_rewards_wei"`
-	AlreadyClaimedRewardsWei   string   `json:"already_claimed_rewards_wei"`
-	ClaimableRewardsWei        string   `json:"claimable_rewards_wei"`
-	PendingRewardsWei          string   `json:"pending_rewards_wei"`
-}
-
 type ApiService struct {
 	srv           *http.Server
 	cfg           *config.Config
@@ -459,17 +351,6 @@ func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
 		m.respondError(w, http.StatusInternalServerError, "no config loaded, nil value")
 		return
 	}
-	type httpOkConfig struct {
-		// TODO Add deployed block
-		Network               string `json:"network"`
-		PoolAddress           string `json:"pool_address"`
-		DeployedSlot          uint64 `json:"deployed_slot"`
-		CheckPointSizeInSlots uint64 `json:"checkpoint_size"`
-		PoolFeesPercent       int    `json:"pool_fees_percent"`
-		PoolFeesAddress       string `json:"pool_fees_address"`
-		DryRun                bool   `json:"dry_run"`
-		CollateralInWei       string `json:"collateral_in_wei"`
-	}
 	m.respondOK(w, httpOkConfig{
 		Network:               m.cfg.Network,
 		PoolAddress:           m.cfg.PoolAddress,
@@ -483,8 +364,25 @@ func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
 }
 
 func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Request) {
-	// Perhaps a bit dangerours to access this directly without getters.
-	m.respondOK(w, m.oracle.State().Validators)
+	validators := maps.Values(m.oracle.State().Validators)
+
+	// Order by index
+	sort.Slice(validators, func(i, j int) bool { return validators[i].ValidatorIndex < validators[j].ValidatorIndex })
+
+	validatorsResp := make([]httpOkValidatorInfo, 0)
+	for _, v := range validators {
+		validatorsResp = append(validatorsResp, httpOkValidatorInfo{
+			ValidatorStatus:       v.ValidatorStatus.String(),
+			AccumulatedRewardsWei: v.AccumulatedRewardsWei.String(),
+			PendingRewardsWei:     v.PendingRewardsWei.String(),
+			CollateralWei:         v.CollateralWei.String(),
+			WithdrawalAddress:     v.WithdrawalAddress,
+			ValidatorIndex:        v.ValidatorIndex,
+			ValidatorKey:          v.ValidatorKey,
+		})
+	}
+
+	m.respondOK(w, validatorsResp)
 }
 
 func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.Request) {
@@ -545,7 +443,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 
 		// Check if the withdrawal address matches the requested one
 		credStr := hex.EncodeToString(validator.Validator.WithdrawalCredentials)
-		eth1Add, err := oracle.GetEth1Address(credStr)
+		eth1Add, err := oracle.GetEth1Address(credStr) // TODO: Use the new function
 
 		// Skip validators without non eth withdrawal address (bls address)
 		if err != nil {
@@ -591,8 +489,9 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	}
 
 	// If at this point we have no validators, just return empty to avoid more processing
+	// TODO: Cant i return earlier? after 2)?
 	if len(requestedValidators) == 0 {
-		m.respondOK(w, maps.Values(requestedValidators))
+		m.respondOK(w, make([]httpOkValidatorInfo, 0))
 		return
 	}
 
@@ -633,52 +532,136 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	values := maps.Values(requestedValidators)
 	sort.Slice(values, func(i, j int) bool { return values[i].ValidatorIndex < values[j].ValidatorIndex })
 
-	m.respondOK(w, values)
+	validatorsResp := make([]httpOkValidatorInfo, 0)
+	for _, v := range values {
+		validatorsResp = append(validatorsResp, httpOkValidatorInfo{
+			ValidatorStatus:       v.ValidatorStatus.String(),
+			AccumulatedRewardsWei: v.AccumulatedRewardsWei.String(),
+			PendingRewardsWei:     v.PendingRewardsWei.String(),
+			CollateralWei:         v.CollateralWei.String(),
+			WithdrawalAddress:     v.WithdrawalAddress,
+			ValidatorIndex:        v.ValidatorIndex,
+			ValidatorKey:          v.ValidatorKey,
+		})
+	}
+	m.respondOK(w, validatorsResp)
 }
 
 func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Request) {
-	type httpOkMemoryFeesInfo struct {
-		PoolFeesPercent     int      `json:"pool_fee_percent"`
-		PoolFeesAddress     string   `json:"pool_fee_address"`
-		PoolAccumulatedFees *big.Int `json:"pool_accumulated_fees"`
-	}
-
 	m.respondOK(w, httpOkMemoryFeesInfo{
 		PoolFeesPercent:     m.oracle.State().PoolFeesPercent,
 		PoolFeesAddress:     m.oracle.State().PoolFeesAddress,
-		PoolAccumulatedFees: m.oracle.State().PoolAccumulatedFees,
+		PoolAccumulatedFees: m.oracle.State().PoolAccumulatedFees.String(),
 	})
 }
 
 func (m *ApiService) handleMemoryAllBlocks(w http.ResponseWriter, req *http.Request) {
-	allBlocks := make([]oracle.Block, 0)
-
 	// Concat all the blocks, order is not guaranteed
-	allBlocks = append(allBlocks, m.oracle.State().ProposedBlocks...)
-	allBlocks = append(allBlocks, m.oracle.State().MissedBlocks...)
-	allBlocks = append(allBlocks, m.oracle.State().WrongFeeBlocks...)
+	allBlocks := make([]httpOkBlock, 0)
+
+	for _, block := range m.oracle.State().ProposedBlocks {
+		allBlocks = append(allBlocks, httpOkBlock{
+			Slot:              block.Slot,
+			Block:             block.Block,
+			ValidatorIndex:    block.ValidatorIndex,
+			ValidatorKey:      block.ValidatorKey,
+			BlockType:         block.BlockType.String(),
+			Reward:            block.Reward.String(),
+			RewardType:        block.RewardType.String(),
+			WithdrawalAddress: block.WithdrawalAddress,
+		})
+	}
+
+	for _, block := range m.oracle.State().MissedBlocks {
+		allBlocks = append(allBlocks, httpOkBlock{
+			Slot:              block.Slot,
+			Block:             block.Block,
+			ValidatorIndex:    block.ValidatorIndex,
+			ValidatorKey:      block.ValidatorKey,
+			BlockType:         block.BlockType.String(),
+			Reward:            block.Reward.String(),
+			RewardType:        block.RewardType.String(),
+			WithdrawalAddress: block.WithdrawalAddress,
+		})
+	}
+
+	for _, block := range m.oracle.State().WrongFeeBlocks {
+		allBlocks = append(allBlocks, httpOkBlock{
+			Slot:              block.Slot,
+			Block:             block.Block,
+			ValidatorIndex:    block.ValidatorIndex,
+			ValidatorKey:      block.ValidatorKey,
+			BlockType:         block.BlockType.String(),
+			Reward:            block.Reward.String(),
+			RewardType:        block.RewardType.String(),
+			WithdrawalAddress: block.WithdrawalAddress,
+		})
+	}
 
 	m.respondOK(w, allBlocks)
 }
 
 func (m *ApiService) handleMemoryProposedBlocks(w http.ResponseWriter, req *http.Request) {
-	// TODO: Use getter, since its safer and dont make this fields public
-	m.respondOK(w, m.oracle.State().ProposedBlocks)
+	proposedBlocks := make([]httpOkBlock, 0)
+	for _, block := range m.oracle.State().ProposedBlocks {
+		proposedBlocks = append(proposedBlocks, httpOkBlock{
+			Slot:              block.Slot,
+			Block:             block.Block,
+			ValidatorIndex:    block.ValidatorIndex,
+			ValidatorKey:      block.ValidatorKey,
+			BlockType:         block.BlockType.String(),
+			Reward:            block.Reward.String(),
+			RewardType:        block.RewardType.String(),
+			WithdrawalAddress: block.WithdrawalAddress,
+		})
+	}
+	m.respondOK(w, proposedBlocks)
 }
 
 func (m *ApiService) handleMemoryMissedBlocks(w http.ResponseWriter, req *http.Request) {
-	// TODO: Use getter, since its safer and dont make this fields public
-	m.respondOK(w, m.oracle.State().MissedBlocks)
+	missedBlocks := make([]httpOkBlock, 0)
+	for _, block := range m.oracle.State().MissedBlocks {
+		missedBlocks = append(missedBlocks, httpOkBlock{
+			Slot:              block.Slot,
+			Block:             block.Block,
+			ValidatorIndex:    block.ValidatorIndex,
+			ValidatorKey:      block.ValidatorKey,
+			BlockType:         block.BlockType.String(),
+			Reward:            block.Reward.String(),
+			RewardType:        block.RewardType.String(),
+			WithdrawalAddress: block.WithdrawalAddress,
+		})
+	}
+	m.respondOK(w, missedBlocks)
 }
 
 func (m *ApiService) handleMemoryWrongFeeBlocks(w http.ResponseWriter, req *http.Request) {
-	// TODO: Use getter, since its safer and dont make this fields public
-	m.respondOK(w, m.oracle.State().WrongFeeBlocks)
+	wrongFeeBlocks := make([]httpOkBlock, 0)
+	for _, block := range m.oracle.State().WrongFeeBlocks {
+		wrongFeeBlocks = append(wrongFeeBlocks, httpOkBlock{
+			Slot:              block.Slot,
+			Block:             block.Block,
+			ValidatorIndex:    block.ValidatorIndex,
+			ValidatorKey:      block.ValidatorKey,
+			BlockType:         block.BlockType.String(),
+			Reward:            block.Reward.String(),
+			RewardType:        block.RewardType.String(),
+			WithdrawalAddress: block.WithdrawalAddress,
+		})
+	}
+	m.respondOK(w, wrongFeeBlocks)
 }
 
 func (m *ApiService) handleMemoryDonations(w http.ResponseWriter, req *http.Request) {
-	// TODO: Use getter, since its safer and dont make this fields public
-	m.respondOK(w, m.oracle.State().Donations)
+	donations := make([]httpOkDonation, 0)
+	for _, donation := range m.oracle.State().Donations {
+		donations = append(donations, httpOkDonation{
+			AmountWei: donation.AmountWei.String(),
+			Block:     donation.Block,
+			TxHash:    donation.TxHash,
+		})
+	}
+	m.respondOK(w, donations)
 }
 
 func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.Request) {
@@ -795,14 +778,13 @@ func (m *ApiService) handleValidatorOnchainStateByIndex(w http.ResponseWriter, r
 		return
 	}
 	m.respondOK(w, httpOkValidatorState{
-		ValidatorStatus:       oracle.ValidatorStateToString(valState.ValidatorStatus),
+		ValidatorStatus:       valState.ValidatorStatus.String(),
 		AccumulatedRewardsWei: valState.AccumulatedRewardsWei.String(),
 		PendingRewardsWei:     valState.PendingRewardsWei.String(),
 		CollateralWei:         valState.CollateralWei.String(),
 		WithdrawalAddress:     valState.WithdrawalAddress,
 		ValidatorIndex:        valState.ValidatorIndex,
 		ValidatorKey:          valState.ValidatorKey,
-		// TODO: Missing blocks fields
 	})
 }
 
