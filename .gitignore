@@ -8,6 +8,8 @@ deployments/goerli/postgres-data
 deployments/goerli/metabase-data
 deployments/geth
 deployments/teku
+deployments/besu
+deployments/prysm
 deployments/postgres-data
 deployments/metabase-data
 deployments/.env

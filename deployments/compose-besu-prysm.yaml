@@ -31,7 +31,7 @@ services:
       - besu
       - prysm
     command:
-      - --consensus-endpoint=http://prysm:5051
+      - --consensus-endpoint=http://prysm:3500
       - --execution-endpoint=http://besu:8545
       - --pool-address=${POOL_ADDRESS}
       #- --updater-keystore-path=/keystore
@@ -63,10 +63,12 @@ services:
       - --rpc-http-enabled=true
       - --rpc-http-port=8545
       - --rpc-ws-enabled=true
+      - --rpc-http-cors-origins=*
+      - --sync-mode=X_SNAP
+      - --data-storage-format=BONSAI
 
     ports:
-      - 127.0.0.1:8551:8551
-      - 127.0.0.1:8545:8545
+      - 127.0.0.1:8545:8545 # debug tool, delete mapping in prod
       - 30303:30303/tcp
       - 30303:30303/udp
     volumes:
@@ -86,7 +88,7 @@ services:
       - --p2p-tcp-port=13000
       - --p2p-udp-port=12000
       - --execution-endpoint="http://besu:8551"
-      - --grpc-gateway-host=127.0.0.1
+      - --grpc-gateway-host=0.0.0.0
       - --grpc-gateway-port=3500
       - --monitoring-host=0.0.0.0
       - --monitoring-port=8080
