@@ -1,0 +1,132 @@
+# instructions
+
+# 1. create jwtsecret folder and jwtsecret file
+# mkdir jwtsecret
+# cd jwtsecret
+# sudo openssl rand -hex 32 > jwtsecret
+
+# 2. create besu data folder to avoid permision issues
+# mkdir besu
+
+# 3. define environment variables
+
+# 4. run docker-compose
+# docker-compose up -d
+
+version: "3.9"
+
+# just used by the oracle
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 2000m
+
+services:
+  oracle:
+    image: "dappnode/mev-sp-oracle:f636523"
+    restart: "no"
+    <<: *logging
+    depends_on:
+      - besu
+      - prysm
+    command:
+      - --consensus-endpoint=http://prysm:5051
+      - --execution-endpoint=http://besu:8545
+      - --pool-address=${POOL_ADDRESS}
+      #- --updater-keystore-path=/keystore
+      #- --updater-keystore-pass=${UPDATER_KEYSTORE_PASS}
+      - --dry-run
+    ports:
+      - 7300:7300
+    volumes:
+      - ./oracle-data:/oracle-data
+      - ./keystore:/keystore
+
+  besu:
+    image: "hyperledger/besu:23.4"
+    restart: on-failure
+    stop_grace_period: 5m
+    command:
+      - --network=${NETWORK}
+      - --data-path=/opt/besu/database
+      - --engine-host-allowlist=*
+      - --engine-rpc-enabled=true
+      - --engine-rpc-port=8551
+      - --engine-jwt-secret=/jwtsecret/jwtsecret
+      - --engine-jwt-disabled=false
+      - --p2p-port=30303
+      - --metrics-enabled=true
+      - --metrics-host=0.0.0.0
+      - --metrics-port=9545
+      - --host-allowlist=*
+      - --rpc-http-enabled=true
+      - --rpc-http-port=8545
+      - --rpc-ws-enabled=true
+
+    ports:
+      - 127.0.0.1:8551:8551
+      - 127.0.0.1:8545:8545
+      - 30303:30303/tcp
+      - 30303:30303/udp
+    volumes:
+      - ./besu:/opt/besu/database
+      - ./jwtsecret:/jwtsecret
+
+  prysm:
+    image: prysmaticlabs/prysm-beacon-chain:v4.0.5
+    restart: on-failure
+    depends_on:
+      - besu
+    command:
+      - --${NETWORK}
+      - --datadir=/opt/prysm/data
+      - --accept-terms-of-use
+      - --jwt-secret=/jwtsecret/jwtsecret
+      - --p2p-tcp-port=13000
+      - --p2p-udp-port=12000
+      - --execution-endpoint="http://besu:8551"
+      - --grpc-gateway-host=127.0.0.1
+      - --grpc-gateway-port=3500
+      - --monitoring-host=0.0.0.0
+      - --monitoring-port=8080
+      - --slots-per-archive-point=32
+      - --genesis-state=/genesis/genesis.ssz
+  
+    ports:
+      - 127.0.0.1:13000:13000
+      - 127.0.0.1:12000:12000
+
+    volumes:
+      - ./prysm:/opt/prysm/data
+      - ./genesis:/genesis
+      - ./jwtsecret:/jwtsecret
+
+
+  prometheus:
+    image: prom/prometheus:v2.43.1
+    volumes:
+      - ./monitoring/prometheus-config.yml:/etc/prometheus/prometheus.yml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - 127.0.0.1:9090:9090
+    restart: on-failure
+
+  grafana:
+    image: grafana/grafana:9.5.1
+    env_file:
+      - ./monitoring/configuration/grafana-plugins.env
+    volumes:
+      - ./monitoring/configuration/grafana.ini:/etc/grafana/grafana.ini
+      - ./monitoring/configuration/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./monitoring/configuration/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./monitoring/configuration/dashboards:/var/lib/grafana/dashboards/
+      - ./monitoring/configuration/customizations/custom-logo.svg:/usr/share/grafana/public/img/grafana_icon.svg
+      - ./monitoring/configuration/customizations/custom-logo.svg:/usr/share/grafana/public/img/grafana_typelogo.svg
+      - ./monitoring/configuration/customizations/custom-logo.png:/usr/share/grafana/public/img/fav32.png
+    ports:
+      - 3000:3000
+    restart: on-failure
+    depends_on:
+      - prometheus

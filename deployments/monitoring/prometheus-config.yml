@@ -12,6 +12,12 @@ scrape_configs:
   - job_name: "teku"
     static_configs:
     - targets: ["teku:8008"]
+  - job_name: "besu"
+    static_configs:
+    - targets: ["besu:9545"]
+  - job_name: "prysm"
+    static_configs:
+    - targets: ["prysm:8080"]
   - job_name: "oracle"
     static_configs:
     - targets: ["oracle:8008"]
