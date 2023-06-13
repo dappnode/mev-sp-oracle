@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
@@ -33,6 +34,7 @@ import (
 
 // This file provides different functions to access the blockchain state from both consensus and
 // execution layer and modifying the its state via smart contract calls.
+// TODO: Move cache to onchain struct + test it
 type EpochDuties struct {
 	Epoch  uint64
 	Duties []*api.ProposerDuty
@@ -52,6 +54,8 @@ type Onchain struct {
 	NumRetries      int
 	updaterKey      *ecdsa.PrivateKey
 	validators      map[phase0.ValidatorIndex]*v1.Validator
+
+	etherReceivedCache []*contract.ContractEtherReceived
 }
 
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
@@ -328,7 +332,7 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 // is triggered by both donations and mev rewards.
 // normal eth tx: https://goerli.etherscan.io/tx/0xfeda23c2e9db46e69615a8bec74c4a9f3f9f7eb650659a13c9ad1f394c13698d
 // via sc: https://goerli.etherscan.io/tx/0x277cec5bcb60852b160a29dc9082b7e18a44333194cbe9c7d7b664e4b89b8c46
-// TODO: Test it
+// TODO: Test it. Remove this
 func (o *Onchain) GetDonationEvents(blockNumber uint64, block Block, opts ...retry.Option) ([]Donation, error) {
 	startBlock := uint64(blockNumber)
 	endBlock := uint64(blockNumber)
@@ -386,84 +390,6 @@ func (o *Onchain) GetDonationEvents(blockNumber uint64, block Block, opts ...ret
 		log.Fatal("could not close iterator for new donation events", err)
 	}
 	return donations, nil
-}
-
-func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option) ([]Subscription, error) {
-	startBlock := uint64(blockNumber)
-	endBlock := uint64(blockNumber)
-
-	// Not the most effective way, but we just need to advance one by one.
-	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
-
-	var err error
-	var itr *contract.ContractSubscribeValidatorIterator
-
-	err = retry.Do(func() error {
-		// Note that this event can be both donations and mev rewards
-		itr, err = o.Contract.FilterSubscribeValidator(filterOpts)
-		if err != nil {
-			log.Warn("Failed attempt to filter subscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
-			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-		}
-		return nil
-	}, o.GetRetryOpts(opts)...)
-
-	if err != nil {
-		return nil, errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-	}
-
-	// Loop over all found events
-	blockSubscriptions := make([]Subscription, 0)
-	for itr.Next() {
-		blockSubscriptions = append(blockSubscriptions, Subscription{
-			Event:     itr.Event,
-			Validator: o.validators[phase0.ValidatorIndex(itr.Event.ValidatorID)],
-		})
-	}
-	err = itr.Close()
-	if err != nil {
-		log.Fatal("could not close iterator for new donation events", err)
-	}
-	return blockSubscriptions, nil
-}
-
-func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Option) ([]Unsubscription, error) {
-	startBlock := uint64(blockNumber)
-	endBlock := uint64(blockNumber)
-
-	// Not the most effective way, but we just need to advance one by one.
-	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
-
-	var err error
-	var itr *contract.ContractUnsubscribeValidatorIterator
-
-	err = retry.Do(func() error {
-		// Note that this event can be both donations and mev rewards
-		itr, err = o.Contract.FilterUnsubscribeValidator(filterOpts)
-		if err != nil {
-			log.Warn("Failed attempt to filter unsubscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
-			return errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-		}
-		return nil
-	}, o.GetRetryOpts(opts)...)
-
-	if err != nil {
-		return nil, errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-	}
-
-	// Loop over all found events
-	blockUnsubscriptions := make([]Unsubscription, 0)
-	for itr.Next() {
-		blockUnsubscriptions = append(blockUnsubscriptions, Unsubscription{
-			Event:     itr.Event,
-			Validator: o.validators[phase0.ValidatorIndex(itr.Event.ValidatorID)],
-		})
-	}
-	err = itr.Close()
-	if err != nil {
-		log.Fatal("could not close iterator for new donation events", err)
-	}
-	return blockUnsubscriptions, nil
 }
 
 func (o *Onchain) IsAddressWhitelisted(
@@ -722,9 +648,10 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 	return balanceWei, nil
 }
 
-// Given a slot number, this function fetches all the information that the oracle need to process
-// the block (if not missed) that was proposed in this slot.
-func (o *Onchain) GetBlockFromSlot(slot uint64, oracle *Oracle) Block {
+// TODO: Document logic. events are fetched for every single block.
+// some rewards only if subscriber of pool or reward went to pool.
+// .. etc
+func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 
 	// Get who should propose the block
 	slotDuty, err := o.GetProposalDuty(slot)
@@ -737,75 +664,59 @@ func (o *Onchain) GetBlockFromSlot(slot uint64, oracle *Oracle) Block {
 		log.Fatal("slot duty slot does not match requested slot: ", slotDuty.Slot, " vs ", slot)
 	}
 
+	// Create the full block with the duty, which is the minimum info it can have
+	fullBlock := NewFullBlock(slotDuty, o.Validators()[slotDuty.ValidatorIndex])
+
 	// Fetch the whole consensus block
 	proposedBlock, err := o.GetConsensusBlockAtSlot(slot)
 	if err != nil {
 		log.Fatal("could not get block at slot:", err)
 	}
 
-	// Get the withdrawal credentials and type of the validator that should propose the block
-	withdrawalAddress, withdrawalType := GetWithdrawalAndType(o.validators[slotDuty.ValidatorIndex])
-
-	// Init pool block, with relevant information to the pool
-	poolBlock := Block{
-		Slot:              uint64(slotDuty.Slot),
-		ValidatorIndex:    uint64(slotDuty.ValidatorIndex),
-		ValidatorKey:      slotDuty.PubKey.String(),
-		WithdrawalAddress: withdrawalAddress,
-		Reward:            big.NewInt(0),
-	}
-
 	if proposedBlock == nil {
-		// nil means missed proposal
-		poolBlock.BlockType = MissedProposal
-		return poolBlock
-
+		// Mised block, nothing to do
 	} else {
-		// If the block was proposed
-		extendedBlock := NewFullBlock(proposedBlock, nil, nil)
+		// Succesfull proposal, fetch the info we need
+
+		fullBlock.SetConsensusBlock(proposedBlock)
+
+		// Sanity check to ensure the block is the one we requested
+		if fullBlock.GetSlotUint64() != slot {
+			log.Fatal("slot does not match requested slot: ", fullBlock.GetSlotUint64(), " vs ", slot)
+		}
+
+		// TODO: Proof of concept. Fetch all events that we are interested in
+		etherReceived, err := o.GetEtherReceivedEvents(fullBlock.GetBlockNumber())
+		if err != nil {
+			log.Fatal("failed getting ether received events: ", err)
+		}
+
+		events := &Events{
+			etherReceived: etherReceived,
+		}
+
+		// Add the events to the block
+		fullBlock.SetEvents(events)
 
 		// Check if the proposal is from a subscribed validator
-		isFromSubscriber := oracle.isSubscribed(extendedBlock.GetProposerIndexUint64())
+		isFromSubscriber := oracle.isSubscribed(fullBlock.GetProposerIndexUint64())
 
 		// Check if the reward was sent to the pool
-		isPoolRewarded := extendedBlock.IsAddressRewarded(o.CliCfg.PoolAddress)
+		isPoolRewarded := fullBlock.IsAddressRewarded(o.CliCfg.PoolAddress)
 
 		// This calculation is expensive, do it only if the reward went to the pool or
-		// if the block is from a subscribed validator (which includes also wrong fee blocks from subscribers)
+		// if the block is from a subscribed validator.
 		if isFromSubscriber || isPoolRewarded {
-			blockNumber := new(big.Int).SetUint64(extendedBlock.GetBlockNumber())
-			header, receipts, err := o.GetExecHeaderAndReceipts(blockNumber, extendedBlock.GetBlockTransactions())
+			blockNumber := new(big.Int).SetUint64(fullBlock.GetBlockNumber())
+			header, receipts, err := o.GetExecHeaderAndReceipts(blockNumber, fullBlock.GetBlockTransactions())
 			if err != nil {
 				log.Fatal("failed getting header and receipts: ", err)
 			}
-			extendedBlock = NewFullBlock(proposedBlock, header, receipts)
-		}
-
-		// Fetch block information
-		reward, correctFeeRec, rewardType := extendedBlock.GetSentRewardAndType(o.CliCfg.PoolAddress, isFromSubscriber)
-
-		// Populate common parameters
-		poolBlock.Reward = reward
-		poolBlock.RewardType = rewardType
-		poolBlock.Block = extendedBlock.GetBlockNumber()
-
-		if correctFeeRec {
-			// If the fee recipient was correct
-			poolBlock.BlockType = OkPoolProposal
-			if withdrawalType == BlsWithdrawal {
-				poolBlock.BlockType = OkPoolProposalBlsKeys
-			} else if withdrawalType == Eth1Withdrawal {
-				poolBlock.BlockType = OkPoolProposal
-			} else {
-				log.Fatal("Unknown withdrawal type: ", withdrawalType)
-			}
-		} else {
-			// If the fee recipient was wrong
-			poolBlock.BlockType = WrongFeeRecipient
+			fullBlock.SetHeaderAndReceipts(header, receipts)
 		}
 	}
 
-	return poolBlock
+	return fullBlock
 }
 
 func (onchain *Onchain) GetConfigFromContract(
@@ -931,6 +842,158 @@ func (onchain *Onchain) GetConfigFromContract(
 	}
 
 	return conf
+}
+
+// Fetch events
+func (o *Onchain) GetEtherReceivedEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractEtherReceived, error) {
+
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractEtherReceivedIterator
+
+	err = retry.Do(func() error {
+		itr, err = o.Contract.FilterEtherReceived(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt GetEtherReceivedEvents for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return err
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get EtherReceived events")
+	}
+
+	var events []*contract.ContractEtherReceived
+	for itr.Next() {
+		events = append(events, itr.Event)
+	}
+	err = itr.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close EtherReceived iterator")
+	}
+	return events, nil
+}
+
+func (o *Onchain) GetSubscribeValidatorEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractSubscribeValidator, error) {
+
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractSubscribeValidatorIterator
+
+	err = retry.Do(func() error {
+		itr, err = o.Contract.FilterSubscribeValidator(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt GetSubscribeValidatorEvents for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return err
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get SubscribeValidator events")
+	}
+
+	var events []*contract.ContractSubscribeValidator
+	for itr.Next() {
+		events = append(events, itr.Event)
+	}
+	err = itr.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close SubscribeValidator iterator")
+	}
+	return events, nil
+}
+
+// TODO: Remove deprecated name
+func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option) ([]Subscription, error) {
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	// Not the most effective way, but we just need to advance one by one.
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractSubscribeValidatorIterator
+
+	err = retry.Do(func() error {
+		// Note that this event can be both donations and mev rewards
+		itr, err = o.Contract.FilterSubscribeValidator(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt to filter subscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+	}
+
+	// Loop over all found events
+	blockSubscriptions := make([]Subscription, 0)
+	for itr.Next() {
+		blockSubscriptions = append(blockSubscriptions, Subscription{
+			Event:     itr.Event,
+			Validator: o.validators[phase0.ValidatorIndex(itr.Event.ValidatorID)],
+		})
+	}
+	err = itr.Close()
+	if err != nil {
+		log.Fatal("could not close iterator for new donation events", err)
+	}
+	return blockSubscriptions, nil
+}
+
+func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Option) ([]Unsubscription, error) {
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	// Not the most effective way, but we just need to advance one by one.
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractUnsubscribeValidatorIterator
+
+	err = retry.Do(func() error {
+		// Note that this event can be both donations and mev rewards
+		itr, err = o.Contract.FilterUnsubscribeValidator(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt to filter unsubscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
+	}
+
+	// Loop over all found events
+	blockUnsubscriptions := make([]Unsubscription, 0)
+	for itr.Next() {
+		blockUnsubscriptions = append(blockUnsubscriptions, Unsubscription{
+			Event:     itr.Event,
+			Validator: o.validators[phase0.ValidatorIndex(itr.Event.ValidatorID)],
+		})
+	}
+	err = itr.Close()
+	if err != nil {
+		log.Fatal("could not close iterator for new donation events", err)
+	}
+	return blockUnsubscriptions, nil
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) string {

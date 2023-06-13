@@ -167,7 +167,9 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		if finalizedSlot >= oracleInstance.State().NextSlotToProcess {
 
 			// Fetch block information
-			poolBlock := onchain.GetBlockFromSlot(oracleInstance.State().NextSlotToProcess, oracleInstance)
+			fullBlock := onchain.FetchFullBlock(oracleInstance.State().NextSlotToProcess, oracleInstance)
+			// TODO: This will be removed
+			poolBlock := fullBlock.SummarizedBlock(oracleInstance, cfg.PoolAddress)
 
 			// Fetch subscription data
 			blockSubs, err := onchain.GetBlockSubscriptions(poolBlock.Block)
@@ -188,6 +190,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 			}
 
 			// Advance state to next slot based on the information we got from the block
+			// TODO: This will get the fullBlock directly
 			processedSlot, err := oracleInstance.AdvanceStateToNextSlot(poolBlock, blockSubs, blockUnsubs, blockDonations)
 			if err != nil {
 				log.Fatal(err)

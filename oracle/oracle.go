@@ -820,6 +820,7 @@ func (or *Oracle) handleManualUnsubscriptions(
 }
 
 // TODO: This is more related to automatic subscriptions. Rename and refactor accordingly
+// TODO: rename to handle autoSubscription. Passs v1.Validator Instead.
 func (or *Oracle) AddSubscriptionIfNotAlready(valIndex uint64, WithdrawalAddress string, validatorKey string) {
 	validator, found := or.state.Validators[valIndex]
 	if !found {

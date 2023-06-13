@@ -8,9 +8,11 @@ import (
 	"os"
 	"testing"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +35,11 @@ var block1 = &bellatrix.SignedBeaconBlock{
 
 func Test_FeeRecipientAndSlot(t *testing.T) {
 	// Check that existing methods are inherited and new ones are extended
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Bellatrix: block1}
-	myBlock := NewFullBlock(extendedBlock, nil, nil)
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionBellatrix, Bellatrix: block1}
+	myBlock := NewFullBlock(&v1.ProposerDuty{
+		Slot: 5214140,
+	}, &v1.Validator{})
+	myBlock.SetConsensusBlock(extendedBlock)
 	require.Equal(t, "0x388c818ca8b9251b393131c08a736a67ccb19297", myBlock.GetFeeRecipient())
 	require.Equal(t, uint64(5214140), uint64(myBlock.GetSlot()))
 }
@@ -119,8 +124,15 @@ func Test_GetProperTip_Mainnet_Slot_5320341(t *testing.T) {
 	// Decode a a hardcode block/header/receipts
 	fileName := "bellatrix_slot_5320341_mainnet"
 	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Bellatrix: &block}
-	myBlock := NewFullBlock(extendedBlock, &header, receipts)
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionBellatrix, Bellatrix: &block}
+	myBlock := NewFullBlock(&v1.ProposerDuty{
+		Slot:           5320341,
+		ValidatorIndex: phase0.ValidatorIndex(87961),
+	}, &v1.Validator{
+		Index: 87961,
+	})
+	myBlock.SetConsensusBlock(extendedBlock)
+	myBlock.SetHeaderAndReceipts(&header, receipts)
 
 	// Get proposer tip
 	proposerTip, err := myBlock.GetProposerTip()
@@ -134,8 +146,15 @@ func Test_GetProperTip_Mainnet_Slot_5320341(t *testing.T) {
 func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
 	fileName := "bellatrix_slot_5344344_mainnet"
 	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Bellatrix: &block}
-	myBlock := NewFullBlock(extendedBlock, &header, receipts)
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionBellatrix, Bellatrix: &block}
+	myBlock := NewFullBlock(&v1.ProposerDuty{
+		Slot:           5344344,
+		ValidatorIndex: phase0.ValidatorIndex(356208),
+	}, &v1.Validator{
+		Index: 356208,
+	})
+	myBlock.SetConsensusBlock(extendedBlock)
+	myBlock.SetHeaderAndReceipts(&header, receipts)
 
 	mevReward, mev, mevFeeRecipient := myBlock.MevRewardInWei()
 	require.Equal(t, big.NewInt(99952842017043014), mevReward)
@@ -150,8 +169,15 @@ func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
 func Test_GetProperTip_Goerli_Slot_5214302(t *testing.T) {
 	fileName := "capella_slot_5214302_goerli"
 	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
-	extendedBlock := spec.VersionedSignedBeaconBlock{Capella: &block}
-	myBlock := NewFullBlock(&extendedBlock, &header, receipts)
+	extendedBlock := spec.VersionedSignedBeaconBlock{Version: spec.DataVersionCapella, Capella: &block}
+	myBlock := NewFullBlock(&v1.ProposerDuty{
+		Slot:           5214302,
+		ValidatorIndex: phase0.ValidatorIndex(218475),
+	}, &v1.Validator{
+		Index: 218475,
+	})
+	myBlock.SetConsensusBlock(&extendedBlock)
+	myBlock.SetHeaderAndReceipts(&header, receipts)
 
 	proposerTip, err := myBlock.GetProposerTip()
 	require.NoError(t, err)
@@ -161,8 +187,15 @@ func Test_GetProperTip_Goerli_Slot_5214302(t *testing.T) {
 func Test_GetMevReward_Goerli_Slot_5214321(t *testing.T) {
 	fileName := "capella_slot_5214321_goerli"
 	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Capella: &block}
-	myBlock := NewFullBlock(extendedBlock, &header, receipts)
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionCapella, Capella: &block}
+	myBlock := NewFullBlock(&v1.ProposerDuty{
+		Slot:           5214321,
+		ValidatorIndex: phase0.ValidatorIndex(252922),
+	}, &v1.Validator{
+		Index: 252922,
+	})
+	myBlock.SetConsensusBlock(extendedBlock)
+	myBlock.SetHeaderAndReceipts(&header, receipts)
 
 	// Gets the MEV reward that was sent to a specific address
 	mevReward, mev, mevFeeRecipient := myBlock.MevRewardInWei()
@@ -182,8 +215,15 @@ func Test_GetMevReward_Goerli_Slot_5307527(t *testing.T) {
 	// https://prater.beaconcha.in/slot/5307527
 	fileName := "capella_slot_5307527_goerli"
 	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Capella: &block}
-	myBlock := NewFullBlock(extendedBlock, &header, receipts)
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionCapella, Capella: &block}
+	myBlock := NewFullBlock(&v1.ProposerDuty{
+		Slot:           5307527,
+		ValidatorIndex: phase0.ValidatorIndex(289213),
+	}, &v1.Validator{
+		Index: 289213,
+	})
+	myBlock.SetConsensusBlock(extendedBlock)
+	myBlock.SetHeaderAndReceipts(&header, receipts)
 
 	// No mev reward
 	_, mev, mevFeeRecipient := myBlock.MevRewardInWei()
@@ -199,8 +239,14 @@ func Test_GetMevReward_Goerli_Slot_5307527(t *testing.T) {
 func Test_MevReward_Slot_5320342(t *testing.T) {
 	fileName := "bellatrix_slot_5320342_mainnet"
 	block, _, _ := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Bellatrix: &block}
-	myBlock := NewFullBlock(extendedBlock, nil, nil)
+	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionBellatrix, Bellatrix: &block}
+	myBlock := NewFullBlock(&v1.ProposerDuty{
+		Slot:           5320342,
+		ValidatorIndex: phase0.ValidatorIndex(42156),
+	}, &v1.Validator{
+		Index: 42156,
+	})
+	myBlock.SetConsensusBlock(extendedBlock)
 
 	// Check that mev reward is correct and sent to the address
 	mevReward, mev, mevFeeRecipient := myBlock.MevRewardInWei()

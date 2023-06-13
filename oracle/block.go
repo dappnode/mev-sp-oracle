@@ -5,57 +5,277 @@ import (
 	"math/big"
 	"strings"
 
+	api "github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
+type Events struct {
+	etherReceived                []*contract.ContractEtherReceived
+	subscribeValidator           []*contract.ContractSubscribeValidator
+	claimRewards                 []*contract.ContractClaimRewards
+	setRewardRecipient           []*contract.ContractSetRewardRecipient
+	unsubscribeValidator         []*contract.ContractUnsubscribeValidator
+	initSmoothingPool            []*contract.ContractInitSmoothingPool
+	updatePoolFee                []*contract.ContractUpdatePoolFee
+	poolFeeRecipient             []*contract.ContractUpdatePoolFeeRecipient
+	checkpointSlotSize           []*contract.ContractUpdateCheckpointSlotSize
+	updateSubscriptionCollateral []*contract.ContractUpdateSubscriptionCollateral
+	submitReport                 []*contract.ContractSubmitReport
+	reportConsolidated           []*contract.ContractReportConsolidated
+	updateQuorum                 []*contract.ContractUpdateQuorum
+	addOracleMember              []*contract.ContractAddOracleMember
+	removeOracleMember           []*contract.ContractRemoveOracleMember
+	transferGovernance           []*contract.ContractTransferGovernance
+	acceptGovernance             []*contract.ContractAcceptGovernance
+}
+
+// document. FullBlock vs SummarizedBlock
 type FullBlock struct {
-	// consensus data (block)
+
+	// consensus data: duty (mandatory)
+	consensusDuty *api.ProposerDuty
+
+	// consensus data: validator (mandatory)
+	validator *v1.Validator
+
+	// consensus data: block (optional)
 	consensusBlock *spec.VersionedSignedBeaconBlock
 
-	// execution data (txs)
+	// execution data: txs (optional)
 	executionHeader   *types.Header
 	executionReceipts []*types.Receipt
 
-	// execution data (events)
+	// execution data: events (optional)
 	events *Events
 }
 
+// TODO:  document. consensus duty is the only mandatory field. the rest can be nil
 func NewFullBlock(
-	versionedBlock *spec.VersionedSignedBeaconBlock,
-	header *types.Header,
-	receipts []*types.Receipt) *FullBlock {
+	consensusDuty *api.ProposerDuty,
+	validator *v1.Validator) *FullBlock {
 
-	// TODO: Check that the events belong to the correct block
-	// header/receipts can be nil
-	// events CANT be nil
+	if consensusDuty == nil {
+		log.Fatal("consensus duty can't be nil")
+	}
 
-	// Create the type first to use its methods
+	// Some sanity checks
+	if validator == nil {
+		log.Fatal("validator can't be nil")
+	}
+	if validator.Index != consensusDuty.ValidatorIndex {
+		log.Fatal("Validator index mismatch between consensus duty and validator: ",
+			consensusDuty.ValidatorIndex, " vs ", validator.Index)
+	}
+
 	fb := &FullBlock{
-		consensusBlock:    versionedBlock,
-		executionHeader:   header,
-		executionReceipts: receipts,
-	}
-
-	// Run some sanity checks to ensure the receipts and header match the block
-	if header != nil {
-		if fb.GetBlockNumberBigInt().Uint64() != fb.executionHeader.Number.Uint64() {
-			log.Fatal("Block number mismatch with header: ",
-				fb.GetBlockNumberBigInt().Uint64(), " vs ", fb.executionHeader.Number.Uint64())
-		}
-	}
-	if receipts != nil && len(receipts) > 0 {
-		if fb.GetBlockNumberBigInt().Uint64() != receipts[0].BlockNumber.Uint64() {
-			log.Fatal("Block number mismatch with receipts: ",
-				fb.GetBlockNumberBigInt().Uint64(), " vs ", receipts[0].BlockNumber.Uint64())
-		}
+		consensusDuty: consensusDuty,
+		validator:     validator,
 	}
 
 	return fb
+}
+
+func (b *FullBlock) SetConsensusBlock(consensusBlock *spec.VersionedSignedBeaconBlock) {
+	if consensusBlock == nil {
+		log.Fatal("consensus block can't be nil")
+	}
+
+	cBlockSlot, err := consensusBlock.Slot()
+	if err != nil {
+		log.Fatal("failed to get slot from consensus block: ", err)
+	}
+
+	if b.consensusDuty.Slot != cBlockSlot {
+		log.Fatal("Slot mismatch between consensus duty and consensus block: ",
+			b.consensusDuty.Slot, " vs ", cBlockSlot)
+	}
+
+	// Expand for upcoming forks
+	var proposerIndex uint64
+	if consensusBlock.Altair != nil {
+		proposerIndex = uint64(consensusBlock.Altair.Message.ProposerIndex)
+	} else if consensusBlock.Bellatrix != nil {
+		proposerIndex = uint64(consensusBlock.Bellatrix.Message.ProposerIndex)
+	} else if consensusBlock.Capella != nil {
+		proposerIndex = uint64(consensusBlock.Capella.Message.ProposerIndex)
+	} else {
+		log.Fatal("Block was empty, cant get proposer index")
+	}
+
+	// Sanity check
+	if uint64(b.consensusDuty.ValidatorIndex) != proposerIndex {
+		log.Fatal("Proposer index mismatch between consensus duty and consensus block: ",
+			b.consensusDuty.ValidatorIndex, " vs ", proposerIndex)
+	}
+
+	b.consensusBlock = consensusBlock
+}
+
+func (b *FullBlock) SetHeaderAndReceipts(header *types.Header, receipts []*types.Receipt) {
+	// Some sanity checks
+	if header == nil || receipts == nil {
+		log.Fatal("header or receipts can't be nil",
+			"header: ", header, " receipts: ", receipts)
+	}
+
+	if b.consensusBlock == nil {
+		log.Fatal("consensus block can't be nil")
+	}
+
+	if b.consensusDuty == nil {
+		log.Fatal("consensus duty can't be nil")
+	}
+
+	if b.GetBlockNumberBigInt().Uint64() != header.Number.Uint64() {
+		log.Fatal("Block number mismatch with header: ",
+			b.GetBlockNumberBigInt().Uint64(), " vs ", header.Number.Uint64())
+	}
+
+	if len(receipts) != 0 {
+		if b.GetBlockNumberBigInt().Uint64() != receipts[0].BlockNumber.Uint64() {
+			log.Fatal("Block number mismatch with receipts: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", receipts[0].BlockNumber.Uint64())
+		}
+	}
+
+	b.executionHeader = header
+	b.executionReceipts = receipts
+}
+
+func (b *FullBlock) SetEvents(events *Events) {
+	// Some sanity checks
+	if events == nil {
+		log.Fatal("events can't be nil")
+	}
+
+	// More sanity checks, boilerplate but safe
+	for _, event := range events.etherReceived {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in etherReceived events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.subscribeValidator {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in subscribeValidator events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.claimRewards {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in claimRewards events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.setRewardRecipient {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in setRewardRecipient events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.unsubscribeValidator {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in unsubscribeValidator events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.initSmoothingPool {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in initSmoothingPool events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.updatePoolFee {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in updatePoolFee events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.poolFeeRecipient {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in poolFeeRecipient events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.checkpointSlotSize {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in checkpointSlotSize events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.updateSubscriptionCollateral {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in updateSubscriptionCollateral events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.submitReport {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in submitReport events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.reportConsolidated {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in reportConsolidated events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.updateQuorum {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in updateQuorum events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.addOracleMember {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in addOracleMember events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.removeOracleMember {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in removeOracleMember events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.transferGovernance {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in transferGovernance events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	for _, event := range events.acceptGovernance {
+		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
+			log.Fatal("Block number mismatch in acceptGovernance events: ",
+				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
+		}
+	}
+
+	b.events = events
 }
 
 // Returns if there was an mev reward and its amount and fee recipient if any
@@ -89,6 +309,9 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 	if Equals(b.GetFeeRecipient(), msg.From().String()) {
 		return msg.Value(), true, strings.ToLower(tx.To().String())
 	}
+
+	// TODO: Check also here the events. If it was a mev rewards there must be a
+	// etherReceived event with the amount of the mev reward. Just a way of double check
 
 	return big.NewInt(0), false, ""
 }
@@ -278,6 +501,75 @@ func (b *FullBlock) GetDonations(poolAddress string) []Donation {
 		}
 	}
 	return donations
+}
+
+// Since storing the full block is expensive, we store a summarized version of it
+func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Block { // TODO these inputs are temporal
+
+	// Get the withdrawal credentials and type of the validator that should propose the block
+	withdrawalAddress, withdrawalType := GetWithdrawalAndType(b.validator)
+
+	// Init pool block, with relevant information to the pool
+	poolBlock := Block{
+		Slot:              uint64(b.consensusDuty.Slot),
+		ValidatorIndex:    uint64(b.consensusDuty.ValidatorIndex),
+		ValidatorKey:      b.consensusDuty.PubKey.String(),
+		WithdrawalAddress: withdrawalAddress,
+		Reward:            big.NewInt(0),
+	}
+
+	if b.consensusBlock == nil {
+		// nil means missed proposal
+		poolBlock.BlockType = MissedProposal
+		return poolBlock
+
+	} else {
+
+		// Check if the proposal is from a subscribed validator
+		isFromSubscriber := oracle.isSubscribed(b.GetProposerIndexUint64())
+		isPoolRewarded := b.IsAddressRewarded(poolAddress)
+
+		// This calculation is expensive, do it only if the reward went to the pool or
+		// if the block is from a subscribed validator (which includes also wrong fee blocks from subscribers)
+		if isFromSubscriber || isPoolRewarded {
+			/*
+				blockNumber := new(big.Int).SetUint64(b.GetBlockNumber())
+				header, receipts, err := o.GetExecHeaderAndReceipts(blockNumber, b.GetBlockTransactions())
+				if err != nil {
+					log.Fatal("failed getting header and receipts: ", err)
+				}
+				extendedBlock = NewFullBlock(proposedBlock, header, receipts, events)*/
+		}
+
+		// TODO:
+		//MEVFeeRecipient
+		//FeeRecipient
+
+		// Fetch block information
+		reward, correctFeeRec, rewardType := b.GetSentRewardAndType(poolAddress, isFromSubscriber)
+
+		// Populate common parameters
+		poolBlock.Reward = reward
+		poolBlock.RewardType = rewardType
+		poolBlock.Block = b.GetBlockNumber()
+
+		if correctFeeRec {
+			// If the fee recipient was correct
+			poolBlock.BlockType = OkPoolProposal
+			if withdrawalType == BlsWithdrawal {
+				poolBlock.BlockType = OkPoolProposalBlsKeys
+			} else if withdrawalType == Eth1Withdrawal {
+				poolBlock.BlockType = OkPoolProposal
+			} else {
+				log.Fatal("Unknown withdrawal type: ", withdrawalType)
+			}
+		} else {
+			// If the fee recipient was wrong
+			poolBlock.BlockType = WrongFeeRecipient
+		}
+	}
+
+	return poolBlock
 }
 
 // Returns the fee recipient of the block, depending on the fork version

@@ -79,27 +79,30 @@ type Block struct {
 	Reward            *big.Int   `json:"reward_wei"`
 	RewardType        RewardType `json:"reward_type"`
 	WithdrawalAddress string     `json:"withdrawal_address"`
+	MEVFeeRecipient   string     `json:"mev_fee_recipient"` // TODO: populate
+	FeeRecipient      string     `json:"fee_recipient"`     // TODO: populate
 }
 
 // Represents a donation made to the pool
 // TODO: deprecate this? donations are detected from the block content
 type Donation struct {
-	AmountWei *big.Int
-	Block     uint64
-	TxHash    string
+	AmountWei *big.Int `json:"amount_wei"`
+	Block     uint64   `json:"block"`
+	TxHash    string   `json:"tx_hash"`
 }
 
 // Subscription event and the associated validator (if any)
 // TODO: Store directly the event?¿
 type Subscription struct {
-	Event     *contract.ContractSubscribeValidator
-	Validator *v1.Validator
+	Event     *contract.ContractSubscribeValidator `json:"event"`
+	Validator *v1.Validator                        `json:"validator"`
 }
 
 // Unsubscription event and the associated validator (if any)
+// TODO: Rething and add json:xxx
 type Unsubscription struct {
-	Event     *contract.ContractUnsubscribeValidator
-	Validator *v1.Validator
+	Event     *contract.ContractUnsubscribeValidator `json:"event"`
+	Validator *v1.Validator                          `json:"validator"`
 }
 
 // Represents all the information that is stored of a validator
@@ -153,26 +156,6 @@ type OracleState struct {
 type RawLeaf struct {
 	WithdrawalAddress     string   `json:"withdrawal_address"`
 	AccumulatedBalanceWei *big.Int `json:"accumulated_balance_wei"`
-}
-
-type Events struct {
-	etherReceived                []*contract.ContractEtherReceived
-	subscribeValidator           []*contract.ContractSubscribeValidator
-	claimRewards                 []*contract.ContractClaimRewards
-	setRewardRecipient           []*contract.ContractSetRewardRecipient
-	unsubscribeValidator         []*contract.ContractUnsubscribeValidator
-	initSmoothingPool            []*contract.ContractInitSmoothingPool
-	updatePoolFee                []*contract.ContractUpdatePoolFee
-	poolFeeRecipient             []*contract.ContractUpdatePoolFeeRecipient
-	checkpointSlotSize           []*contract.ContractUpdateCheckpointSlotSize
-	updateSubscriptionCollateral []*contract.ContractUpdateSubscriptionCollateral
-	submitReport                 []*contract.ContractSubmitReport
-	reportConsolidated           []*contract.ContractReportConsolidated
-	updateQuorum                 []*contract.ContractUpdateQuorum
-	addOracleMember              []*contract.ContractAddOracleMember
-	removeOracleMember           []*contract.ContractRemoveOracleMember
-	transferGovernance           []*contract.ContractTransferGovernance
-	acceptGovernance             []*contract.ContractAcceptGovernance
 }
 
 // TODO: Test all this
