@@ -31,7 +31,7 @@ var (
 
 // ContractMetaData contains all meta data concerning the Contract contract.
 var ContractMetaData = &bind.MetaData{
-	ABI: "[{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newOracleMember\",\"type\":\"address\"}],\"name\":\"AddOracleMember\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"withdrawalAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"rewardAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"claimableBalance\",\"type\":\"uint256\"}],\"name\":\"ClaimRewards\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"donationAmount\",\"type\":\"uint256\"}],\"name\":\"EtherReceived\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"oracleMemberRemoved\",\"type\":\"address\"}],\"name\":\"RemoveOracleMember\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"slotNumber\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"newRewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"ReportConsolidated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"withdrawalAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"poolRecipient\",\"type\":\"address\"}],\"name\":\"SetRewardRecipient\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"slotNumber\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"newRewardsRoot\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"oracleMember\",\"type\":\"address\"}],\"name\":\"SubmitReport\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"subscriptionCollateral\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"SubscribeValidator\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"UnsubscribeValidator\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"newCheckpointSlotSize\",\"type\":\"uint64\"}],\"name\":\"UpdateCheckpointSlotSize\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newGovernance\",\"type\":\"address\"}],\"name\":\"UpdateGovernance\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newPoolFee\",\"type\":\"uint256\"}],\"name\":\"UpdatePoolFee\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newPoolFeeRecipient\",\"type\":\"address\"}],\"name\":\"UpdatePoolFeeRecipient\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"newQuorum\",\"type\":\"uint64\"}],\"name\":\"UpdateQuorum\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newSubscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"UpdateSubscriptionCollateral\",\"type\":\"event\"},{\"stateMutability\":\"payable\",\"type\":\"fallback\"},{\"inputs\":[],\"name\":\"INITIAL_REPORT_HASH\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOracleMember\",\"type\":\"address\"}],\"name\":\"addOracleMember\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"addressToVotedReportHash\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"checkpointSlotSize\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"withdrawalAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"accumulatedBalance\",\"type\":\"uint256\"},{\"internalType\":\"bytes32[]\",\"name\":\"merkleProof\",\"type\":\"bytes32[]\"}],\"name\":\"claimRewards\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"claimedBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"deploymentBlockNumber\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"_slot\",\"type\":\"uint64\"},{\"internalType\":\"bytes32\",\"name\":\"_rewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"getReportHash\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"governance\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_governance\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_subscriptionCollateral\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_poolFee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_poolFeeRecipient\",\"type\":\"address\"},{\"internalType\":\"uint64\",\"name\":\"_checkpointSlotSize\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"_quorum\",\"type\":\"uint64\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"lastConsolidatedSlot\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"poolFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"poolFeeRecipient\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"quorum\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"oracleMember\",\"type\":\"address\"}],\"name\":\"removeOracleMember\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"reportHashToReport\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"slot\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"votes\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"rewardRecipient\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"rewardsRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"rewardAddress\",\"type\":\"address\"}],\"name\":\"setRewardRecipient\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"slotNumber\",\"type\":\"uint64\"},{\"internalType\":\"bytes32\",\"name\":\"proposedRewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"submitReport\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"subscribeValidator\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subscriptionCollateral\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"unsubscribeValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"newCheckpointSlotSize\",\"type\":\"uint64\"}],\"name\":\"updateCheckpointSlotSize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newSubscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"updateCollateral\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newGovernance\",\"type\":\"address\"}],\"name\":\"updateGovernance\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newPoolFee\",\"type\":\"uint256\"}],\"name\":\"updatePoolFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newPoolFeeRecipient\",\"type\":\"address\"}],\"name\":\"updatePoolFeeRecipient\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"newQuorum\",\"type\":\"uint64\"}],\"name\":\"updateQuorum\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newGovernance\",\"type\":\"address\"}],\"name\":\"AcceptGovernance\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newOracleMember\",\"type\":\"address\"}],\"name\":\"AddOracleMember\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"withdrawalAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"rewardAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"claimableBalance\",\"type\":\"uint256\"}],\"name\":\"ClaimRewards\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"donationAmount\",\"type\":\"uint256\"}],\"name\":\"EtherReceived\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"initialSmoothingPoolSlot\",\"type\":\"uint64\"}],\"name\":\"InitSmoothingPool\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"oracleMemberRemoved\",\"type\":\"address\"}],\"name\":\"RemoveOracleMember\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"slotNumber\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"newRewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"ReportConsolidated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"withdrawalAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"poolRecipient\",\"type\":\"address\"}],\"name\":\"SetRewardRecipient\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"slotNumber\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"newRewardsRoot\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"oracleMember\",\"type\":\"address\"}],\"name\":\"SubmitReport\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"subscriptionCollateral\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"SubscribeValidator\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newPendingGovernance\",\"type\":\"address\"}],\"name\":\"TransferGovernance\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"UnsubscribeValidator\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"newCheckpointSlotSize\",\"type\":\"uint64\"}],\"name\":\"UpdateCheckpointSlotSize\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newPoolFee\",\"type\":\"uint256\"}],\"name\":\"UpdatePoolFee\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newPoolFeeRecipient\",\"type\":\"address\"}],\"name\":\"UpdatePoolFeeRecipient\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"newQuorum\",\"type\":\"uint64\"}],\"name\":\"UpdateQuorum\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newSubscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"UpdateSubscriptionCollateral\",\"type\":\"event\"},{\"stateMutability\":\"payable\",\"type\":\"fallback\"},{\"inputs\":[],\"name\":\"INITIAL_REPORT_HASH\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"acceptGovernance\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOracleMember\",\"type\":\"address\"}],\"name\":\"addOracleMember\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"addressToVotedReportHash\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"checkpointSlotSize\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"withdrawalAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"accumulatedBalance\",\"type\":\"uint256\"},{\"internalType\":\"bytes32[]\",\"name\":\"merkleProof\",\"type\":\"bytes32[]\"}],\"name\":\"claimRewards\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"claimedBalance\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"deploymentBlockNumber\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getAllOracleMembers\",\"outputs\":[{\"internalType\":\"address[]\",\"name\":\"\",\"type\":\"address[]\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"oracleMember\",\"type\":\"address\"}],\"name\":\"getOracleMemberIndex\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getOracleMembersCount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"_slot\",\"type\":\"uint64\"},{\"internalType\":\"bytes32\",\"name\":\"_rewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"getReportHash\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"governance\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_governance\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_subscriptionCollateral\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_poolFee\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_poolFeeRecipient\",\"type\":\"address\"},{\"internalType\":\"uint64\",\"name\":\"_checkpointSlotSize\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"_quorum\",\"type\":\"uint64\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"lastConsolidatedSlot\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"oracleMembers\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"pendingGovernance\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"poolFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"poolFeeRecipient\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"quorum\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"oracleMemberAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"oracleMemberIndex\",\"type\":\"uint256\"}],\"name\":\"removeOracleMember\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"reportHashToReport\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"slot\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"votes\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"rewardRecipient\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"rewardsRoot\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"rewardAddress\",\"type\":\"address\"}],\"name\":\"setRewardRecipient\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"slotNumber\",\"type\":\"uint64\"},{\"internalType\":\"bytes32\",\"name\":\"proposedRewardsRoot\",\"type\":\"bytes32\"}],\"name\":\"submitReport\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"subscribeValidator\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"subscriptionCollateral\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newPendingGovernance\",\"type\":\"address\"}],\"name\":\"transferGovernance\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"validatorID\",\"type\":\"uint64\"}],\"name\":\"unsubscribeValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"newCheckpointSlotSize\",\"type\":\"uint64\"}],\"name\":\"updateCheckpointSlotSize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newSubscriptionCollateral\",\"type\":\"uint256\"}],\"name\":\"updateCollateral\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newPoolFee\",\"type\":\"uint256\"}],\"name\":\"updatePoolFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newPoolFeeRecipient\",\"type\":\"address\"}],\"name\":\"updatePoolFeeRecipient\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"newQuorum\",\"type\":\"uint64\"}],\"name\":\"updateQuorum\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 }
 
 // ContractABI is the input ABI used to generate the binding from.
@@ -335,6 +335,99 @@ func (_Contract *ContractCallerSession) DeploymentBlockNumber() (*big.Int, error
 	return _Contract.Contract.DeploymentBlockNumber(&_Contract.CallOpts)
 }
 
+// GetAllOracleMembers is a free data retrieval call binding the contract method 0x2827acf3.
+//
+// Solidity: function getAllOracleMembers() view returns(address[])
+func (_Contract *ContractCaller) GetAllOracleMembers(opts *bind.CallOpts) ([]common.Address, error) {
+	var out []interface{}
+	err := _Contract.contract.Call(opts, &out, "getAllOracleMembers")
+
+	if err != nil {
+		return *new([]common.Address), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([]common.Address)).(*[]common.Address)
+
+	return out0, err
+
+}
+
+// GetAllOracleMembers is a free data retrieval call binding the contract method 0x2827acf3.
+//
+// Solidity: function getAllOracleMembers() view returns(address[])
+func (_Contract *ContractSession) GetAllOracleMembers() ([]common.Address, error) {
+	return _Contract.Contract.GetAllOracleMembers(&_Contract.CallOpts)
+}
+
+// GetAllOracleMembers is a free data retrieval call binding the contract method 0x2827acf3.
+//
+// Solidity: function getAllOracleMembers() view returns(address[])
+func (_Contract *ContractCallerSession) GetAllOracleMembers() ([]common.Address, error) {
+	return _Contract.Contract.GetAllOracleMembers(&_Contract.CallOpts)
+}
+
+// GetOracleMemberIndex is a free data retrieval call binding the contract method 0xe1a80493.
+//
+// Solidity: function getOracleMemberIndex(address oracleMember) view returns(uint256)
+func (_Contract *ContractCaller) GetOracleMemberIndex(opts *bind.CallOpts, oracleMember common.Address) (*big.Int, error) {
+	var out []interface{}
+	err := _Contract.contract.Call(opts, &out, "getOracleMemberIndex", oracleMember)
+
+	if err != nil {
+		return *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+
+	return out0, err
+
+}
+
+// GetOracleMemberIndex is a free data retrieval call binding the contract method 0xe1a80493.
+//
+// Solidity: function getOracleMemberIndex(address oracleMember) view returns(uint256)
+func (_Contract *ContractSession) GetOracleMemberIndex(oracleMember common.Address) (*big.Int, error) {
+	return _Contract.Contract.GetOracleMemberIndex(&_Contract.CallOpts, oracleMember)
+}
+
+// GetOracleMemberIndex is a free data retrieval call binding the contract method 0xe1a80493.
+//
+// Solidity: function getOracleMemberIndex(address oracleMember) view returns(uint256)
+func (_Contract *ContractCallerSession) GetOracleMemberIndex(oracleMember common.Address) (*big.Int, error) {
+	return _Contract.Contract.GetOracleMemberIndex(&_Contract.CallOpts, oracleMember)
+}
+
+// GetOracleMembersCount is a free data retrieval call binding the contract method 0xc37f45bf.
+//
+// Solidity: function getOracleMembersCount() view returns(uint256)
+func (_Contract *ContractCaller) GetOracleMembersCount(opts *bind.CallOpts) (*big.Int, error) {
+	var out []interface{}
+	err := _Contract.contract.Call(opts, &out, "getOracleMembersCount")
+
+	if err != nil {
+		return *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+
+	return out0, err
+
+}
+
+// GetOracleMembersCount is a free data retrieval call binding the contract method 0xc37f45bf.
+//
+// Solidity: function getOracleMembersCount() view returns(uint256)
+func (_Contract *ContractSession) GetOracleMembersCount() (*big.Int, error) {
+	return _Contract.Contract.GetOracleMembersCount(&_Contract.CallOpts)
+}
+
+// GetOracleMembersCount is a free data retrieval call binding the contract method 0xc37f45bf.
+//
+// Solidity: function getOracleMembersCount() view returns(uint256)
+func (_Contract *ContractCallerSession) GetOracleMembersCount() (*big.Int, error) {
+	return _Contract.Contract.GetOracleMembersCount(&_Contract.CallOpts)
+}
+
 // GetReportHash is a free data retrieval call binding the contract method 0x781f5855.
 //
 // Solidity: function getReportHash(uint64 _slot, bytes32 _rewardsRoot) pure returns(bytes32)
@@ -428,6 +521,37 @@ func (_Contract *ContractCallerSession) LastConsolidatedSlot() (uint64, error) {
 	return _Contract.Contract.LastConsolidatedSlot(&_Contract.CallOpts)
 }
 
+// OracleMembers is a free data retrieval call binding the contract method 0x37215ebd.
+//
+// Solidity: function oracleMembers(uint256 ) view returns(address)
+func (_Contract *ContractCaller) OracleMembers(opts *bind.CallOpts, arg0 *big.Int) (common.Address, error) {
+	var out []interface{}
+	err := _Contract.contract.Call(opts, &out, "oracleMembers", arg0)
+
+	if err != nil {
+		return *new(common.Address), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
+
+	return out0, err
+
+}
+
+// OracleMembers is a free data retrieval call binding the contract method 0x37215ebd.
+//
+// Solidity: function oracleMembers(uint256 ) view returns(address)
+func (_Contract *ContractSession) OracleMembers(arg0 *big.Int) (common.Address, error) {
+	return _Contract.Contract.OracleMembers(&_Contract.CallOpts, arg0)
+}
+
+// OracleMembers is a free data retrieval call binding the contract method 0x37215ebd.
+//
+// Solidity: function oracleMembers(uint256 ) view returns(address)
+func (_Contract *ContractCallerSession) OracleMembers(arg0 *big.Int) (common.Address, error) {
+	return _Contract.Contract.OracleMembers(&_Contract.CallOpts, arg0)
+}
+
 // Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
 //
 // Solidity: function owner() view returns(address)
@@ -457,6 +581,37 @@ func (_Contract *ContractSession) Owner() (common.Address, error) {
 // Solidity: function owner() view returns(address)
 func (_Contract *ContractCallerSession) Owner() (common.Address, error) {
 	return _Contract.Contract.Owner(&_Contract.CallOpts)
+}
+
+// PendingGovernance is a free data retrieval call binding the contract method 0xf39c38a0.
+//
+// Solidity: function pendingGovernance() view returns(address)
+func (_Contract *ContractCaller) PendingGovernance(opts *bind.CallOpts) (common.Address, error) {
+	var out []interface{}
+	err := _Contract.contract.Call(opts, &out, "pendingGovernance")
+
+	if err != nil {
+		return *new(common.Address), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
+
+	return out0, err
+
+}
+
+// PendingGovernance is a free data retrieval call binding the contract method 0xf39c38a0.
+//
+// Solidity: function pendingGovernance() view returns(address)
+func (_Contract *ContractSession) PendingGovernance() (common.Address, error) {
+	return _Contract.Contract.PendingGovernance(&_Contract.CallOpts)
+}
+
+// PendingGovernance is a free data retrieval call binding the contract method 0xf39c38a0.
+//
+// Solidity: function pendingGovernance() view returns(address)
+func (_Contract *ContractCallerSession) PendingGovernance() (common.Address, error) {
+	return _Contract.Contract.PendingGovernance(&_Contract.CallOpts)
 }
 
 // PoolFee is a free data retrieval call binding the contract method 0x089fe6aa.
@@ -690,6 +845,27 @@ func (_Contract *ContractCallerSession) SubscriptionCollateral() (*big.Int, erro
 	return _Contract.Contract.SubscriptionCollateral(&_Contract.CallOpts)
 }
 
+// AcceptGovernance is a paid mutator transaction binding the contract method 0x238efcbc.
+//
+// Solidity: function acceptGovernance() returns()
+func (_Contract *ContractTransactor) AcceptGovernance(opts *bind.TransactOpts) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "acceptGovernance")
+}
+
+// AcceptGovernance is a paid mutator transaction binding the contract method 0x238efcbc.
+//
+// Solidity: function acceptGovernance() returns()
+func (_Contract *ContractSession) AcceptGovernance() (*types.Transaction, error) {
+	return _Contract.Contract.AcceptGovernance(&_Contract.TransactOpts)
+}
+
+// AcceptGovernance is a paid mutator transaction binding the contract method 0x238efcbc.
+//
+// Solidity: function acceptGovernance() returns()
+func (_Contract *ContractTransactorSession) AcceptGovernance() (*types.Transaction, error) {
+	return _Contract.Contract.AcceptGovernance(&_Contract.TransactOpts)
+}
+
 // AddOracleMember is a paid mutator transaction binding the contract method 0xb164e437.
 //
 // Solidity: function addOracleMember(address newOracleMember) returns()
@@ -753,25 +929,25 @@ func (_Contract *ContractTransactorSession) Initialize(_governance common.Addres
 	return _Contract.Contract.Initialize(&_Contract.TransactOpts, _governance, _subscriptionCollateral, _poolFee, _poolFeeRecipient, _checkpointSlotSize, _quorum)
 }
 
-// RemoveOracleMember is a paid mutator transaction binding the contract method 0xf98fae81.
+// RemoveOracleMember is a paid mutator transaction binding the contract method 0x53985e5a.
 //
-// Solidity: function removeOracleMember(address oracleMember) returns()
-func (_Contract *ContractTransactor) RemoveOracleMember(opts *bind.TransactOpts, oracleMember common.Address) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "removeOracleMember", oracleMember)
+// Solidity: function removeOracleMember(address oracleMemberAddress, uint256 oracleMemberIndex) returns()
+func (_Contract *ContractTransactor) RemoveOracleMember(opts *bind.TransactOpts, oracleMemberAddress common.Address, oracleMemberIndex *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "removeOracleMember", oracleMemberAddress, oracleMemberIndex)
 }
 
-// RemoveOracleMember is a paid mutator transaction binding the contract method 0xf98fae81.
+// RemoveOracleMember is a paid mutator transaction binding the contract method 0x53985e5a.
 //
-// Solidity: function removeOracleMember(address oracleMember) returns()
-func (_Contract *ContractSession) RemoveOracleMember(oracleMember common.Address) (*types.Transaction, error) {
-	return _Contract.Contract.RemoveOracleMember(&_Contract.TransactOpts, oracleMember)
+// Solidity: function removeOracleMember(address oracleMemberAddress, uint256 oracleMemberIndex) returns()
+func (_Contract *ContractSession) RemoveOracleMember(oracleMemberAddress common.Address, oracleMemberIndex *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.RemoveOracleMember(&_Contract.TransactOpts, oracleMemberAddress, oracleMemberIndex)
 }
 
-// RemoveOracleMember is a paid mutator transaction binding the contract method 0xf98fae81.
+// RemoveOracleMember is a paid mutator transaction binding the contract method 0x53985e5a.
 //
-// Solidity: function removeOracleMember(address oracleMember) returns()
-func (_Contract *ContractTransactorSession) RemoveOracleMember(oracleMember common.Address) (*types.Transaction, error) {
-	return _Contract.Contract.RemoveOracleMember(&_Contract.TransactOpts, oracleMember)
+// Solidity: function removeOracleMember(address oracleMemberAddress, uint256 oracleMemberIndex) returns()
+func (_Contract *ContractTransactorSession) RemoveOracleMember(oracleMemberAddress common.Address, oracleMemberIndex *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.RemoveOracleMember(&_Contract.TransactOpts, oracleMemberAddress, oracleMemberIndex)
 }
 
 // RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
@@ -858,6 +1034,27 @@ func (_Contract *ContractTransactorSession) SubscribeValidator(validatorID uint6
 	return _Contract.Contract.SubscribeValidator(&_Contract.TransactOpts, validatorID)
 }
 
+// TransferGovernance is a paid mutator transaction binding the contract method 0xd38bfff4.
+//
+// Solidity: function transferGovernance(address newPendingGovernance) returns()
+func (_Contract *ContractTransactor) TransferGovernance(opts *bind.TransactOpts, newPendingGovernance common.Address) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "transferGovernance", newPendingGovernance)
+}
+
+// TransferGovernance is a paid mutator transaction binding the contract method 0xd38bfff4.
+//
+// Solidity: function transferGovernance(address newPendingGovernance) returns()
+func (_Contract *ContractSession) TransferGovernance(newPendingGovernance common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.TransferGovernance(&_Contract.TransactOpts, newPendingGovernance)
+}
+
+// TransferGovernance is a paid mutator transaction binding the contract method 0xd38bfff4.
+//
+// Solidity: function transferGovernance(address newPendingGovernance) returns()
+func (_Contract *ContractTransactorSession) TransferGovernance(newPendingGovernance common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.TransferGovernance(&_Contract.TransactOpts, newPendingGovernance)
+}
+
 // TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
 //
 // Solidity: function transferOwnership(address newOwner) returns()
@@ -942,27 +1139,6 @@ func (_Contract *ContractTransactorSession) UpdateCollateral(newSubscriptionColl
 	return _Contract.Contract.UpdateCollateral(&_Contract.TransactOpts, newSubscriptionCollateral)
 }
 
-// UpdateGovernance is a paid mutator transaction binding the contract method 0xb2561263.
-//
-// Solidity: function updateGovernance(address newGovernance) returns()
-func (_Contract *ContractTransactor) UpdateGovernance(opts *bind.TransactOpts, newGovernance common.Address) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "updateGovernance", newGovernance)
-}
-
-// UpdateGovernance is a paid mutator transaction binding the contract method 0xb2561263.
-//
-// Solidity: function updateGovernance(address newGovernance) returns()
-func (_Contract *ContractSession) UpdateGovernance(newGovernance common.Address) (*types.Transaction, error) {
-	return _Contract.Contract.UpdateGovernance(&_Contract.TransactOpts, newGovernance)
-}
-
-// UpdateGovernance is a paid mutator transaction binding the contract method 0xb2561263.
-//
-// Solidity: function updateGovernance(address newGovernance) returns()
-func (_Contract *ContractTransactorSession) UpdateGovernance(newGovernance common.Address) (*types.Transaction, error) {
-	return _Contract.Contract.UpdateGovernance(&_Contract.TransactOpts, newGovernance)
-}
-
 // UpdatePoolFee is a paid mutator transaction binding the contract method 0xc2cac04b.
 //
 // Solidity: function updatePoolFee(uint256 newPoolFee) returns()
@@ -1045,6 +1221,140 @@ func (_Contract *ContractSession) Fallback(calldata []byte) (*types.Transaction,
 // Solidity: fallback() payable returns()
 func (_Contract *ContractTransactorSession) Fallback(calldata []byte) (*types.Transaction, error) {
 	return _Contract.Contract.Fallback(&_Contract.TransactOpts, calldata)
+}
+
+// ContractAcceptGovernanceIterator is returned from FilterAcceptGovernance and is used to iterate over the raw logs and unpacked data for AcceptGovernance events raised by the Contract contract.
+type ContractAcceptGovernanceIterator struct {
+	Event *ContractAcceptGovernance // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractAcceptGovernanceIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractAcceptGovernance)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractAcceptGovernance)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractAcceptGovernanceIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractAcceptGovernanceIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractAcceptGovernance represents a AcceptGovernance event raised by the Contract contract.
+type ContractAcceptGovernance struct {
+	NewGovernance common.Address
+	Raw           types.Log // Blockchain specific contextual infos
+}
+
+// FilterAcceptGovernance is a free log retrieval operation binding the contract event 0x0e5e627abed15db8c4841ff7db9a3fb94e105b243564c206bf485362210eee07.
+//
+// Solidity: event AcceptGovernance(address newGovernance)
+func (_Contract *ContractFilterer) FilterAcceptGovernance(opts *bind.FilterOpts) (*ContractAcceptGovernanceIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "AcceptGovernance")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractAcceptGovernanceIterator{contract: _Contract.contract, event: "AcceptGovernance", logs: logs, sub: sub}, nil
+}
+
+// WatchAcceptGovernance is a free log subscription operation binding the contract event 0x0e5e627abed15db8c4841ff7db9a3fb94e105b243564c206bf485362210eee07.
+//
+// Solidity: event AcceptGovernance(address newGovernance)
+func (_Contract *ContractFilterer) WatchAcceptGovernance(opts *bind.WatchOpts, sink chan<- *ContractAcceptGovernance) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "AcceptGovernance")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractAcceptGovernance)
+				if err := _Contract.contract.UnpackLog(event, "AcceptGovernance", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseAcceptGovernance is a log parse operation binding the contract event 0x0e5e627abed15db8c4841ff7db9a3fb94e105b243564c206bf485362210eee07.
+//
+// Solidity: event AcceptGovernance(address newGovernance)
+func (_Contract *ContractFilterer) ParseAcceptGovernance(log types.Log) (*ContractAcceptGovernance, error) {
+	event := new(ContractAcceptGovernance)
+	if err := _Contract.contract.UnpackLog(event, "AcceptGovernance", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
 }
 
 // ContractAddOracleMemberIterator is returned from FilterAddOracleMember and is used to iterate over the raw logs and unpacked data for AddOracleMember events raised by the Contract contract.
@@ -1446,6 +1756,140 @@ func (_Contract *ContractFilterer) WatchEtherReceived(opts *bind.WatchOpts, sink
 func (_Contract *ContractFilterer) ParseEtherReceived(log types.Log) (*ContractEtherReceived, error) {
 	event := new(ContractEtherReceived)
 	if err := _Contract.contract.UnpackLog(event, "EtherReceived", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractInitSmoothingPoolIterator is returned from FilterInitSmoothingPool and is used to iterate over the raw logs and unpacked data for InitSmoothingPool events raised by the Contract contract.
+type ContractInitSmoothingPoolIterator struct {
+	Event *ContractInitSmoothingPool // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractInitSmoothingPoolIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractInitSmoothingPool)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractInitSmoothingPool)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractInitSmoothingPoolIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractInitSmoothingPoolIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractInitSmoothingPool represents a InitSmoothingPool event raised by the Contract contract.
+type ContractInitSmoothingPool struct {
+	InitialSmoothingPoolSlot uint64
+	Raw                      types.Log // Blockchain specific contextual infos
+}
+
+// FilterInitSmoothingPool is a free log retrieval operation binding the contract event 0x517462a977504b91ea9a39b7a880cff34a3a13d734f1b294ae4eb0e5c603c7d0.
+//
+// Solidity: event InitSmoothingPool(uint64 initialSmoothingPoolSlot)
+func (_Contract *ContractFilterer) FilterInitSmoothingPool(opts *bind.FilterOpts) (*ContractInitSmoothingPoolIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "InitSmoothingPool")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractInitSmoothingPoolIterator{contract: _Contract.contract, event: "InitSmoothingPool", logs: logs, sub: sub}, nil
+}
+
+// WatchInitSmoothingPool is a free log subscription operation binding the contract event 0x517462a977504b91ea9a39b7a880cff34a3a13d734f1b294ae4eb0e5c603c7d0.
+//
+// Solidity: event InitSmoothingPool(uint64 initialSmoothingPoolSlot)
+func (_Contract *ContractFilterer) WatchInitSmoothingPool(opts *bind.WatchOpts, sink chan<- *ContractInitSmoothingPool) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "InitSmoothingPool")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractInitSmoothingPool)
+				if err := _Contract.contract.UnpackLog(event, "InitSmoothingPool", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseInitSmoothingPool is a log parse operation binding the contract event 0x517462a977504b91ea9a39b7a880cff34a3a13d734f1b294ae4eb0e5c603c7d0.
+//
+// Solidity: event InitSmoothingPool(uint64 initialSmoothingPoolSlot)
+func (_Contract *ContractFilterer) ParseInitSmoothingPool(log types.Log) (*ContractInitSmoothingPool, error) {
+	event := new(ContractInitSmoothingPool)
+	if err := _Contract.contract.UnpackLog(event, "InitSmoothingPool", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -2415,6 +2859,140 @@ func (_Contract *ContractFilterer) ParseSubscribeValidator(log types.Log) (*Cont
 	return event, nil
 }
 
+// ContractTransferGovernanceIterator is returned from FilterTransferGovernance and is used to iterate over the raw logs and unpacked data for TransferGovernance events raised by the Contract contract.
+type ContractTransferGovernanceIterator struct {
+	Event *ContractTransferGovernance // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractTransferGovernanceIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractTransferGovernance)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractTransferGovernance)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractTransferGovernanceIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractTransferGovernanceIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractTransferGovernance represents a TransferGovernance event raised by the Contract contract.
+type ContractTransferGovernance struct {
+	NewPendingGovernance common.Address
+	Raw                  types.Log // Blockchain specific contextual infos
+}
+
+// FilterTransferGovernance is a free log retrieval operation binding the contract event 0xde4aabcd09171142d82dd9e667db43bf0dca12f30fa0aec30859875d35ecb5d6.
+//
+// Solidity: event TransferGovernance(address newPendingGovernance)
+func (_Contract *ContractFilterer) FilterTransferGovernance(opts *bind.FilterOpts) (*ContractTransferGovernanceIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "TransferGovernance")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractTransferGovernanceIterator{contract: _Contract.contract, event: "TransferGovernance", logs: logs, sub: sub}, nil
+}
+
+// WatchTransferGovernance is a free log subscription operation binding the contract event 0xde4aabcd09171142d82dd9e667db43bf0dca12f30fa0aec30859875d35ecb5d6.
+//
+// Solidity: event TransferGovernance(address newPendingGovernance)
+func (_Contract *ContractFilterer) WatchTransferGovernance(opts *bind.WatchOpts, sink chan<- *ContractTransferGovernance) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "TransferGovernance")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractTransferGovernance)
+				if err := _Contract.contract.UnpackLog(event, "TransferGovernance", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseTransferGovernance is a log parse operation binding the contract event 0xde4aabcd09171142d82dd9e667db43bf0dca12f30fa0aec30859875d35ecb5d6.
+//
+// Solidity: event TransferGovernance(address newPendingGovernance)
+func (_Contract *ContractFilterer) ParseTransferGovernance(log types.Log) (*ContractTransferGovernance, error) {
+	event := new(ContractTransferGovernance)
+	if err := _Contract.contract.UnpackLog(event, "TransferGovernance", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // ContractUnsubscribeValidatorIterator is returned from FilterUnsubscribeValidator and is used to iterate over the raw logs and unpacked data for UnsubscribeValidator events raised by the Contract contract.
 type ContractUnsubscribeValidatorIterator struct {
 	Event *ContractUnsubscribeValidator // Event containing the contract specifics and raw log
@@ -2678,140 +3256,6 @@ func (_Contract *ContractFilterer) WatchUpdateCheckpointSlotSize(opts *bind.Watc
 func (_Contract *ContractFilterer) ParseUpdateCheckpointSlotSize(log types.Log) (*ContractUpdateCheckpointSlotSize, error) {
 	event := new(ContractUpdateCheckpointSlotSize)
 	if err := _Contract.contract.UnpackLog(event, "UpdateCheckpointSlotSize", log); err != nil {
-		return nil, err
-	}
-	event.Raw = log
-	return event, nil
-}
-
-// ContractUpdateGovernanceIterator is returned from FilterUpdateGovernance and is used to iterate over the raw logs and unpacked data for UpdateGovernance events raised by the Contract contract.
-type ContractUpdateGovernanceIterator struct {
-	Event *ContractUpdateGovernance // Event containing the contract specifics and raw log
-
-	contract *bind.BoundContract // Generic contract to use for unpacking event data
-	event    string              // Event name to use for unpacking event data
-
-	logs chan types.Log        // Log channel receiving the found contract events
-	sub  ethereum.Subscription // Subscription for errors, completion and termination
-	done bool                  // Whether the subscription completed delivering logs
-	fail error                 // Occurred error to stop iteration
-}
-
-// Next advances the iterator to the subsequent event, returning whether there
-// are any more events found. In case of a retrieval or parsing error, false is
-// returned and Error() can be queried for the exact failure.
-func (it *ContractUpdateGovernanceIterator) Next() bool {
-	// If the iterator failed, stop iterating
-	if it.fail != nil {
-		return false
-	}
-	// If the iterator completed, deliver directly whatever's available
-	if it.done {
-		select {
-		case log := <-it.logs:
-			it.Event = new(ContractUpdateGovernance)
-			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-				it.fail = err
-				return false
-			}
-			it.Event.Raw = log
-			return true
-
-		default:
-			return false
-		}
-	}
-	// Iterator still in progress, wait for either a data or an error event
-	select {
-	case log := <-it.logs:
-		it.Event = new(ContractUpdateGovernance)
-		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-			it.fail = err
-			return false
-		}
-		it.Event.Raw = log
-		return true
-
-	case err := <-it.sub.Err():
-		it.done = true
-		it.fail = err
-		return it.Next()
-	}
-}
-
-// Error returns any retrieval or parsing error occurred during filtering.
-func (it *ContractUpdateGovernanceIterator) Error() error {
-	return it.fail
-}
-
-// Close terminates the iteration process, releasing any pending underlying
-// resources.
-func (it *ContractUpdateGovernanceIterator) Close() error {
-	it.sub.Unsubscribe()
-	return nil
-}
-
-// ContractUpdateGovernance represents a UpdateGovernance event raised by the Contract contract.
-type ContractUpdateGovernance struct {
-	NewGovernance common.Address
-	Raw           types.Log // Blockchain specific contextual infos
-}
-
-// FilterUpdateGovernance is a free log retrieval operation binding the contract event 0x8d55d160c0009eb3d739442df0a3ca089ed64378bfac017e7ddad463f9815b87.
-//
-// Solidity: event UpdateGovernance(address newGovernance)
-func (_Contract *ContractFilterer) FilterUpdateGovernance(opts *bind.FilterOpts) (*ContractUpdateGovernanceIterator, error) {
-
-	logs, sub, err := _Contract.contract.FilterLogs(opts, "UpdateGovernance")
-	if err != nil {
-		return nil, err
-	}
-	return &ContractUpdateGovernanceIterator{contract: _Contract.contract, event: "UpdateGovernance", logs: logs, sub: sub}, nil
-}
-
-// WatchUpdateGovernance is a free log subscription operation binding the contract event 0x8d55d160c0009eb3d739442df0a3ca089ed64378bfac017e7ddad463f9815b87.
-//
-// Solidity: event UpdateGovernance(address newGovernance)
-func (_Contract *ContractFilterer) WatchUpdateGovernance(opts *bind.WatchOpts, sink chan<- *ContractUpdateGovernance) (event.Subscription, error) {
-
-	logs, sub, err := _Contract.contract.WatchLogs(opts, "UpdateGovernance")
-	if err != nil {
-		return nil, err
-	}
-	return event.NewSubscription(func(quit <-chan struct{}) error {
-		defer sub.Unsubscribe()
-		for {
-			select {
-			case log := <-logs:
-				// New log arrived, parse the event and forward to the user
-				event := new(ContractUpdateGovernance)
-				if err := _Contract.contract.UnpackLog(event, "UpdateGovernance", log); err != nil {
-					return err
-				}
-				event.Raw = log
-
-				select {
-				case sink <- event:
-				case err := <-sub.Err():
-					return err
-				case <-quit:
-					return nil
-				}
-			case err := <-sub.Err():
-				return err
-			case <-quit:
-				return nil
-			}
-		}
-	}), nil
-}
-
-// ParseUpdateGovernance is a log parse operation binding the contract event 0x8d55d160c0009eb3d739442df0a3ca089ed64378bfac017e7ddad463f9815b87.
-//
-// Solidity: event UpdateGovernance(address newGovernance)
-func (_Contract *ContractFilterer) ParseUpdateGovernance(log types.Log) (*ContractUpdateGovernance, error) {
-	event := new(ContractUpdateGovernance)
-	if err := _Contract.contract.UnpackLog(event, "UpdateGovernance", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
