@@ -155,6 +155,26 @@ type RawLeaf struct {
 	AccumulatedBalanceWei *big.Int `json:"accumulated_balance_wei"`
 }
 
+type Events struct {
+	etherReceived                []*contract.ContractEtherReceived
+	subscribeValidator           []*contract.ContractSubscribeValidator
+	claimRewards                 []*contract.ContractClaimRewards
+	setRewardRecipient           []*contract.ContractSetRewardRecipient
+	unsubscribeValidator         []*contract.ContractUnsubscribeValidator
+	initSmoothingPool            []*contract.ContractInitSmoothingPool
+	updatePoolFee                []*contract.ContractUpdatePoolFee
+	poolFeeRecipient             []*contract.ContractUpdatePoolFeeRecipient
+	checkpointSlotSize           []*contract.ContractUpdateCheckpointSlotSize
+	updateSubscriptionCollateral []*contract.ContractUpdateSubscriptionCollateral
+	submitReport                 []*contract.ContractSubmitReport
+	reportConsolidated           []*contract.ContractReportConsolidated
+	updateQuorum                 []*contract.ContractUpdateQuorum
+	addOracleMember              []*contract.ContractAddOracleMember
+	removeOracleMember           []*contract.ContractRemoveOracleMember
+	transferGovernance           []*contract.ContractTransferGovernance
+	acceptGovernance             []*contract.ContractAcceptGovernance
+}
+
 // TODO: Test all this
 func (r *RewardType) String() string {
 	if *r == VanilaBlock {

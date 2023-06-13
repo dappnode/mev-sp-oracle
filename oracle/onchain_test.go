@@ -64,7 +64,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 	// Serialize and dump the block to a file
 	// Change this Bellatrix, Capella or any other block version
 	// depending on which field you want to store
-	mbeel, err := extendedSignedBeaconBlock.Capella.MarshalJSON()
+	mbeel, err := extendedSignedBeaconBlock.consensusBlock.Capella.MarshalJSON()
 	require.NoError(t, err)
 	nameBlock := "block_" + blockType + "_slot_" + strconv.FormatInt(int64(slotToFetch), 10) + "_" + network
 	fblock, err := os.Create(filepath.Join(folder, nameBlock))

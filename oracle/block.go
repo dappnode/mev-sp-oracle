@@ -14,9 +14,15 @@ import (
 )
 
 type FullBlock struct {
-	*spec.VersionedSignedBeaconBlock
-	header   *types.Header
-	receipts []*types.Receipt
+	// consensus data (block)
+	consensusBlock *spec.VersionedSignedBeaconBlock
+
+	// execution data (txs)
+	executionHeader   *types.Header
+	executionReceipts []*types.Receipt
+
+	// execution data (events)
+	events *Events
 }
 
 func NewFullBlock(
@@ -24,18 +30,22 @@ func NewFullBlock(
 	header *types.Header,
 	receipts []*types.Receipt) *FullBlock {
 
+	// TODO: Check that the events belong to the correct block
+	// header/receipts can be nil
+	// events CANT be nil
+
 	// Create the type first to use its methods
 	fb := &FullBlock{
-		VersionedSignedBeaconBlock: versionedBlock,
-		header:                     header,
-		receipts:                   receipts,
+		consensusBlock:    versionedBlock,
+		executionHeader:   header,
+		executionReceipts: receipts,
 	}
 
 	// Run some sanity checks to ensure the receipts and header match the block
 	if header != nil {
-		if fb.GetBlockNumberBigInt().Uint64() != fb.header.Number.Uint64() {
+		if fb.GetBlockNumberBigInt().Uint64() != fb.executionHeader.Number.Uint64() {
 			log.Fatal("Block number mismatch with header: ",
-				fb.GetBlockNumberBigInt().Uint64(), " vs ", fb.header.Number.Uint64())
+				fb.GetBlockNumberBigInt().Uint64(), " vs ", fb.executionHeader.Number.Uint64())
 		}
 	}
 	if receipts != nil && len(receipts) > 0 {
@@ -104,6 +114,7 @@ func (b *FullBlock) GetSentRewardAndType(
 		if err != nil {
 			log.Fatal("could not get proposer tip: ", err)
 		}
+		// TODO: Remove logs from here
 		if Equals(b.GetFeeRecipient(), poolAddress) {
 			log.WithFields(log.Fields{
 				"Slot":         b.GetSlot(),
@@ -131,6 +142,7 @@ func (b *FullBlock) GetSentRewardAndType(
 
 	if mevPresent && Equals(mevRecipient, poolAddress) {
 		wasRewardSent = true
+		// TODO Remove logs from here
 		log.WithFields(log.Fields{
 			"Slot":            b.GetSlot(),
 			"Block":           b.GetBlockNumber(),
@@ -162,18 +174,18 @@ func (b *FullBlock) IsAddressRewarded(address string) bool {
 func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 
 	// Ensure non nil
-	if b.receipts == nil {
+	if b.executionReceipts == nil {
 		return nil, errors.New("receipts of full block are nil, cant calculate tip")
 	}
 
-	if b.header == nil {
+	if b.executionHeader == nil {
 		return nil, errors.New("header of full block are nil, cant calculate tip")
 	}
 
 	// Ensure tx and their receipts have the same size
-	if len(b.GetBlockTransactions()) != len(b.receipts) {
+	if len(b.GetBlockTransactions()) != len(b.executionReceipts) {
 		return nil, errors.New(fmt.Sprintf("txs and receipts not the same length. txs: %d, receipts: %d",
-			len(b.GetBlockTransactions()), len(b.receipts)))
+			len(b.GetBlockTransactions()), len(b.executionReceipts)))
 	}
 
 	// little-endian to big-endian
@@ -190,13 +202,13 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "could not decode tx")
 		}
-		if tx.Hash() != b.receipts[i].TxHash {
+		if tx.Hash() != b.executionReceipts[i].TxHash {
 			return nil, errors.Wrap(err, "tx hash does not match receipt hash")
 		}
 
 		tipFee := new(big.Int)
 		gasPrice := tx.GasPrice()
-		gasUsed := big.NewInt(int64(b.receipts[i].GasUsed))
+		gasUsed := big.NewInt(int64(b.executionReceipts[i].GasUsed))
 
 		switch tx.Type() {
 		case 0:
@@ -205,7 +217,7 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 			tipFee.Mul(gasPrice, gasUsed)
 		case 2:
 			// Sum gastipcap and basefee or saturate to gasfeecap
-			usedGasPrice := SumAndSaturate(msg.GasTipCap(), b.header.BaseFee, msg.GasFeeCap())
+			usedGasPrice := SumAndSaturate(msg.GasTipCap(), b.executionHeader.BaseFee, msg.GasFeeCap())
 			tipFee = new(big.Int).Mul(usedGasPrice, gasUsed)
 		default:
 			return nil, errors.New(fmt.Sprintf("unknown tx type: %d", tx.Type()))
@@ -249,6 +261,7 @@ func (b *FullBlock) GetDonations(poolAddress string) []Donation {
 				continue
 			}
 
+			// TODO: Remove logs from here
 			log.WithFields(log.Fields{
 				"RewardWei":   msg.Value(),
 				"BlockNumber": b.GetBlockNumber(),
@@ -271,12 +284,12 @@ func (b *FullBlock) GetDonations(poolAddress string) []Donation {
 func (b *FullBlock) GetFeeRecipient() string {
 	var feeRecipient string
 
-	if b.Altair != nil {
+	if b.consensusBlock.Altair != nil {
 		log.Fatal("Altair block has no fee recipient")
-	} else if b.Bellatrix != nil {
-		feeRecipient = b.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient.String()
-	} else if b.Capella != nil {
-		feeRecipient = b.Capella.Message.Body.ExecutionPayload.FeeRecipient.String()
+	} else if b.consensusBlock.Bellatrix != nil {
+		feeRecipient = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient.String()
+	} else if b.consensusBlock.Capella != nil {
+		feeRecipient = b.consensusBlock.Capella.Message.Body.ExecutionPayload.FeeRecipient.String()
 	} else {
 		log.Fatal("Block was empty, cant get fee recipient")
 	}
@@ -287,12 +300,12 @@ func (b *FullBlock) GetFeeRecipient() string {
 func (b *FullBlock) GetBlockTransactions() []bellatrix.Transaction {
 
 	var transactions []bellatrix.Transaction
-	if b.Altair != nil {
+	if b.consensusBlock.Altair != nil {
 		log.Fatal("Altair block has no transactions in the beacon block")
-	} else if b.Bellatrix != nil {
-		transactions = b.Bellatrix.Message.Body.ExecutionPayload.Transactions
-	} else if b.Capella != nil {
-		transactions = b.Capella.Message.Body.ExecutionPayload.Transactions
+	} else if b.consensusBlock.Bellatrix != nil {
+		transactions = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.Transactions
+	} else if b.consensusBlock.Capella != nil {
+		transactions = b.consensusBlock.Capella.Message.Body.ExecutionPayload.Transactions
 	} else {
 		log.Fatal("Block was empty, cant get transactions")
 	}
@@ -303,12 +316,12 @@ func (b *FullBlock) GetBlockTransactions() []bellatrix.Transaction {
 func (b *FullBlock) GetBlockNumber() uint64 {
 	var blockNumber uint64
 
-	if b.Altair != nil {
+	if b.consensusBlock.Altair != nil {
 		log.Fatal("Altair block has no block number")
-	} else if b.Bellatrix != nil {
-		blockNumber = b.Bellatrix.Message.Body.ExecutionPayload.BlockNumber
-	} else if b.Capella != nil {
-		blockNumber = b.Capella.Message.Body.ExecutionPayload.BlockNumber
+	} else if b.consensusBlock.Bellatrix != nil {
+		blockNumber = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.BlockNumber
+	} else if b.consensusBlock.Capella != nil {
+		blockNumber = b.consensusBlock.Capella.Message.Body.ExecutionPayload.BlockNumber
 	} else {
 		log.Fatal("Block was empty, cant get block number")
 	}
@@ -324,12 +337,12 @@ func (b *FullBlock) GetBlockNumberBigInt() *big.Int {
 func (b *FullBlock) GetSlot() phase0.Slot {
 	var slot phase0.Slot
 
-	if b.Altair != nil {
-		slot = b.Altair.Message.Slot
-	} else if b.Bellatrix != nil {
-		slot = b.Bellatrix.Message.Slot
-	} else if b.Capella != nil {
-		slot = b.Capella.Message.Slot
+	if b.consensusBlock.Altair != nil {
+		slot = b.consensusBlock.Altair.Message.Slot
+	} else if b.consensusBlock.Bellatrix != nil {
+		slot = b.consensusBlock.Bellatrix.Message.Slot
+	} else if b.consensusBlock.Capella != nil {
+		slot = b.consensusBlock.Capella.Message.Slot
 	} else {
 		log.Fatal("Block was empty, cant get slot")
 	}
@@ -344,12 +357,12 @@ func (b *FullBlock) GetSlotUint64() uint64 {
 func (b *FullBlock) GetProposerIndex() phase0.ValidatorIndex {
 	var proposerIndex phase0.ValidatorIndex
 
-	if b.Altair != nil {
-		proposerIndex = b.Altair.Message.ProposerIndex
-	} else if b.Bellatrix != nil {
-		proposerIndex = b.Bellatrix.Message.ProposerIndex
-	} else if b.Capella != nil {
-		proposerIndex = b.Capella.Message.ProposerIndex
+	if b.consensusBlock.Altair != nil {
+		proposerIndex = b.consensusBlock.Altair.Message.ProposerIndex
+	} else if b.consensusBlock.Bellatrix != nil {
+		proposerIndex = b.consensusBlock.Bellatrix.Message.ProposerIndex
+	} else if b.consensusBlock.Capella != nil {
+		proposerIndex = b.consensusBlock.Capella.Message.ProposerIndex
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
@@ -364,12 +377,12 @@ func (b *FullBlock) GetProposerIndexUint64() uint64 {
 func (b *FullBlock) GetGasUsed() uint64 {
 	var gasUsed uint64
 
-	if b.Altair != nil {
+	if b.consensusBlock.Altair != nil {
 		log.Fatal("Altair block has no gas used")
-	} else if b.Bellatrix != nil {
-		gasUsed = b.Bellatrix.Message.Body.ExecutionPayload.GasUsed
-	} else if b.Capella != nil {
-		gasUsed = b.Capella.Message.Body.ExecutionPayload.GasUsed
+	} else if b.consensusBlock.Bellatrix != nil {
+		gasUsed = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.GasUsed
+	} else if b.consensusBlock.Capella != nil {
+		gasUsed = b.consensusBlock.Capella.Message.Body.ExecutionPayload.GasUsed
 	} else {
 		log.Fatal("Block was empty, cant get gas used")
 	}
@@ -380,12 +393,12 @@ func (b *FullBlock) GetGasUsed() uint64 {
 func (b *FullBlock) GetBaseFeePerGas() [32]byte {
 	var baseFeePerGas [32]byte
 
-	if b.Altair != nil {
+	if b.consensusBlock.Altair != nil {
 		log.Fatal("Altair block has no base fee per gas")
-	} else if b.Bellatrix != nil {
-		baseFeePerGas = b.Bellatrix.Message.Body.ExecutionPayload.BaseFeePerGas
-	} else if b.Capella != nil {
-		baseFeePerGas = b.Capella.Message.Body.ExecutionPayload.BaseFeePerGas
+	} else if b.consensusBlock.Bellatrix != nil {
+		baseFeePerGas = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.BaseFeePerGas
+	} else if b.consensusBlock.Capella != nil {
+		baseFeePerGas = b.consensusBlock.Capella.Message.Body.ExecutionPayload.BaseFeePerGas
 	} else {
 		log.Fatal("Block was empty, cant get base fee per gas")
 	}
