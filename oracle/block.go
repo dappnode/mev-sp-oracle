@@ -68,7 +68,7 @@ func NewFullBlock(
 
 	// Some sanity checks
 	if validator == nil {
-		log.Fatal("validator can't be nil")
+		log.Fatal("validator can't be nil, expected index: ", consensusDuty.ValidatorIndex)
 	}
 	if validator.Index != consensusDuty.ValidatorIndex {
 		log.Fatal("Validator index mismatch between consensus duty and validator: ",
@@ -471,9 +471,10 @@ func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherRe
 	// We need to filter out mev rewards
 	mevReward, isMev, mevRec := b.MevRewardInWei()
 
-	// If no MEV reward was sent to the pool, no etherReceived event is mev
-	if isMev && !Equals(mevRec, poolAddress) {
+	// If no mev reward or mev reward but not to the pool
+	if !isMev || !Equals(mevRec, poolAddress) {
 		// In this case we dont expect any etherReceived event due to MEV
+		// All events are donations
 		return b.events.etherReceived
 	}
 
