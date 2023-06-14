@@ -49,13 +49,13 @@ var ProposalDutyCache EpochDuties
 type Onchain struct {
 	ConsensusClient *http.Service
 	ExecutionClient *ethclient.Client
-	CliCfg          *config.CliConfig
+	CliCfg          *config.CliConfig // TODO:  remove?
 	Contract        *contract.Contract
 	NumRetries      int
 	updaterKey      *ecdsa.PrivateKey
 	validators      map[phase0.ValidatorIndex]*v1.Validator
 
-	etherReceivedCache []*contract.ContractEtherReceived
+	etherReceivedCache []*contract.ContractEtherReceived // TODO: unused
 }
 
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
@@ -63,13 +63,13 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 	// Dial the execution client
 	executionClient, err := ethclient.Dial(cliCfg.ExecutionEndpoint)
 	if err != nil {
-		return nil, errors.New("Error dialing execution client: " + err.Error())
+		return nil, errors.Wrap(err, "Error dialing execution client")
 	}
 
 	// Get chainid to ensure the endpoint is working
 	chainId, err := executionClient.ChainID(context.Background())
 	if err != nil {
-		return nil, errors.New("Error fetching chainId from execution client: " + err.Error())
+		return nil, errors.Wrap(err, "Error fetching chainid from execution client")
 	}
 	log.Info("Connected succesfully to execution client. ChainId: ", chainId)
 
@@ -80,33 +80,34 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		http.WithLogLevel(zerolog.WarnLevel),
 	)
 	if err != nil {
-		return nil, errors.New("Error dialing consensus client. " + err.Error())
+		return nil, errors.Wrap(err, "Error dialing consensus client")
 	}
 	consensusClient := client.(*http.Service)
 
 	// Get deposit contract to ensure the endpoint is working
 	depositContract, err := consensusClient.DepositContract(context.Background())
 	if err != nil {
-		return nil, errors.New("Error fetching deposit contract from consensus client: " + err.Error())
+		return nil, errors.Wrap(err, "Error fetching deposit contract from consensus client")
 	}
 	log.Info("Connected succesfully to consensus client. ChainId: ", depositContract.ChainID,
 		" DepositContract: ", "0x"+hex.EncodeToString(depositContract.Address[:]))
 
 	if depositContract.ChainID != uint64(chainId.Int64()) {
-		return nil, fmt.Errorf("ChainId from consensus and execution client do not match: %d vs %d", depositContract.ChainID, uint64(chainId.Int64()))
+		return nil, errors.Wrap(err, fmt.Sprintf("Consensus and execution clients are not connected to the same chain %d vs %d",
+			depositContract.ChainID, chainId))
 	}
 
 	// Print sync status of consensus and execution client
 	execSync, err := executionClient.SyncProgress(context.Background())
 	if err != nil {
-		return nil, errors.New("Error fetching execution client sync progress: " + err.Error())
+		return nil, errors.Wrap(err, "Error fetching execution client sync progress")
 	}
 
 	// nil means synced
 	if execSync == nil {
 		header, err := executionClient.HeaderByNumber(context.Background(), nil)
 		if err != nil {
-			return nil, errors.New("Error fetching execution client sync progress: " + err.Error())
+			return nil, errors.Wrap(err, "Error fetching execution client header")
 		}
 		log.Info("Execution client is in sync, block number: ", header.Number)
 	} else {
@@ -115,7 +116,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 
 	consSync, err := consensusClient.NodeSyncing(context.Background())
 	if err != nil {
-		return nil, errors.New("Error fetching consensus client sync progress: " + err.Error())
+		return nil, errors.Wrap(err, "Error fetching consensus client sync progress")
 	}
 
 	if consSync.SyncDistance == 0 {
@@ -128,7 +129,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 	address := common.HexToAddress(cliCfg.PoolAddress)
 	contract, err := contract.NewContract(address, executionClient)
 	if err != nil {
-		return nil, errors.New("Error instantiating contract: " + err.Error())
+		return nil, errors.Wrap(err, "Error instantiating contract")
 	}
 
 	return &Onchain{
@@ -324,72 +325,6 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 		receipts = append(receipts, receipt)
 	}
 	return header, receipts, nil
-}
-
-// Get donations in a given block number. Support both normal tx
-// and internal txs donating via a smart contract.
-// The block is inputed to filter out mev rewards from donations since EtherReceived event
-// is triggered by both donations and mev rewards.
-// normal eth tx: https://goerli.etherscan.io/tx/0xfeda23c2e9db46e69615a8bec74c4a9f3f9f7eb650659a13c9ad1f394c13698d
-// via sc: https://goerli.etherscan.io/tx/0x277cec5bcb60852b160a29dc9082b7e18a44333194cbe9c7d7b664e4b89b8c46
-// TODO: Test it. Remove this
-func (o *Onchain) GetDonationEvents(blockNumber uint64, block Block, opts ...retry.Option) ([]Donation, error) {
-	startBlock := uint64(blockNumber)
-	endBlock := uint64(blockNumber)
-
-	// Not the most effective way, but we just need to advance one by one.
-	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
-
-	var err error
-	var itr *contract.ContractEtherReceivedIterator
-
-	err = retry.Do(func() error {
-		// Note that this event can be both donations and mev rewards
-		itr, err = o.Contract.FilterEtherReceived(filterOpts)
-		if err != nil {
-			log.Warn("Failed attempt to filter donations for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
-			return errors.New("Error filtering donations for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-		}
-		return nil
-	}, o.GetRetryOpts(opts)...)
-
-	if err != nil {
-		return nil, errors.New("Could not filter donations for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-	}
-
-	// Loop over all found events
-	donations := make([]Donation, 0)
-	alreadyMatched := false
-	for itr.Next() {
-		event := itr.Event
-
-		// We skip this event since it was triggered by a mev reward as
-		// this event is triggered by both donations and mev rewards.
-		// alreadyMatched prevents to filter out a donation with the same
-		// amount as a mev reward, rare but to be safe.
-		if event.DonationAmount.Cmp(block.Reward) == 0 && !alreadyMatched {
-			alreadyMatched = true
-			continue
-		}
-
-		log.WithFields(log.Fields{
-			"RewardWei":   event.DonationAmount,
-			"BlockNumber": event.Raw.BlockNumber,
-			"Type":        "Donation",
-			"TxHash":      event.Raw.TxHash.Hex(),
-		}).Info("New Reward")
-
-		donations = append(donations, Donation{
-			AmountWei: event.DonationAmount,
-			Block:     blockNumber,
-			TxHash:    event.Raw.TxHash.Hex(),
-		})
-	}
-	err = itr.Close()
-	if err != nil {
-		log.Fatal("could not close iterator for new donation events", err)
-	}
-	return donations, nil
 }
 
 func (o *Onchain) IsAddressWhitelisted(
@@ -915,85 +850,6 @@ func (o *Onchain) GetSubscribeValidatorEvents(
 		return nil, errors.Wrap(err, "could not close SubscribeValidator iterator")
 	}
 	return events, nil
-}
-
-// TODO: Remove deprecated name
-func (o *Onchain) GetBlockSubscriptions(blockNumber uint64, opts ...retry.Option) ([]Subscription, error) {
-	startBlock := uint64(blockNumber)
-	endBlock := uint64(blockNumber)
-
-	// Not the most effective way, but we just need to advance one by one.
-	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
-
-	var err error
-	var itr *contract.ContractSubscribeValidatorIterator
-
-	err = retry.Do(func() error {
-		// Note that this event can be both donations and mev rewards
-		itr, err = o.Contract.FilterSubscribeValidator(filterOpts)
-		if err != nil {
-			log.Warn("Failed attempt to filter subscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
-			return errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-		}
-		return nil
-	}, o.GetRetryOpts(opts)...)
-
-	if err != nil {
-		return nil, errors.New("Error getting validator subscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-	}
-
-	// Loop over all found events
-	blockSubscriptions := make([]Subscription, 0)
-	for itr.Next() {
-		blockSubscriptions = append(blockSubscriptions, Subscription{
-			Event:     itr.Event,
-			Validator: o.validators[phase0.ValidatorIndex(itr.Event.ValidatorID)],
-		})
-	}
-	err = itr.Close()
-	if err != nil {
-		log.Fatal("could not close iterator for new donation events", err)
-	}
-	return blockSubscriptions, nil
-}
-
-func (o *Onchain) GetBlockUnsubscriptions(blockNumber uint64, opts ...retry.Option) ([]Unsubscription, error) {
-	startBlock := uint64(blockNumber)
-	endBlock := uint64(blockNumber)
-
-	// Not the most effective way, but we just need to advance one by one.
-	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
-
-	var err error
-	var itr *contract.ContractUnsubscribeValidatorIterator
-
-	err = retry.Do(func() error {
-		// Note that this event can be both donations and mev rewards
-		itr, err = o.Contract.FilterUnsubscribeValidator(filterOpts)
-		if err != nil {
-			log.Warn("Failed attempt to filter unsubscriptions for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
-			return errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-		}
-		return nil
-	}, o.GetRetryOpts(opts)...)
-
-	if err != nil {
-		return nil, errors.New("Error getting validator unsubscriptions for block " + strconv.FormatUint(blockNumber, 10) + ": " + err.Error())
-	}
-
-	// Loop over all found events
-	blockUnsubscriptions := make([]Unsubscription, 0)
-	for itr.Next() {
-		blockUnsubscriptions = append(blockUnsubscriptions, Unsubscription{
-			Event:     itr.Event,
-			Validator: o.validators[phase0.ValidatorIndex(itr.Event.ValidatorID)],
-		})
-	}
-	err = itr.Close()
-	if err != nil {
-		log.Fatal("could not close iterator for new donation events", err)
-	}
-	return blockUnsubscriptions, nil
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) string {

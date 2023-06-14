@@ -457,7 +457,10 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 // This function is called on everyblock and MevRewardInWei, which iterate the same
 // set of transactions. As a TODO: we can refactor this to only iterate once and get
 // both information.
-// TODO: Unused, only works for normal tx not internal
+// TODO: Unused, only works for normal tx not internal.
+// TODO: use etherreceived event and remove mev to get donation. unfinished!
+// normal eth tx: https://goerli.etherscan.io/tx/0xfeda23c2e9db46e69615a8bec74c4a9f3f9f7eb650659a13c9ad1f394c13698d
+// via sc: https://goerli.etherscan.io/tx/0x277cec5bcb60852b160a29dc9082b7e18a44333194cbe9c7d7b664e4b89b8c46
 func (b *FullBlock) GetDonations(poolAddress string) []Donation {
 	donations := []Donation{}
 

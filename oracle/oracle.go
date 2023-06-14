@@ -16,7 +16,9 @@ import (
 	"github.com/pkg/errors"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	log "github.com/sirupsen/logrus"
 )
@@ -27,9 +29,10 @@ var StateFolder = "oracle-data"
 var StateJsonName = "state.json"
 
 type Oracle struct {
-	cfg   *config.Config
-	state *OracleState
-	mutex sync.RWMutex
+	cfg              *config.Config
+	state            *OracleState
+	beaconValidators map[phase0.ValidatorIndex]*v1.Validator
+	mutex            sync.RWMutex
 }
 
 // TODO: Make private the functions that should not be accessed outside of the package
@@ -49,7 +52,7 @@ func NewOracle(cfg *config.Config) *Oracle {
 		PoolFeesAddress:     cfg.PoolFeesAddress,
 		PoolAccumulatedFees: big.NewInt(0),
 
-		Subscriptions:   make([]Subscription, 0),
+		Subscriptions:   make([]*contract.ContractSubscribeValidator, 0),
 		Unsubscriptions: make([]Unsubscription, 0),
 		Donations:       make([]Donation, 0),
 		ProposedBlocks:  make([]Block, 0),
@@ -81,16 +84,17 @@ func (or *Oracle) State() *OracleState {
 	return or.state
 }
 
+func (or *Oracle) SetBeaconValidators(
+	validators map[phase0.ValidatorIndex]*v1.Validator) {
+	or.beaconValidators = validators
+}
+
 // Advances the oracle to the next state, processing LatestSlot proposals/donations
 // calculating the new state of all validators. It returns the slot that was processed
 // and if there was an error.
 
 // TODO: Here provide the block class, that will contain all events etc.
-func (or *Oracle) AdvanceStateToNextSlot(
-	blockPool Block,
-	blockSubs []Subscription,
-	blockUnsubs []Unsubscription,
-	blockDonations []Donation) (uint64, error) {
+func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
@@ -98,17 +102,20 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	// TODO: Ensure blockPool is == nextSlot to process? or smlt
 
 	if or.state.NextSlotToProcess != (or.state.LatestProcessedSlot + 1) {
-		log.Fatal("Next slot to process is not the last processed slot + 1",
-			or.state.NextSlotToProcess, " ", or.state.LatestProcessedSlot)
+		return 0, errors.New(fmt.Sprint("Next slot to process is not the last processed slot + 1",
+			or.state.NextSlotToProcess, " ", or.state.LatestProcessedSlot))
 	}
 
-	err := or.validateParameters(blockPool, blockSubs, blockUnsubs, blockDonations)
-	if err != nil {
-		return 0, err
-	}
+	/*
+		err := or.validateParameters(blockPool, blockSubs, blockUnsubs, blockDonations)
+		if err != nil {
+			return 0, err
+		}*/
+	blockPool := fullBlock.SummarizedBlock(or, or.cfg.PoolAddress) // TODO: rename to summarizedBlock
+	blockDonations := fullBlock.GetDonations(or.cfg.PoolAddress)
 
 	// Handle subscriptions first thing
-	or.handleManualSubscriptions(blockSubs)
+	or.handleManualSubscriptions(fullBlock.events.subscribeValidator)
 
 	// If the validator was subscribed and missed proposed the block in this slot
 	if blockPool.BlockType == MissedProposal && or.isSubscribed(blockPool.ValidatorIndex) {
@@ -121,9 +128,12 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	}
 
 	// Manual subscription. If feeRec is ok, means the reward was sent to the pool
-	if blockPool.BlockType == OkPoolProposal {
+	if blockPool.BlockType == OkPoolProposal { /* and isSubscribed*/
 		or.handleCorrectBlockProposal(blockPool)
 	}
+
+	// TODO:
+	/* OkPoolProposal && !isSubscribed*/ // auto subs
 
 	// If the validator was subscribed but the fee recipient was wrong we ban the validator
 	if blockPool.BlockType == WrongFeeRecipient && or.isSubscribed(blockPool.ValidatorIndex) {
@@ -145,6 +155,7 @@ func (or *Oracle) AdvanceStateToNextSlot(
 	return processedSlot, nil
 }
 
+/*
 func (or *Oracle) validateParameters(
 	blockPool Block,
 	blockSubs []Subscription,
@@ -158,7 +169,7 @@ func (or *Oracle) validateParameters(
 
 	// TODO: Add more validators to block subs unsubs, donations, etc
 	return nil
-}
+}*/
 
 func (or *Oracle) hashStateLockFree() error {
 	// We remove the hash before hashing, always hashing an empty hash
@@ -346,7 +357,7 @@ func (or *Oracle) LoadStateFromFile() error {
 	readState := OracleState{
 		Validators:          make(map[uint64]*ValidatorInfo, 0),
 		PoolAccumulatedFees: big.NewInt(0),
-		Subscriptions:       make([]Subscription, 0),
+		Subscriptions:       make([]*contract.ContractSubscribeValidator, 0),
 		Unsubscriptions:     make([]Unsubscription, 0),
 		Donations:           make([]Donation, 0),
 		ProposedBlocks:      make([]Block, 0),
@@ -560,20 +571,27 @@ func (or *Oracle) handleBlsCorrectBlockProposal(block Block) {
 }
 
 func (or *Oracle) handleManualSubscriptions(
-	subscriptions []Subscription) {
+	subsEvents []*contract.ContractSubscribeValidator) {
 
-	for _, sub := range subscriptions {
+	if or.beaconValidators == nil {
+		log.Fatal("Beacon validators cant be nil")
+	}
 
-		valIdx := sub.Event.ValidatorID
-		collateral := sub.Event.SubscriptionCollateral
-		sender := sub.Event.Sender.String()
+	for _, sub := range subsEvents {
+		// TODO: Ensure they are from the same block
+
+		valIdx := sub.ValidatorID
+		collateral := sub.SubscriptionCollateral
+		sender := sub.Sender.String()
+
+		validator, found := or.beaconValidators[phase0.ValidatorIndex(valIdx)]
 
 		// Subscription recevied for a validator index that doesnt exist
-		if sub.Validator == nil {
+		if !found {
 			log.WithFields(log.Fields{
-				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SubscriptionCollateral,
-				"TxHash":         sub.Event.Raw.TxHash,
+				"BlockNumber":    sub.Raw.BlockNumber,
+				"Collateral":     sub.SubscriptionCollateral,
+				"TxHash":         sub.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for non existing validator, skipping")
 			// Fees go to the pool, since validator does not exist in the pool and it is not tracked
@@ -581,19 +599,19 @@ func (or *Oracle) handleManualSubscriptions(
 			continue
 		}
 
-		if valIdx != uint64(sub.Validator.Index) {
+		if valIdx != uint64(validator.Index) {
 			log.Fatal("Subscription event validator index doesnt match the validator index. ",
-				valIdx, " vs ", sub.Validator.Index)
+				valIdx, " vs ", validator.Index)
 		}
 
 		// Subscription received for a validator that cannot subscribe (see states)
-		if !CanValidatorSubscribeToPool(sub.Validator) {
+		if !CanValidatorSubscribeToPool(validator) {
 			log.WithFields(log.Fields{
-				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SubscriptionCollateral,
-				"TxHash":         sub.Event.Raw.TxHash,
+				"BlockNumber":    sub.Raw.BlockNumber,
+				"Collateral":     sub.SubscriptionCollateral,
+				"TxHash":         sub.Raw.TxHash,
 				"ValidatorIndex": valIdx,
-				"ValidatorState": sub.Validator.Status,
+				"ValidatorState": validator.Status,
 			}).Warn("[Subscription]: for validator that cannot subscribe due to its state, skipping")
 			// Fees go to the pool, since validator is not operational (withdrawn, slashed, etc)
 			or.SendRewardToPool(collateral)
@@ -601,13 +619,13 @@ func (or *Oracle) handleManualSubscriptions(
 		}
 
 		// Subscription received for a validator that dont have eth1 withdrawal address (bls)
-		validatorWithdrawal, err := GetEth1AddressByte(sub.Validator.Validator.WithdrawalCredentials)
+		validatorWithdrawal, err := GetEth1AddressByte(validator.Validator.WithdrawalCredentials)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SubscriptionCollateral,
-				"TxHash":         sub.Event.Raw.TxHash,
-				"WithdrawalAddr": "0x" + hex.EncodeToString(sub.Validator.Validator.WithdrawalCredentials[:]),
+				"BlockNumber":    sub.Raw.BlockNumber,
+				"Collateral":     sub.SubscriptionCollateral,
+				"TxHash":         sub.Raw.TxHash,
+				"WithdrawalAddr": "0x" + hex.EncodeToString(validator.Validator.WithdrawalCredentials[:]),
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for validator with invalid withdrawal address (bls), skipping")
 			// Fees go to the pool. A validator with a bls address can not be tracked since it has not been able to subscribe.
@@ -618,9 +636,9 @@ func (or *Oracle) handleManualSubscriptions(
 		// Subscription received from an address that is not the validator withdrawal address
 		if !Equals(sender, validatorWithdrawal) {
 			log.WithFields(log.Fields{
-				"BlockNumber":         sub.Event.Raw.BlockNumber,
-				"Collateral":          sub.Event.SubscriptionCollateral,
-				"TxHash":              sub.Event.Raw.TxHash,
+				"BlockNumber":         sub.Raw.BlockNumber,
+				"Collateral":          sub.SubscriptionCollateral,
+				"TxHash":              sub.Raw.TxHash,
 				"ValidatorIndex":      valIdx,
 				"Sender":              sender,
 				"ValidatorWithdrawal": validatorWithdrawal,
@@ -634,9 +652,9 @@ func (or *Oracle) handleManualSubscriptions(
 		// Subscription received for a banned validator
 		if or.IsBanned(valIdx) {
 			log.WithFields(log.Fields{
-				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SubscriptionCollateral,
-				"TxHash":         sub.Event.Raw.TxHash,
+				"BlockNumber":    sub.Raw.BlockNumber,
+				"Collateral":     sub.SubscriptionCollateral,
+				"TxHash":         sub.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for banned validator, skipping")
 			// Since we track this validator, give the collateral back
@@ -647,9 +665,9 @@ func (or *Oracle) handleManualSubscriptions(
 		// Subscription received for an already subscribed validator
 		if or.isSubscribed(valIdx) {
 			log.WithFields(log.Fields{
-				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SubscriptionCollateral,
-				"TxHash":         sub.Event.Raw.TxHash,
+				"BlockNumber":    sub.Raw.BlockNumber,
+				"Collateral":     sub.SubscriptionCollateral,
+				"TxHash":         sub.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for an already subscribed validator, skipping")
 			// Since we track this validator, return the collateral as accumulated balance
@@ -660,9 +678,9 @@ func (or *Oracle) handleManualSubscriptions(
 		// Subscription received for a validator with not enough collateral
 		if !or.IsCollateralEnough(collateral) {
 			log.WithFields(log.Fields{
-				"BlockNumber":    sub.Event.Raw.BlockNumber,
-				"Collateral":     sub.Event.SubscriptionCollateral,
-				"TxHash":         sub.Event.Raw.TxHash,
+				"BlockNumber":    sub.Raw.BlockNumber,
+				"Collateral":     sub.SubscriptionCollateral,
+				"TxHash":         sub.Raw.TxHash,
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for a validator with not enough collateral, skipping")
 			// Fees go to the pool, since validator does not exist in the pool
@@ -685,13 +703,13 @@ func (or *Oracle) handleManualSubscriptions(
 					CollateralWei:         collateral,
 					WithdrawalAddress:     validatorWithdrawal,
 					ValidatorIndex:        valIdx,
-					ValidatorKey:          "0x" + hex.EncodeToString(sub.Validator.Validator.PublicKey[:]),
+					ValidatorKey:          "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
 				}
 			}
 			log.WithFields(log.Fields{
-				"BlockNumber":      sub.Event.Raw.BlockNumber,
-				"Collateral":       sub.Event.SubscriptionCollateral,
-				"TxHash":           sub.Event.Raw.TxHash,
+				"BlockNumber":      sub.Raw.BlockNumber,
+				"Collateral":       sub.SubscriptionCollateral,
+				"TxHash":           sub.Raw.TxHash,
 				"ValidatorIndex":   valIdx,
 				"WithdrawaAddress": validatorWithdrawal,
 			}).Info("[Subscription]: Validator subscribed ok")
@@ -703,9 +721,9 @@ func (or *Oracle) handleManualSubscriptions(
 
 		// If we reach this point, its a case we havent considered, but its not valid
 		log.WithFields(log.Fields{
-			"BlockNumber":      sub.Event.Raw.BlockNumber,
-			"Collateral":       sub.Event.SubscriptionCollateral,
-			"TxHash":           sub.Event.Raw.TxHash,
+			"BlockNumber":      sub.Raw.BlockNumber,
+			"Collateral":       sub.SubscriptionCollateral,
+			"TxHash":           sub.Raw.TxHash,
 			"ValidatorIndex":   valIdx,
 			"WithdrawaAddress": validatorWithdrawal,
 		}).Info("[Subscription]: Not considered case meaning wrong subscription, skipping")

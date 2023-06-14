@@ -92,15 +92,15 @@ type Donation struct {
 }
 
 // Subscription event and the associated validator (if any)
-// TODO: Store directly the event?¿
-type Subscription struct {
+// TODO: Remove and also fix API
+type Subscription struct { //TODO: remove
 	Event     *contract.ContractSubscribeValidator `json:"event"`
 	Validator *v1.Validator                        `json:"validator"`
 }
 
 // Unsubscription event and the associated validator (if any)
 // TODO: Rething and add json:xxx
-type Unsubscription struct {
+type Unsubscription struct { //TODO: remove
 	Event     *contract.ContractUnsubscribeValidator `json:"event"`
 	Validator *v1.Validator                          `json:"validator"`
 }
@@ -142,12 +142,12 @@ type OracleState struct {
 	PoolFeesAddress     string   `json:"pool_fees_address"`
 	PoolAccumulatedFees *big.Int `json:"pool_accumulated_fees"`
 
-	Subscriptions   []Subscription   `json:"subscriptions"`
-	Unsubscriptions []Unsubscription `json:"unsubscriptions"`
-	Donations       []Donation       `json:"donations"`
-	ProposedBlocks  []Block          `json:"proposed_blocks"`
-	MissedBlocks    []Block          `json:"missed_blocks"`
-	WrongFeeBlocks  []Block          `json:"wrong_fee_blocks"`
+	Subscriptions   []*contract.ContractSubscribeValidator `json:"subscriptions"`
+	Unsubscriptions []Unsubscription                       `json:"unsubscriptions"`
+	Donations       []Donation                             `json:"donations"`
+	ProposedBlocks  []Block                                `json:"proposed_blocks"`
+	MissedBlocks    []Block                                `json:"missed_blocks"`
+	WrongFeeBlocks  []Block                                `json:"wrong_fee_blocks"`
 
 	// unsure if config should be here. maybe not TODO:
 	Config *config.Config `json:"todo_unsure"`

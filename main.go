@@ -114,7 +114,9 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 	syncedWithOnchainRoot := false
 
 	// Load all the validators from the beacon chain
+	// TODO: This is duplicated, not very nice
 	onchain.RefreshBeaconValidators()
+	oracleInstance.SetBeaconValidators(onchain.Validators())
 
 	log.WithFields(log.Fields{
 		"LatestProcessedSlot": oracleInstance.State().LatestProcessedSlot,
@@ -168,30 +170,9 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 
 			// Fetch block information
 			fullBlock := onchain.FetchFullBlock(oracleInstance.State().NextSlotToProcess, oracleInstance)
-			// TODO: This will be removed
-			poolBlock := fullBlock.SummarizedBlock(oracleInstance, cfg.PoolAddress)
 
-			// Fetch subscription data
-			blockSubs, err := onchain.GetBlockSubscriptions(poolBlock.Block)
-			if err != nil {
-				log.Fatal("could not get block subscriptions: ", err)
-			}
-
-			// Fetch unsubscription data
-			blockUnsubs, err := onchain.GetBlockUnsubscriptions(poolBlock.Block)
-			if err != nil {
-				log.Fatal("could not get block unsubscriptions: ", err)
-			}
-
-			// Fetch donations in this block
-			blockDonations, err := onchain.GetDonationEvents(poolBlock.Block, poolBlock) // TODO: Redundant
-			if err != nil {
-				log.Fatal("could not get block donations: ", err)
-			}
-
-			// Advance state to next slot based on the information we got from the block
-			// TODO: This will get the fullBlock directly
-			processedSlot, err := oracleInstance.AdvanceStateToNextSlot(poolBlock, blockSubs, blockUnsubs, blockDonations)
+			// Process the block
+			processedSlot, err := oracleInstance.AdvanceStateToNextSlot(fullBlock)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -227,6 +208,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		UpdateValidatorsIntervalSlots := uint64(600)
 		if oracleInstance.State().LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
 			onchain.RefreshBeaconValidators()
+			oracleInstance.SetBeaconValidators(onchain.Validators())
 		}
 
 		// Every CheckPointSizeInSlots we commit the state
