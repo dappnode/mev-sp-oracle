@@ -641,7 +641,9 @@ func Test_handleManualSubscriptions_NonExistent(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{}
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		0: &v1.Validator{}, // dummuy validator
+	}
 
 	subs := []*contract.ContractSubscribeValidator{
 		&contract.ContractSubscribeValidator{
@@ -936,23 +938,15 @@ func Test_SubThenUnsubThenAuto(t *testing.T) {
 	oracle.state.Validators[valIdx].AccumulatedRewardsWei = big.NewInt(20000)
 
 	// Unsubscribe it
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: valIdx,
 			Sender:      common.Address{3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:         types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIdx),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{7, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
 
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	// Check is no longer subscribed and balances are kept (pending is reset)
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[valIdx].PendingRewardsWei)
@@ -1017,24 +1011,15 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	require.Equal(t, 4, len(oracle.state.Validators))
 
 	// Receive valid unsubscription event for index 6
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: 6,
 			// Same as withdrawal credential without the prefix
 			Sender: common.Address{byte(6), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(6),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key/withdrawal addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(6), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(6), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	require.Equal(t, oracle.state.Validators[6], &ValidatorInfo{
 		ValidatorStatus:       NotSubscribed,    // Validator is still tracked but not subscribed
@@ -1047,7 +1032,7 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	})
 	require.Equal(t, 4, len(oracle.state.Validators))
 	require.Equal(t, 1, len(oracle.state.Unsubscriptions))
-	require.Equal(t, unsub, oracle.state.Unsubscriptions[0])
+	require.Equal(t, unsubs[0], oracle.state.Unsubscriptions[0])
 
 	// The rest get the pending of valIndex=6
 	require.Equal(t, oracle.state.Validators[9].PendingRewardsWei, big.NewInt(300000000000000000+300000000000000000/3))
@@ -1065,30 +1050,19 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	require.Equal(t, oracle.state.Validators[15].ValidatorStatus, Active)
 
 	// Unsubscribe all remaining validators
-	unsubs := make([]Unsubscription, 0)
+	newUnsubs := make([]*contract.ContractUnsubscribeValidator, 0)
 	for _, valIdx := range []uint64{ /*6*/ 9, 10, 15} {
-		unsub := Unsubscription{
-			Event: &contract.ContractUnsubscribeValidator{
+		newUnsubs = append(newUnsubs,
+			&contract.ContractUnsubscribeValidator{
 				ValidatorID: valIdx,
 				// Same as withdrawal credential without the prefix
 				Sender: common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 				Raw:    types.Log{TxHash: [32]byte{0x1}},
-			},
-			Validator: &v1.Validator{
-				Index:  phase0.ValidatorIndex(valIdx),
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// byte(valIdx) just to have different key/withdrawal addresses
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
-		}
-		unsubs = append(unsubs, unsub)
+			})
 	}
 
 	// Unsubscribe all at once
-	oracle.handleManualUnsubscriptions(unsubs)
+	oracle.handleManualUnsubscriptions(newUnsubs)
 
 	require.Equal(t, 4, len(oracle.state.Validators))
 	require.Equal(t, oracle.state.Validators[6].ValidatorStatus, NotSubscribed)
@@ -1110,6 +1084,10 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		0: &v1.Validator{}, // dummy validator
+	}
+
 	// Simulate subscription of validator 33
 	oracle.state.Validators[33] = &ValidatorInfo{
 		ValidatorStatus:       Active,
@@ -1122,16 +1100,15 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 	}
 
 	// Receive event of a validator index that doesnt exist in the beacon chain
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: 900300,
 			// Same as withdrawal credential without the prefix
 			Sender: common.Address{byte(50), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: nil,
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	// Check that the existing validator is not affected
 	require.Equal(t, 1, len(oracle.state.Validators))
@@ -1154,26 +1131,21 @@ func Test_HandleUnsubscriptions_NotSubscribedValidator(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		0: &v1.Validator{}, // dummy validator
+	}
+
 	// Unsubscribe event of a validator index that BUT is not subscribed
 	valIdx := uint64(730100)
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: valIdx,
 			// Same as withdrawal credential without the prefix
 			Sender: common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIdx),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key/withdrawal addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 	require.Equal(t, 0, len(oracle.state.Validators))
 }
 
@@ -1184,6 +1156,10 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 	oracle := NewOracle(&config.Config{
 		CollateralInWei: big.NewInt(1000),
 	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		0: &v1.Validator{}, // dummy validator
+	}
 
 	// Simulate subscription of validator 750100
 	valIndex := uint64(750100)
@@ -1197,24 +1173,15 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}
 
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: valIndex,
 			// Wrong sender address (see WithdrawalCredentials)
 			Sender: common.Address{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIndex),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key/withdrawal addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	// Validator remains intact, since unsubscription event was wrong
 	require.Equal(t, &ValidatorInfo{
@@ -1267,24 +1234,15 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	oracle.IncreaseValidatorPendingRewards(valIndex, big.NewInt(5000000000000000000))
 
 	// Now it unsubscribes ok
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: valIndex,
 			// Wrong sender address (see WithdrawalCredentials)
 			Sender: common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIndex),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	// Unsubscription is ok
 	require.Equal(t, &ValidatorInfo{

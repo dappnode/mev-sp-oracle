@@ -142,12 +142,12 @@ type OracleState struct {
 	PoolFeesAddress     string   `json:"pool_fees_address"`
 	PoolAccumulatedFees *big.Int `json:"pool_accumulated_fees"`
 
-	Subscriptions   []*contract.ContractSubscribeValidator `json:"subscriptions"`
-	Unsubscriptions []Unsubscription                       `json:"unsubscriptions"`
-	Donations       []Donation                             `json:"donations"`
-	ProposedBlocks  []Block                                `json:"proposed_blocks"`
-	MissedBlocks    []Block                                `json:"missed_blocks"`
-	WrongFeeBlocks  []Block                                `json:"wrong_fee_blocks"`
+	Subscriptions   []*contract.ContractSubscribeValidator   `json:"subscriptions"`
+	Unsubscriptions []*contract.ContractUnsubscribeValidator `json:"unsubscriptions"`
+	Donations       []Donation                               `json:"donations"`
+	ProposedBlocks  []Block                                  `json:"proposed_blocks"`
+	MissedBlocks    []Block                                  `json:"missed_blocks"`
+	WrongFeeBlocks  []Block                                  `json:"wrong_fee_blocks"`
 
 	// unsure if config should be here. maybe not TODO:
 	Config *config.Config `json:"todo_unsure"`

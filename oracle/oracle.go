@@ -53,7 +53,7 @@ func NewOracle(cfg *config.Config) *Oracle {
 		PoolAccumulatedFees: big.NewInt(0),
 
 		Subscriptions:   make([]*contract.ContractSubscribeValidator, 0),
-		Unsubscriptions: make([]Unsubscription, 0),
+		Unsubscriptions: make([]*contract.ContractUnsubscribeValidator, 0),
 		Donations:       make([]Donation, 0),
 		ProposedBlocks:  make([]Block, 0),
 		MissedBlocks:    make([]Block, 0),
@@ -141,7 +141,7 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	}
 
 	// Handle unsubscriptions the last thing after distributing rewards
-	or.handleManualUnsubscriptions(blockUnsubs)
+	or.handleManualUnsubscriptions(fullBlock.events.unsubscribeValidator)
 
 	// Handle the donations from this block
 	or.handleDonations(blockDonations)
@@ -358,7 +358,7 @@ func (or *Oracle) LoadStateFromFile() error {
 		Validators:          make(map[uint64]*ValidatorInfo, 0),
 		PoolAccumulatedFees: big.NewInt(0),
 		Subscriptions:       make([]*contract.ContractSubscribeValidator, 0),
-		Unsubscriptions:     make([]Unsubscription, 0),
+		Unsubscriptions:     make([]*contract.ContractUnsubscribeValidator, 0),
 		Donations:           make([]Donation, 0),
 		ProposedBlocks:      make([]Block, 0),
 		MissedBlocks:        make([]Block, 0),
@@ -577,6 +577,10 @@ func (or *Oracle) handleManualSubscriptions(
 		log.Fatal("Beacon validators cant be nil")
 	}
 
+	if len(or.beaconValidators) == 0 {
+		log.Fatal("Beacon validators cant be empty")
+	}
+
 	for _, sub := range subsEvents {
 		// TODO: Ensure they are from the same block
 
@@ -732,6 +736,103 @@ func (or *Oracle) handleManualSubscriptions(
 	}
 }
 
+func (or *Oracle) handleManualUnsubscriptions(
+	unsubEvents []*contract.ContractUnsubscribeValidator) {
+
+	if or.beaconValidators == nil {
+		log.Fatal("Beacon validators cant be nil")
+	}
+
+	if len(or.beaconValidators) == 0 {
+		log.Fatal("Beacon validators cant be empty")
+	}
+
+	for _, unsub := range unsubEvents {
+
+		valIdx := unsub.ValidatorID
+		sender := unsub.Sender.String()
+
+		validator, found := or.beaconValidators[phase0.ValidatorIndex(valIdx)]
+
+		// Unsubscription but for a validator that doesnt exist
+		if !found {
+			log.WithFields(log.Fields{
+				"BlockNumber":    unsub.Raw.BlockNumber,
+				"TxHash":         unsub.Raw.TxHash,
+				"Sender":         sender,
+				"ValidatorIndex": valIdx,
+			}).Warn("[Unsubscription]: for validator index that does not exist, skipping")
+			continue
+		}
+
+		if validator.Index != phase0.ValidatorIndex(valIdx) {
+			log.Fatal("Unsubscription event validator index doesnt match the validator index. ",
+				valIdx, " vs ", validator.Index)
+		}
+
+		// Unsubscription but for a validator that does not have an eth1 address. Should never happen
+		withdrawalAddress, err := GetEth1AddressByte(validator.Validator.WithdrawalCredentials)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"BlockNumber":    unsub.Raw.BlockNumber,
+				"TxHash":         unsub.Raw.TxHash,
+				"Sender":         sender,
+				"ValidatorIndex": valIdx,
+			}).Warn("[Unsubscription]: for validator with no eth1 withdrawal addres (bls), skipping")
+			continue
+		}
+
+		// Its very important to check that the unsubscription was made from the withdrawal address
+		// of the validator, otherwise anyone could call the unsubscription function.
+		if !Equals(sender, withdrawalAddress) {
+			log.WithFields(log.Fields{
+				"BlockNumber":      unsub.Raw.BlockNumber,
+				"TxHash":           unsub.Raw.TxHash,
+				"ValidatorIndex":   valIdx,
+				"WithdrawaAddress": withdrawalAddress,
+				"Sender":           sender,
+			}).Warn("[Unsubscription] but sender does not match withdrawal address, skipping")
+			continue
+		}
+
+		// After all the checks, we can proceed with the unsubscription
+		if or.isSubscribed(valIdx) {
+			or.AdvanceStateMachine(valIdx, Unsubscribe)
+			or.IncreaseAllPendingRewards(or.state.Validators[valIdx].PendingRewardsWei)
+			or.ResetPendingRewards(valIdx)
+			or.state.Unsubscriptions = append(or.state.Unsubscriptions, unsub)
+			log.WithFields(log.Fields{
+				"BlockNumber":      unsub.Raw.BlockNumber,
+				"TxHash":           unsub.Raw.TxHash,
+				"ValidatorIndex":   valIdx,
+				"WithdrawaAddress": withdrawalAddress,
+				"Sender":           sender,
+			}).Info("[Unsubscription] Validator unsubscribed ok")
+			continue
+		}
+
+		if !or.isSubscribed(valIdx) {
+			log.WithFields(log.Fields{
+				"BlockNumber":      unsub.Raw.BlockNumber,
+				"TxHash":           unsub.Raw.TxHash,
+				"ValidatorIndex":   valIdx,
+				"WithdrawaAddress": withdrawalAddress,
+				"Sender":           sender,
+			}).Warn("[Unsubscription] but the validator is not subscribed, skipping")
+			continue
+		}
+
+		// If we reach this point, its a case we havent considered, but its not valid
+		log.WithFields(log.Fields{
+			"BlockNumber":      unsub.Raw.BlockNumber,
+			"TxHash":           unsub.Raw.TxHash,
+			"ValidatorIndex":   valIdx,
+			"WithdrawaAddress": withdrawalAddress,
+			"Sender":           sender,
+		}).Warn("[Unsubscription] Not considered case meaning wrong unsubscription, skipping")
+	}
+}
+
 // Banning a validator implies sharing its pending rewards among the rest
 // of the validators and setting its pending to zero.
 func (or *Oracle) handleBanValidator(block Block) {
@@ -748,93 +849,6 @@ func (or *Oracle) handleBanValidator(block Block) {
 func (or *Oracle) handleMissedBlock(block Block) {
 	or.AdvanceStateMachine(block.ValidatorIndex, ProposalMissed)
 	or.state.MissedBlocks = append(or.state.MissedBlocks, block)
-}
-
-func (or *Oracle) handleManualUnsubscriptions(
-	newUnsubscriptions []Unsubscription) {
-
-	for _, unsub := range newUnsubscriptions {
-
-		valIdx := uint64(unsub.Event.ValidatorID) // TODO: should be uint64 in the contract
-		sender := unsub.Event.Sender.String()
-
-		// Unsubscription but for a validator that doesnt exist
-		if unsub.Validator == nil {
-			log.WithFields(log.Fields{
-				"BlockNumber":    unsub.Event.Raw.BlockNumber,
-				"TxHash":         unsub.Event.Raw.TxHash,
-				"Sender":         sender,
-				"ValidatorIndex": valIdx,
-			}).Warn("[Unsubscription]: for validator index that does not exist, skipping")
-			continue
-		}
-
-		if valIdx != uint64(unsub.Validator.Index) {
-			log.Fatal("Unsubscription event validator index doesnt match the validator index. ",
-				valIdx, " vs ", unsub.Validator.Index)
-		}
-
-		// Unsubscription but for a validator that does not have an eth1 address. Should never happen
-		withdrawalAddress, err := GetEth1AddressByte(unsub.Validator.Validator.WithdrawalCredentials)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"BlockNumber":    unsub.Event.Raw.BlockNumber,
-				"TxHash":         unsub.Event.Raw.TxHash,
-				"Sender":         sender,
-				"ValidatorIndex": valIdx,
-			}).Warn("[Unsubscription]: for validator with no eth1 withdrawal addres (bls), skipping")
-			continue
-		}
-
-		// Its very important to check that the unsubscription was made from the withdrawal address
-		// of the validator, otherwise anyone could call the unsubscription function.
-		if !Equals(sender, withdrawalAddress) {
-			log.WithFields(log.Fields{
-				"BlockNumber":      unsub.Event.Raw.BlockNumber,
-				"TxHash":           unsub.Event.Raw.TxHash,
-				"ValidatorIndex":   valIdx,
-				"WithdrawaAddress": withdrawalAddress,
-				"Sender":           sender,
-			}).Warn("[Unsubscription] but sender does not match withdrawal address, skipping")
-			continue
-		}
-
-		// After all the checks, we can proceed with the unsubscription
-		if or.isSubscribed(valIdx) {
-			or.AdvanceStateMachine(valIdx, Unsubscribe)
-			or.IncreaseAllPendingRewards(or.state.Validators[valIdx].PendingRewardsWei)
-			or.ResetPendingRewards(valIdx)
-			or.state.Unsubscriptions = append(or.state.Unsubscriptions, unsub)
-			log.WithFields(log.Fields{
-				"BlockNumber":      unsub.Event.Raw.BlockNumber,
-				"TxHash":           unsub.Event.Raw.TxHash,
-				"ValidatorIndex":   valIdx,
-				"WithdrawaAddress": withdrawalAddress,
-				"Sender":           sender,
-			}).Info("[Unsubscription] Validator unsubscribed ok")
-			continue
-		}
-
-		if !or.isSubscribed(valIdx) {
-			log.WithFields(log.Fields{
-				"BlockNumber":      unsub.Event.Raw.BlockNumber,
-				"TxHash":           unsub.Event.Raw.TxHash,
-				"ValidatorIndex":   valIdx,
-				"WithdrawaAddress": withdrawalAddress,
-				"Sender":           sender,
-			}).Warn("[Unsubscription] but the validator is not subscribed, skipping")
-			continue
-		}
-
-		// If we reach this point, its a case we havent considered, but its not valid
-		log.WithFields(log.Fields{
-			"BlockNumber":      unsub.Event.Raw.BlockNumber,
-			"TxHash":           unsub.Event.Raw.TxHash,
-			"ValidatorIndex":   valIdx,
-			"WithdrawaAddress": withdrawalAddress,
-			"Sender":           sender,
-		}).Warn("[Unsubscription] Not considered case meaning wrong unsubscription, skipping")
-	}
 }
 
 // TODO: This is more related to automatic subscriptions. Rename and refactor accordingly
