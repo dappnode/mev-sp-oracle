@@ -95,7 +95,7 @@ func Test_GetBellatrixBlockAtSlot(t *testing.T) {
 
 	var receiptsBlock []*types.Receipt
 	for _, rawTx := range extendedSignedBeaconBlock.GetBlockTransactions() {
-		tx, _, err := DecodeTx(rawTx)
+		tx, err := DecodeTx(rawTx)
 		if err == nil {
 			receipt, err := onchain.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
 			require.NoError(t, err)

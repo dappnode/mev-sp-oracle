@@ -428,7 +428,7 @@ func (or *Oracle) StoreLatestOnchainState() bool {
 		}
 
 		block := withdrawalToLeaf[WithdrawalAddress]
-		proof, err := tree.GenerateProof(block)
+		proof, err := tree.Proof(block)
 
 		if err != nil {
 			log.Fatal("could not generate proof for block: ", err)

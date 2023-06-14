@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
+	builderApiV1 "github.com/attestantio/go-builder-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/flashbots/go-boost-utils/types"
 	"github.com/hako/durafmt"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
@@ -820,7 +820,7 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			signedRegistration := &types.SignedValidatorRegistration{}
+			signedRegistration := &builderApiV1.SignedValidatorRegistration{}
 
 			bodyBytes, err := io.ReadAll(resp.Body)
 			if err != nil {
@@ -836,7 +836,7 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 			relayRegistration := httpRelay{
 				RelayAddress: relay,
 				FeeRecipient: signedRegistration.Message.FeeRecipient.String(),
-				Timestamp:    fmt.Sprintf("%s", time.Unix(int64(signedRegistration.Message.Timestamp), 0)),
+				Timestamp:    fmt.Sprintf("%d", signedRegistration.Message.Timestamp.UnixNano()),
 			}
 
 			if strings.ToLower(signedRegistration.Message.FeeRecipient.String()) == strings.ToLower(m.Onchain.CliCfg.PoolAddress) {
