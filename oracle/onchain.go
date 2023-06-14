@@ -44,7 +44,7 @@ type EpochDuties struct {
 // This is useful to not query the beacon node for each slot
 // since ProposerDuties returns the duties for the whole epoch
 // Note that the cache is meant to store only one epoch's duties
-var ProposalDutyCache EpochDuties
+var ProposalDutyCache EpochDuties // TODO: Make the cache part of onchain
 
 type Onchain struct {
 	ConsensusClient *http.Service
@@ -54,8 +54,6 @@ type Onchain struct {
 	NumRetries      int
 	updaterKey      *ecdsa.PrivateKey
 	validators      map[phase0.ValidatorIndex]*v1.Validator
-
-	etherReceivedCache []*contract.ContractEtherReceived // TODO: unused
 }
 
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
@@ -137,6 +135,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		ExecutionClient: executionClient,
 		CliCfg:          cliCfg,
 		Contract:        contract,
+		NumRetries:      cliCfg.NumRetries,
 		updaterKey:      updaterKey,
 	}, nil
 }
@@ -664,7 +663,7 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 		isFromSubscriber := oracle.isSubscribed(fullBlock.GetProposerIndexUint64())
 
 		// Check if the reward was sent to the pool
-		isPoolRewarded := fullBlock.isAddressRewarded(o.CliCfg.PoolAddress)
+		isPoolRewarded := fullBlock.IsAddressRewarded(o.CliCfg.PoolAddress)
 
 		// This calculation is expensive, do it only if the reward went to the pool or
 		// if the block is from a subscribed validator.
@@ -806,27 +805,7 @@ func (onchain *Onchain) GetConfigFromContract(
 	return conf
 }
 
-/*
-done: etherReceived                []*contract.ContractEtherReceived
-done: subscribeValidator           []*contract.ContractSubscribeValidator
-done: claimRewards                 []*contract.ContractClaimRewards
-done: setRewardRecipient           []*contract.ContractSetRewardRecipient
-done: unsubscribeValidator         []*contract.ContractUnsubscribeValidator
-initSmoothingPool            []*contract.ContractInitSmoothingPool
-updatePoolFee                []*contract.ContractUpdatePoolFee
-poolFeeRecipient             []*contract.ContractUpdatePoolFeeRecipient
-checkpointSlotSize           []*contract.ContractUpdateCheckpointSlotSize
-updateSubscriptionCollateral []*contract.ContractUpdateSubscriptionCollateral
-submitReport                 []*contract.ContractSubmitReport
-reportConsolidated           []*contract.ContractReportConsolidated
-updateQuorum                 []*contract.ContractUpdateQuorum
-addOracleMember              []*contract.ContractAddOracleMember
-removeOracleMember           []*contract.ContractRemoveOracleMember
-transferGovernance           []*contract.ContractTransferGovernance
-acceptGovernance             []*contract.ContractAcceptGovernance
-*/
-
-// Fetch events
+// Wrappers to fetch every event with the retrial logic
 func (o *Onchain) GetEtherReceivedEvents(
 	blockNumber uint64,
 	opts ...retry.Option) ([]*contract.ContractEtherReceived, error) {

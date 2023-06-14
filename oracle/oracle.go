@@ -53,7 +53,7 @@ func NewOracle(cfg *Config) *Oracle {
 
 		Subscriptions:   make([]*contract.ContractSubscribeValidator, 0),
 		Unsubscriptions: make([]*contract.ContractUnsubscribeValidator, 0),
-		Donations:       make([]Donation, 0),
+		Donations:       make([]*contract.ContractEtherReceived, 0),
 		ProposedBlocks:  make([]Block, 0),
 		MissedBlocks:    make([]Block, 0),
 		WrongFeeBlocks:  make([]Block, 0),
@@ -103,6 +103,10 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 		return 0, errors.New(fmt.Sprint("Next slot to process is not the last processed slot + 1",
 			or.state.NextSlotToProcess, " ", or.state.LatestProcessedSlot))
 	}
+
+	// TODO: Debug print etherReceived events. source of truth for rewards + vanila block
+
+	// TODO: Wondering if i should store the FullBlock
 
 	summarizedBlock := fullBlock.SummarizedBlock(or, or.cfg.PoolAddress)
 	blockDonations := fullBlock.GetDonations(or.cfg.PoolAddress)
@@ -316,7 +320,7 @@ func (or *Oracle) LoadStateFromFile() error {
 		PoolAccumulatedFees: big.NewInt(0),
 		Subscriptions:       make([]*contract.ContractSubscribeValidator, 0),
 		Unsubscriptions:     make([]*contract.ContractUnsubscribeValidator, 0),
-		Donations:           make([]Donation, 0),
+		Donations:           make([]*contract.ContractEtherReceived, 0),
 		ProposedBlocks:      make([]Block, 0),
 		MissedBlocks:        make([]Block, 0),
 		WrongFeeBlocks:      make([]Block, 0),
@@ -527,20 +531,26 @@ func (or *Oracle) isCollateralEnough(collateral *big.Int) bool {
 	return collateral.Cmp(or.state.Config.CollateralInWei) >= 0
 }
 
-func (or *Oracle) handleDonations(donations []Donation) {
+func (or *Oracle) handleDonations(donations []*contract.ContractEtherReceived) {
 	// Ensure the donations are from the same block
 	if len(donations) > 0 {
-		blockReference := donations[0].Block
+		blockReference := donations[0].Raw.BlockNumber
 		for _, donation := range donations {
-			if donation.Block != blockReference {
+			if donation.Raw.BlockNumber != blockReference {
 				log.Fatal("Handling donations from different blocks is not possible: ",
-					donation.Block, " vs ", blockReference)
+					donation.Raw.BlockNumber, " vs ", blockReference)
 			}
 		}
 	}
 	for _, donation := range donations {
-		or.increaseAllPendingRewards(donation.AmountWei)
+		or.increaseAllPendingRewards(donation.DonationAmount)
 		or.state.Donations = append(or.state.Donations, donation)
+		log.WithFields(log.Fields{
+			"RewardWei":   donation.DonationAmount,
+			"BlockNumber": donation.Raw.BlockNumber,
+			"Type":        "Donation",
+			"TxHash":      donation.Raw.TxHash.String(),
+		}).Info("[Reward]")
 	}
 }
 
@@ -550,6 +560,16 @@ func (or *Oracle) handleCorrectBlockProposal(block Block) {
 	or.increaseAllPendingRewards(block.Reward)
 	or.consolidateBalance(block.ValidatorIndex)
 	or.state.ProposedBlocks = append(or.state.ProposedBlocks, block)
+
+	log.WithFields(log.Fields{
+		"Slot":       block.Slot,
+		"Block":      block.Block,
+		"ValIndex":   block.ValidatorIndex,
+		"Reward":     block.Reward,
+		"RewardType": block.RewardType,
+		//"PoolAddress":  xxx.,
+		//"FeeRecipient": xxx,
+	}).Info("[Reward]")
 }
 
 func (or *Oracle) handleBlsCorrectBlockProposal(block Block) {

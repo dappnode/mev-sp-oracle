@@ -45,6 +45,127 @@ func Test_AdvanceStateToNextSlot(t *testing.T) {
 
 }
 
+// TODO: Test that if the file changes it fails due to hash
+func Test_SaveReadToFromJson(t *testing.T) {
+	oracle := NewOracle(&Config{
+		PoolAddress:     "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
+		Network:         "mainnet",
+	})
+
+	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+
+	oracle.StoreLatestOnchainState()
+
+	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(643344), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+
+	oracle.StoreLatestOnchainState()
+
+	subs := []*contract.ContractSubscribeValidator{
+		{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}, Topics: []common.Hash{{0x2}}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+	oracle.state.Subscriptions = subs
+	_ = subs
+
+	defer os.Remove(filepath.Join(StateFileName, StateFolder))
+	defer os.RemoveAll(StateFolder)
+	oracle.SaveToJson()
+
+	oracle.LoadFromJson()
+	//defer os.Remove(filepath.Join(StateFileName, StateFolder))
+	//defer os.RemoveAll(StateFolder)
+	jsonData, err := json.MarshalIndent(oracle.state, "", " ")
+	if err != nil {
+		log.Fatal("could not marshal state to json: ", err)
+	}
+
+	fmt.Printf("recovered data: %s\n", jsonData)
+	log.Info(oracle.state.Validators[3].ValidatorStatus)
+
+	require.Equal(t, oracle.state, oracle.state)
+
+	//require.NoError(t, err)
+	//require.Equal(t, state, state)
+}
+
+func Test_StoreLatestOnchainState(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		PoolFeesPercent: 0,
+		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
+	})
+
+	valInfo1 := &ValidatorInfo{
+		ValidatorStatus:       Active,
+		ValidatorIndex:        1,
+		AccumulatedRewardsWei: big.NewInt(1000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
+	}
+
+	valInfo2 := &ValidatorInfo{
+		ValidatorStatus:       NotSubscribed,
+		ValidatorIndex:        2,
+		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		// same withdrawal address as valInfo3
+		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
+	}
+
+	valInfo3 := &ValidatorInfo{
+		ValidatorStatus:       NotSubscribed,
+		ValidatorIndex:        3,
+		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		// same withdrawal address as valInfo2
+		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
+	}
+
+	oracle.state.Validators[1] = valInfo1
+	oracle.state.Validators[2] = valInfo2
+	oracle.state.Validators[3] = valInfo3
+
+	// Function under test
+	oracle.StoreLatestOnchainState()
+
+	// Ensure all validators are present in the state
+	require.Equal(t, valInfo1, oracle.state.LatestCommitedState.Validators[1])
+	require.Equal(t, valInfo2, oracle.state.LatestCommitedState.Validators[2])
+	require.Equal(t, valInfo3, oracle.state.LatestCommitedState.Validators[3])
+
+	// Ensure merkle root matches
+	require.Equal(t, "0xd9a1eee574026532cddccbcce6320c0600f370a7c64ce30c5eafc63357449940", oracle.state.LatestCommitedState.MerkleRoot)
+
+	// Ensure proofs and leafs are correct
+	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0xfee0000000000000000000000000000000000000"], []string{"0x8bfb8acff6772a60d6641cb854587bb2b6f2100391fbadff2c34be0b8c20a0cc", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x1000000000000000000000000000000000000000"], []string{"0xaaf838df9c8d5cec6ed77fcbc2cace945e8f2078eede4a0bb7164818d425f24d", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x2000000000000000000000000000000000000000"], []string{"0xd643163144dcba353b4d27c50939b3d11133bd3c6916092de059d07353b4cb5f", "0xda53f5dd3e17f66f4a35c9c9d5fd27c094fa4249e2933fb819ac724476dc9ae1"})
+
+	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0xfee0000000000000000000000000000000000000"], RawLeaf{"0xfee0000000000000000000000000000000000000", big.NewInt(0)})
+	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x1000000000000000000000000000000000000000"], RawLeaf{"0x1000000000000000000000000000000000000000", big.NewInt(1000000000000000000)})
+	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x2000000000000000000000000000000000000000"], RawLeaf{"0x2000000000000000000000000000000000000000", big.NewInt(4000000000000000000)})
+
+	// Ensure LatestCommitedState contains a deep copy of the validators and not just a reference
+	// This is very important since otherwise they will be modified when the state is modified
+	// and we want a frozen snapshot of the state at that moment.
+
+	// Do some changes in validators
+	oracle.state.Validators[2].AccumulatedRewardsWei = big.NewInt(22)
+	oracle.state.Validators[3].PendingRewardsWei = big.NewInt(22)
+
+	// And assert the frozen state is not changes
+	require.Equal(t, big.NewInt(2000000000000000000), oracle.state.LatestCommitedState.Validators[2].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(500000), oracle.state.LatestCommitedState.Validators[3].PendingRewardsWei)
+}
+
 // TODO:
 func Test_Oracle_ManualSubscription(t *testing.T) {
 	/*
@@ -416,19 +537,31 @@ func Test_addSubscriptionIfNotAlready(t *testing.T) {
 
 func Test_AddDonation(t *testing.T) {
 	oracle := NewOracle(&Config{})
-	donations := []Donation{
-		Donation{AmountWei: big.NewInt(765432), Block: uint64(100), TxHash: "0x1"},
-		Donation{AmountWei: big.NewInt(30023456), Block: uint64(100), TxHash: "0x2"},
+	donations := []*contract.ContractEtherReceived{
+		&contract.ContractEtherReceived{
+			DonationAmount: big.NewInt(765432),
+			Raw: types.Log{
+				TxHash:      [32]byte{0x1},
+				BlockNumber: uint64(100),
+			},
+		},
+		&contract.ContractEtherReceived{
+			DonationAmount: big.NewInt(30023456),
+			Raw: types.Log{
+				TxHash:      [32]byte{0x2},
+				BlockNumber: uint64(100),
+			},
+		},
 	}
 	oracle.handleDonations(donations)
 
-	require.Equal(t, big.NewInt(765432), oracle.state.Donations[0].AmountWei)
-	require.Equal(t, uint64(100), oracle.state.Donations[0].Block)
-	require.Equal(t, "0x1", oracle.state.Donations[0].TxHash)
+	require.Equal(t, big.NewInt(765432), oracle.state.Donations[0].DonationAmount)
+	require.Equal(t, uint64(100), oracle.state.Donations[0].Raw.BlockNumber)
+	require.Equal(t, "0x0100000000000000000000000000000000000000000000000000000000000000", oracle.state.Donations[0].Raw.TxHash.String())
 
-	require.Equal(t, big.NewInt(30023456), oracle.state.Donations[1].AmountWei)
-	require.Equal(t, uint64(100), oracle.state.Donations[1].Block)
-	require.Equal(t, "0x2", oracle.state.Donations[1].TxHash)
+	require.Equal(t, big.NewInt(30023456), oracle.state.Donations[1].DonationAmount)
+	require.Equal(t, uint64(100), oracle.state.Donations[1].Raw.BlockNumber)
+	require.Equal(t, "0x0200000000000000000000000000000000000000000000000000000000000000", oracle.state.Donations[1].Raw.TxHash.String())
 }
 
 // TODO: Merge all these tests into one
@@ -1300,76 +1433,6 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	}, oracle.state.Validators[valIndex])
 }
 
-func Test_StoreLatestOnchainState(t *testing.T) {
-
-	oracle := NewOracle(&Config{
-		PoolFeesPercent: 0,
-		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
-	})
-
-	valInfo1 := &ValidatorInfo{
-		ValidatorStatus:       Active,
-		ValidatorIndex:        1,
-		AccumulatedRewardsWei: big.NewInt(1000000000000000000),
-		PendingRewardsWei:     big.NewInt(500000),
-		WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
-	}
-
-	valInfo2 := &ValidatorInfo{
-		ValidatorStatus:       NotSubscribed,
-		ValidatorIndex:        2,
-		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
-		PendingRewardsWei:     big.NewInt(500000),
-		// same withdrawal address as valInfo3
-		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
-	}
-
-	valInfo3 := &ValidatorInfo{
-		ValidatorStatus:       NotSubscribed,
-		ValidatorIndex:        3,
-		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
-		PendingRewardsWei:     big.NewInt(500000),
-		// same withdrawal address as valInfo2
-		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
-	}
-
-	oracle.state.Validators[1] = valInfo1
-	oracle.state.Validators[2] = valInfo2
-	oracle.state.Validators[3] = valInfo3
-
-	// Function under test
-	oracle.StoreLatestOnchainState()
-
-	// Ensure all validators are present in the state
-	require.Equal(t, valInfo1, oracle.state.LatestCommitedState.Validators[1])
-	require.Equal(t, valInfo2, oracle.state.LatestCommitedState.Validators[2])
-	require.Equal(t, valInfo3, oracle.state.LatestCommitedState.Validators[3])
-
-	// Ensure merkle root matches
-	require.Equal(t, "0xd9a1eee574026532cddccbcce6320c0600f370a7c64ce30c5eafc63357449940", oracle.state.LatestCommitedState.MerkleRoot)
-
-	// Ensure proofs and leafs are correct
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0xfee0000000000000000000000000000000000000"], []string{"0x8bfb8acff6772a60d6641cb854587bb2b6f2100391fbadff2c34be0b8c20a0cc", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x1000000000000000000000000000000000000000"], []string{"0xaaf838df9c8d5cec6ed77fcbc2cace945e8f2078eede4a0bb7164818d425f24d", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x2000000000000000000000000000000000000000"], []string{"0xd643163144dcba353b4d27c50939b3d11133bd3c6916092de059d07353b4cb5f", "0xda53f5dd3e17f66f4a35c9c9d5fd27c094fa4249e2933fb819ac724476dc9ae1"})
-
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0xfee0000000000000000000000000000000000000"], RawLeaf{"0xfee0000000000000000000000000000000000000", big.NewInt(0)})
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x1000000000000000000000000000000000000000"], RawLeaf{"0x1000000000000000000000000000000000000000", big.NewInt(1000000000000000000)})
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x2000000000000000000000000000000000000000"], RawLeaf{"0x2000000000000000000000000000000000000000", big.NewInt(4000000000000000000)})
-
-	// Ensure LatestCommitedState contains a deep copy of the validators and not just a reference
-	// This is very important since otherwise they will be modified when the state is modified
-	// and we want a frozen snapshot of the state at that moment.
-
-	// Do some changes in validators
-	oracle.state.Validators[2].AccumulatedRewardsWei = big.NewInt(22)
-	oracle.state.Validators[3].PendingRewardsWei = big.NewInt(22)
-
-	// And assert the frozen state is not changes
-	require.Equal(t, big.NewInt(2000000000000000000), oracle.state.LatestCommitedState.Validators[2].AccumulatedRewardsWei)
-	require.Equal(t, big.NewInt(500000), oracle.state.LatestCommitedState.Validators[3].PendingRewardsWei)
-}
-
 func Test_increaseAllPendingRewards_1(t *testing.T) {
 
 	oracle := NewOracle(&Config{
@@ -1678,57 +1741,6 @@ func Test_StateMachine(t *testing.T) {
 	}
 }
 
-// TODO: Test that if the file changes it fails due to hash
-func Test_SaveReadToFromJson(t *testing.T) {
-	oracle := NewOracle(&Config{
-		PoolAddress:     "0x0000000000000000000000000000000000000000",
-		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
-		Network:         "mainnet",
-	})
-
-	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
-
-	oracle.StoreLatestOnchainState()
-
-	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(643344), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
-
-	oracle.StoreLatestOnchainState()
-
-	subs := []*contract.ContractSubscribeValidator{
-		&contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}, Topics: []common.Hash{{0x2}}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-	}
-	oracle.state.Subscriptions = subs
-	_ = subs
-
-	defer os.Remove(filepath.Join(StateFileName, StateFolder))
-	defer os.RemoveAll(StateFolder)
-	oracle.SaveToJson()
-
-	oracle.LoadFromJson()
-	//defer os.Remove(filepath.Join(StateFileName, StateFolder))
-	//defer os.RemoveAll(StateFolder)
-	jsonData, err := json.MarshalIndent(oracle.state, "", " ")
-	if err != nil {
-		log.Fatal("could not marshal state to json: ", err)
-	}
-
-	fmt.Printf("recovered data: %s\n", jsonData)
-	log.Info(oracle.state.Validators[3].ValidatorStatus)
-
-	require.Equal(t, oracle.state, oracle.state)
-
-	//require.NoError(t, err)
-	//require.Equal(t, state, state)
-}
-
 func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
 	oracle := NewOracle(&Config{
 		PoolAddress:     "0x0000000000000000000000000000000000000000",
@@ -1752,12 +1764,14 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 		Network:         "mainnet",
 	})
 
-	oracle.state.Donations = make([]Donation, 1)
+	oracle.state.Donations = make([]*contract.ContractEtherReceived, 1)
 
-	oracle.state.Donations[0] = Donation{
-		AmountWei: big.NewInt(1000),
-		Block:     1000,
-		TxHash:    "0x",
+	oracle.state.Donations[0] = &contract.ContractEtherReceived{
+		DonationAmount: big.NewInt(1000),
+		Raw: types.Log{
+			TxHash:      [32]byte{0x0},
+			BlockNumber: uint64(1000),
+		},
 	}
 
 	oracle.state.Validators[10] = &ValidatorInfo{

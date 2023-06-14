@@ -99,14 +99,6 @@ type Block struct {
 	FeeRecipient      string     `json:"fee_recipient"`     // TODO: populate
 }
 
-// Represents a donation made to the pool
-// TODO: deprecate this? donations are detected from the block content
-type Donation struct {
-	AmountWei *big.Int `json:"amount_wei"`
-	Block     uint64   `json:"block"`
-	TxHash    string   `json:"tx_hash"`
-}
-
 // Subscription event and the associated validator (if any)
 // TODO: Remove and also fix API
 type Subscription struct { //TODO: remove
@@ -160,7 +152,7 @@ type OracleState struct {
 
 	Subscriptions   []*contract.ContractSubscribeValidator   `json:"subscriptions"`
 	Unsubscriptions []*contract.ContractUnsubscribeValidator `json:"unsubscriptions"`
-	Donations       []Donation                               `json:"donations"`
+	Donations       []*contract.ContractEtherReceived        `json:"donations"`
 	ProposedBlocks  []Block                                  `json:"proposed_blocks"`
 	MissedBlocks    []Block                                  `json:"missed_blocks"`
 	WrongFeeBlocks  []Block                                  `json:"wrong_fee_blocks"`

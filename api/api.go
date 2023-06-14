@@ -236,7 +236,7 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	}
 	totalDonationsWei := big.NewInt(0)
 	for _, donation := range m.oracle.State().Donations {
-		totalDonationsWei.Add(totalDonationsWei, donation.AmountWei)
+		totalDonationsWei.Add(totalDonationsWei, donation.DonationAmount)
 	}
 
 	totalProposedBlocks := uint64(len(m.oracle.State().ProposedBlocks))
@@ -656,9 +656,9 @@ func (m *ApiService) handleMemoryDonations(w http.ResponseWriter, req *http.Requ
 	donations := make([]httpOkDonation, 0)
 	for _, donation := range m.oracle.State().Donations {
 		donations = append(donations, httpOkDonation{
-			AmountWei: donation.AmountWei.String(),
-			Block:     donation.Block,
-			TxHash:    donation.TxHash,
+			AmountWei: donation.DonationAmount.String(),
+			Block:     donation.Raw.BlockNumber,
+			TxHash:    donation.Raw.TxHash.String(),
 		})
 	}
 	m.respondOK(w, donations)
