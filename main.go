@@ -106,7 +106,7 @@ func main() {
 	log.Info("Oracle gracefully stopped")
 }
 
-func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config) {
+func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracle.Config) {
 
 	// Check if we are in sync with the latest onchain root. If not we wont be updating
 	// the state until we are in sync with the latest. This prevents from the oracle

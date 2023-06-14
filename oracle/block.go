@@ -379,7 +379,7 @@ func (b *FullBlock) GetSentRewardAndType(
 	return reward, wasRewardSent, txType
 }
 
-func (b *FullBlock) IsAddressRewarded(address string) bool {
+func (b *FullBlock) isAddressRewarded(address string) bool {
 	if Equals(b.GetFeeRecipient(), address) {
 		return true
 	}
@@ -530,7 +530,7 @@ func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Block { 
 
 		// Check if the proposal is from a subscribed validator
 		isFromSubscriber := oracle.isSubscribed(b.GetProposerIndexUint64())
-		isPoolRewarded := b.IsAddressRewarded(poolAddress)
+		isPoolRewarded := b.isAddressRewarded(poolAddress)
 
 		// This calculation is expensive, do it only if the reward went to the pool or
 		// if the block is from a subscribed validator (which includes also wrong fee blocks from subscribers)

@@ -620,14 +620,41 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 			log.Fatal("slot does not match requested slot: ", fullBlock.GetSlotUint64(), " vs ", slot)
 		}
 
-		// TODO: Proof of concept. Fetch all events that we are interested in
+		// TODO: Some events are missing here
 		etherReceived, err := o.GetEtherReceivedEvents(fullBlock.GetBlockNumber())
 		if err != nil {
 			log.Fatal("failed getting ether received events: ", err)
 		}
 
+		subscribeValidator, err := o.GetSubscribeValidatorEvents(fullBlock.GetBlockNumber())
+		if err != nil {
+			log.Fatal("failed getting subscribe validator events: ", err)
+		}
+
+		unsubscribeValidator, err := o.GetUnsubscribeValidatorEvents(fullBlock.GetBlockNumber())
+		if err != nil {
+			log.Fatal("failed getting unsubscribe validator events: ", err)
+		}
+
+		// Not all events are fetched as they are not needed
 		events := &Events{
-			etherReceived: etherReceived,
+			etherReceived:      etherReceived,
+			subscribeValidator: subscribeValidator,
+			//claimRewards: claimRewards,
+			//setRewardRecipient: setRewardRecipient,    // TODO:
+			unsubscribeValidator: unsubscribeValidator,
+			//initSmoothingPool: initSmoothingPool,
+			//updatePoolFee: updatePoolFee,              // TODO:
+			//poolFeeRecipient: poolFeeRecipient,        // TODO:
+			//checkpointSlotSize: checkpointSlotSize,    // TODO:
+			//updateSubscriptionCollateral: updateSubscriptionCollateral, // TODO:
+			//submitReport: submitReport,
+			//reportConsolidated: reportConsolidated,
+			//updateQuorum: updateQuorum,
+			//addOracleMember: addOracleMember,
+			//removeOracleMember: removeOracleMember,
+			//transferGovernance: transferGovernance,
+			//acceptGovernance: acceptGovernance,
 		}
 
 		// Add the events to the block
@@ -637,7 +664,7 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 		isFromSubscriber := oracle.isSubscribed(fullBlock.GetProposerIndexUint64())
 
 		// Check if the reward was sent to the pool
-		isPoolRewarded := fullBlock.IsAddressRewarded(o.CliCfg.PoolAddress)
+		isPoolRewarded := fullBlock.isAddressRewarded(o.CliCfg.PoolAddress)
 
 		// This calculation is expensive, do it only if the reward went to the pool or
 		// if the block is from a subscribed validator.
@@ -655,7 +682,7 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 }
 
 func (onchain *Onchain) GetConfigFromContract(
-	cliCfg *config.CliConfig) *config.Config {
+	cliCfg *config.CliConfig) *Config {
 
 	MainnetChainId := uint64(1)
 	GoerliChainId := uint64(5)
@@ -759,7 +786,7 @@ func (onchain *Onchain) GetConfigFromContract(
 		log.Warn("The pool contract WILL BE updated, running in normal mode")
 	}
 
-	conf := &config.Config{
+	conf := &Config{
 		ConsensusEndpoint:     cliCfg.ConsensusEndpoint,
 		ExecutionEndpoint:     cliCfg.ExecutionEndpoint,
 		Network:               network,
@@ -778,6 +805,26 @@ func (onchain *Onchain) GetConfigFromContract(
 
 	return conf
 }
+
+/*
+done: etherReceived                []*contract.ContractEtherReceived
+done: subscribeValidator           []*contract.ContractSubscribeValidator
+done: claimRewards                 []*contract.ContractClaimRewards
+done: setRewardRecipient           []*contract.ContractSetRewardRecipient
+done: unsubscribeValidator         []*contract.ContractUnsubscribeValidator
+initSmoothingPool            []*contract.ContractInitSmoothingPool
+updatePoolFee                []*contract.ContractUpdatePoolFee
+poolFeeRecipient             []*contract.ContractUpdatePoolFeeRecipient
+checkpointSlotSize           []*contract.ContractUpdateCheckpointSlotSize
+updateSubscriptionCollateral []*contract.ContractUpdateSubscriptionCollateral
+submitReport                 []*contract.ContractSubmitReport
+reportConsolidated           []*contract.ContractReportConsolidated
+updateQuorum                 []*contract.ContractUpdateQuorum
+addOracleMember              []*contract.ContractAddOracleMember
+removeOracleMember           []*contract.ContractRemoveOracleMember
+transferGovernance           []*contract.ContractTransferGovernance
+acceptGovernance             []*contract.ContractAcceptGovernance
+*/
 
 // Fetch events
 func (o *Onchain) GetEtherReceivedEvents(
@@ -849,6 +896,159 @@ func (o *Onchain) GetSubscribeValidatorEvents(
 	if err != nil {
 		return nil, errors.Wrap(err, "could not close SubscribeValidator iterator")
 	}
+	return events, nil
+}
+
+func (o *Onchain) GetClaimRewardsEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractClaimRewards, error) {
+
+	var events []*contract.ContractClaimRewards
+	log.Fatal("Not implemented: GetClaimRewardsEvents is not implemented")
+
+	return events, nil
+}
+
+func (o *Onchain) GetSetRewardRecipientEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractSetRewardRecipient, error) {
+
+	var events []*contract.ContractSetRewardRecipient
+	log.Fatal("Not implemented: GetSetRewardsRecipientEvents it not implemented")
+	return events, nil
+}
+
+func (o *Onchain) GetUnsubscribeValidatorEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractUnsubscribeValidator, error) {
+
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractUnsubscribeValidatorIterator
+
+	err = retry.Do(func() error {
+		itr, err = o.Contract.FilterUnsubscribeValidator(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt GetUnsubscribeValidatorEvents for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return err
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get UnsubscribeValidator events")
+	}
+
+	var events []*contract.ContractUnsubscribeValidator
+	for itr.Next() {
+		events = append(events, itr.Event)
+	}
+	err = itr.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close UnsubscribeValidator iterator")
+	}
+	return events, nil
+}
+
+func (o *Onchain) GetInitSmoothingPoolEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractInitSmoothingPool, error) {
+
+	var events []*contract.ContractInitSmoothingPool
+	log.Fatal("Not implemented: GetInitSmoothingPoolEvents it not implemented")
+	return events, nil
+}
+
+func (o *Onchain) GetUpdatePoolFeeEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractUpdatePoolFee, error) {
+
+	var events []*contract.ContractUpdatePoolFee
+	log.Fatal("Not implemented: GetUpdatePoolFeeEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetPoolFeeRecipientEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractUpdatePoolFeeRecipient, error) {
+
+	var events []*contract.ContractUpdatePoolFeeRecipient
+	log.Fatal("Not implemented: GetPoolFeeRecipientEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetCheckpointSlotSizeEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractUpdateCheckpointSlotSize, error) {
+
+	var events []*contract.ContractUpdateCheckpointSlotSize
+	log.Fatal("Not implemented: GetCheckpointSlotSizeEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetUpdateSubscriptionCollateralEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractUpdateSubscriptionCollateral, error) {
+
+	var events []*contract.ContractUpdateSubscriptionCollateral
+	log.Fatal("Not implemented: GetUpdateSubscriptionCollateralEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetSubmitReportEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractSubmitReport, error) {
+
+	var events []*contract.ContractSubmitReport
+	log.Fatal("Not implemented: GetSubmitReportEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetReportConsolidatedEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractReportConsolidated, error) {
+
+	var events []*contract.ContractReportConsolidated
+	log.Fatal("Not implemented: GetReportConsolidatedEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetUpdateQuorumEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractUpdateQuorum, error) {
+
+	var events []*contract.ContractUpdateQuorum
+	log.Fatal("Not implemented: GetUpdateQuorumEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetAddOracleMemberEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractAddOracleMember, error) {
+
+	var events []*contract.ContractAddOracleMember
+	log.Fatal("Not implemented: GetAddOracleMemberEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetRemoveOracleMemberEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractRemoveOracleMember, error) {
+
+	var events []*contract.ContractRemoveOracleMember
+	log.Fatal("Not implemented: GetRemoveOracleMemberEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetTransferGovernanceEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractTransferGovernance, error) {
+
+	var events []*contract.ContractTransferGovernance
+	log.Fatal("Not implemented: GetTransferGovernanceEvents it not implemented")
+	return events, nil
+}
+func (o *Onchain) GetAcceptGovernanceEvents(
+	blockNumber uint64,
+	opts ...retry.Option) ([]*contract.ContractAcceptGovernance, error) {
+
+	var events []*contract.ContractAcceptGovernance
+	log.Fatal("Not implemented: GetAcceptGovernanceEvents it not implemented")
 	return events, nil
 }
 

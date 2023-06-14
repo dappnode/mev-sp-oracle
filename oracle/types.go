@@ -5,7 +5,6 @@ import (
 	"math/big"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/pkg/errors"
 )
@@ -66,6 +65,23 @@ const (
 	BlsWithdrawal  WithdrawalType = 0
 	Eth1Withdrawal WithdrawalType = 1
 )
+
+type Config struct {
+	ConsensusEndpoint     string   `json:"consensus_endpoint"`
+	ExecutionEndpoint     string   `json:"execution_endpoint"`
+	Network               string   `json:"network"`
+	PoolAddress           string   `json:"pool_address"`
+	DeployedSlot          uint64   `json:"deployed_slot"`
+	DeployedBlock         uint64   `json:"deployed_block"`
+	CheckPointSizeInSlots uint64   `json:"checkpoint_size"`
+	PoolFeesPercent       int      `json:"pool_fees_percent"` // With 2 decimals (eg 1.5% = 150)
+	PoolFeesAddress       string   `json:"pool_fees_address"`
+	DryRun                bool     `json:"dry_run"`
+	NumRetries            int      `json:"num_retries"`
+	CollateralInWei       *big.Int `json:"collateral_in_wei"`
+	UpdaterKeyPass        string   `json:"-"`
+	UpdaterKeyPath        string   `json:"-"`
+}
 
 // Represents a block with information relevant for the pool
 // TODO: Call SummarizedBlock?
@@ -150,7 +166,7 @@ type OracleState struct {
 	WrongFeeBlocks  []Block                                  `json:"wrong_fee_blocks"`
 
 	// unsure if config should be here. maybe not TODO:
-	Config *config.Config `json:"todo_unsure"`
+	Config *Config `json:"todo_unsure"`
 }
 
 type RawLeaf struct {

@@ -17,7 +17,6 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	log "github.com/sirupsen/logrus"
@@ -29,7 +28,7 @@ var StateFolder = "oracle-data"
 var StateJsonName = "state.json"
 
 type Oracle struct {
-	cfg              *config.Config
+	cfg              *Config
 	state            *OracleState
 	beaconValidators map[phase0.ValidatorIndex]*v1.Validator
 	mutex            sync.RWMutex
@@ -37,7 +36,7 @@ type Oracle struct {
 
 // TODO: Make private the functions that should not be accessed outside of the package
 
-func NewOracle(cfg *config.Config) *Oracle {
+func NewOracle(cfg *Config) *Oracle {
 	state := &OracleState{
 		StateHash:            "",
 		LatestProcessedSlot:  cfg.DeployedSlot - 1,
@@ -363,7 +362,7 @@ func (or *Oracle) LoadStateFromFile() error {
 		ProposedBlocks:      make([]Block, 0),
 		MissedBlocks:        make([]Block, 0),
 		WrongFeeBlocks:      make([]Block, 0),
-		Config:              &config.Config{},
+		Config:              &Config{},
 	}
 
 	// TODO: Run reconciliation here to ensure the state is correct

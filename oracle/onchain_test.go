@@ -182,7 +182,7 @@ func Test_FetchFullBlock(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.Name, func(t *testing.T) {
-			oracle := NewOracle(&config.Config{})
+			oracle := NewOracle(&Config{})
 			oracle.state.Config.PoolAddress = tt.PoolAddress
 			onchain.CliCfg.PoolAddress = tt.PoolAddress
 
@@ -239,7 +239,7 @@ func Test_GetDonationEvents(t *testing.T) {
 	onchain, err := NewOnchain(cfgOnchain, nil)
 	require.NoError(t, err)
 
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 
 	onchain.RefreshBeaconValidators()
 

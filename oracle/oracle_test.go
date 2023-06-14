@@ -10,7 +10,6 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -26,7 +25,7 @@ import (
 // TODO:
 func Test_Oracle_ManualSubscription(t *testing.T) {
 	/*
-		oracle := NewOracle(&config.Config{
+		oracle := NewOracle(&Config{
 			Network:               "",
 			PoolAddress:           "0xdead000000000000000000000000000000000000",
 			UpdaterAddress:        "",
@@ -105,7 +104,7 @@ func Test_100_slots_test(t *testing.T) {
 	numBlocks := 100
 	log.Infof("Number of blocks to simulate: %d", numBlocks)
 	//set new oracle instance
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		Network:               "mainnet",
 		PoolAddress:           "0xdead000000000000000000000000000000000000",
 		DeployedSlot:          uint64(50000),
@@ -353,7 +352,7 @@ func GenerateUnsunscriptions(
 }*/
 
 func Test_AddSubscription(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.AddSubscriptionIfNotAlready(10, "0x", "0x")
 	oracle.IncreaseAllPendingRewards(big.NewInt(100))
 	oracle.ConsolidateBalance(10)
@@ -368,7 +367,7 @@ func Test_AddSubscription(t *testing.T) {
 }
 
 func Test_AddSubscriptionIfNotAlready(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.AddSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
 	require.Equal(t, 1, len(oracle.state.Validators))
 	require.Equal(t, &ValidatorInfo{
@@ -393,7 +392,7 @@ func Test_AddSubscriptionIfNotAlready(t *testing.T) {
 }
 
 func Test_AddDonation(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	donations := []Donation{
 		Donation{AmountWei: big.NewInt(765432), Block: uint64(100), TxHash: "0x1"},
 		Donation{AmountWei: big.NewInt(30023456), Block: uint64(100), TxHash: "0x2"},
@@ -415,7 +414,7 @@ func Test_handleManualSubscriptions_Valid(t *testing.T) {
 	// Tests a valid subscription, with enough collateral to a not subscribed validator
 	// and sent from the validator's withdrawal address
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -460,7 +459,7 @@ func Test_handleManualSubscriptions_FromWrongAddress(t *testing.T) {
 	// Tests a subscription sent from a wrong address, meaning that it doesnt
 	// match the validator's withdrawal address. No subscription is produced
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -495,7 +494,7 @@ func Test_handleManualSubscriptions_FromWrongAddress(t *testing.T) {
 func Test_handleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 	// Test a subscription to an already subscribed validator, we return the collateral
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -553,7 +552,7 @@ func Test_handleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 	// has some balance. Assert that the existing balance is not touched and the
 	// collateral is returned
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -604,7 +603,7 @@ func Test_handleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
 	// is nos subscribed and the collateral is given to the pool, since we dont have a way
 	// to return it to its owner.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -637,7 +636,7 @@ func Test_handleManualSubscriptions_NonExistent(t *testing.T) {
 	// Test a subscription of a non-existent validator. Someone subscribes a validator
 	// index that doesnt exist. Nothing happens, and the pool gets this collateral.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -663,7 +662,7 @@ func Test_handleManualSubscriptions_WrongStateValidator(t *testing.T) {
 	// Test a subscription of a validator in a wrong state (eg slashed validator or exited)
 	// Nothing happens, and the pool gets this collateral.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -714,7 +713,7 @@ func Test_handleManualSubscriptions_BannedValidator(t *testing.T) {
 	// and its kept in Banned state. Since we track this validator, we return the collateral
 	// to the owner in good faith.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -769,7 +768,7 @@ func Test_handleManualSubscriptions_BannedValidator(t *testing.T) {
 
 func Test_Handle_Subscriptions_1(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -904,7 +903,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 
 func Test_SubThenUnsubThenAuto(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(500000),
 		PoolFeesPercent: 0,
 	})
@@ -976,7 +975,7 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	// sent from the withdrawal address of the validator. Check also that when unsubscribing
 	// the pending validator rewards are shared among the rest of the validators.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(500000),
 	})
 	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{}
@@ -1080,7 +1079,7 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 	// We receive an unsubscription for a validator that does not exist in the beacon
 	// chain. Nothing happens to existing subscribed validators.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -1127,7 +1126,7 @@ func Test_HandleUnsubscriptions_NotSubscribedValidator(t *testing.T) {
 	// We receive an unsubscription for a validator that is not subscribed but exists in
 	// the beacon chain. Nothing happens, and no subscriptions are added.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -1153,7 +1152,7 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 	// An unsubscription for a subscribed validator is received, but the sender is not the
 	// withdrawal address of that validator. Nothing happens to this validator
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
@@ -1199,7 +1198,7 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	// A validator subscribes, the unsubscribes and the rejoins. Check that its accumulated balances
 	// are kept, and that it can rejoin succesfully.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(500000),
 	})
 
@@ -1280,7 +1279,7 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 
 func Test_StoreLatestOnchainState(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesPercent: 0,
 		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
 	})
@@ -1350,7 +1349,7 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 
 func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesPercent: 0,
 		PoolFeesAddress: "0x",
 	})
@@ -1371,7 +1370,7 @@ func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 
 func Test_IncreaseAllPendingRewards_2(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesPercent: 10 * 100, // 10%
 		PoolFeesAddress: "0x",
 	})
@@ -1415,7 +1414,7 @@ func Test_IncreaseAllPendingRewards_3(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		oracle := NewOracle(&config.Config{
+		oracle := NewOracle(&Config{
 			PoolFeesPercent: test.FeePercent,
 			PoolFeesAddress: "0x",
 		})
@@ -1483,7 +1482,7 @@ func Test_IncreaseAllPendingRewards_4(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		oracle := NewOracle(&config.Config{
+		oracle := NewOracle(&Config{
 			PoolFeesPercent: test.FeePercentX100,
 			PoolFeesAddress: "0x",
 		})
@@ -1513,7 +1512,7 @@ func Test_IncreaseAllPendingRewards_4(t *testing.T) {
 }
 
 func Test_IncreaseValidatorPendingRewards(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[12] = &ValidatorInfo{
 		PendingRewardsWei:     big.NewInt(100),
 		AccumulatedRewardsWei: big.NewInt(0),
@@ -1535,7 +1534,7 @@ func Test_IncreaseValidatorPendingRewards(t *testing.T) {
 }
 
 func Test_IncreaseValidatorAccumulatedRewards(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[9999999] = &ValidatorInfo{
 		PendingRewardsWei:     big.NewInt(100),
 		AccumulatedRewardsWei: big.NewInt(99999999999999),
@@ -1546,7 +1545,7 @@ func Test_IncreaseValidatorAccumulatedRewards(t *testing.T) {
 }
 
 func Test_SendRewardToPool(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.SendRewardToPool(big.NewInt(10456543212340))
 	require.Equal(t, big.NewInt(10456543212340), oracle.state.PoolAccumulatedFees)
 
@@ -1555,7 +1554,7 @@ func Test_SendRewardToPool(t *testing.T) {
 }
 
 func Test_ResetPendingRewards(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[1] = &ValidatorInfo{
 		PendingRewardsWei:     big.NewInt(99999999999999),
 		AccumulatedRewardsWei: big.NewInt(99999999999999),
@@ -1567,7 +1566,7 @@ func Test_ResetPendingRewards(t *testing.T) {
 }
 
 func Test_IncreasePendingRewards(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[12] = &ValidatorInfo{
 		WithdrawalAddress: "0xaa",
 		ValidatorStatus:   Active,
@@ -1583,7 +1582,7 @@ func Test_IncreasePendingRewards(t *testing.T) {
 func Test_IncreasePendingEmptyPool(t *testing.T) {
 	// Test a case where a new rewards adds to the pool but no validators are subscribed
 	// This can happen when a donation is recived to the pool but no validators are subscribed
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 
 	// This prevents division by zero
 	oracle.IncreaseAllPendingRewards(big.NewInt(10000))
@@ -1593,7 +1592,7 @@ func Test_IncreasePendingEmptyPool(t *testing.T) {
 }
 
 func Test_ConsolidateBalance_Eligible(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[10] = &ValidatorInfo{
 		AccumulatedRewardsWei: big.NewInt(77),
 		PendingRewardsWei:     big.NewInt(23),
@@ -1609,7 +1608,7 @@ func Test_ConsolidateBalance_Eligible(t *testing.T) {
 }
 
 func Test_StateMachine(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	valIndex1 := uint64(1000)
 	valIndex2 := uint64(2000)
 
@@ -1658,7 +1657,7 @@ func Test_StateMachine(t *testing.T) {
 
 // TODO: Test that if the file changes it fails due to hash
 func Test_SaveReadToFromJson(t *testing.T) {
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolAddress:     "0x0000000000000000000000000000000000000000",
 		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
 		Network:         "mainnet",
@@ -1708,7 +1707,7 @@ func Test_SaveReadToFromJson(t *testing.T) {
 }
 
 func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolAddress:     "0x0000000000000000000000000000000000000000",
 		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
 		Network:         "mainnet",
@@ -1724,7 +1723,7 @@ func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
 }
 func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolAddress:     "0x0000000000000000000000000000000000000000",
 		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
 		Network:         "mainnet",
@@ -1778,7 +1777,7 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 }
 
 func Test_IsValidatorSubscribed(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[10] = &ValidatorInfo{
 		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(100),
@@ -1812,7 +1811,7 @@ func Test_IsValidatorSubscribed(t *testing.T) {
 }
 
 func Test_BanValidator(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.AddSubscriptionIfNotAlready(1, "0xa", "0xb")
 	oracle.AddSubscriptionIfNotAlready(2, "0xa", "0xb")
 	oracle.AddSubscriptionIfNotAlready(3, "0xa", "0xb")
@@ -1838,7 +1837,7 @@ func Test_BanValidator(t *testing.T) {
 }
 
 func Test_IsBanned(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[1] = &ValidatorInfo{
 		ValidatorStatus: Active,
 	}
@@ -1867,7 +1866,7 @@ func Test_IsBanned(t *testing.T) {
 // Follows an non happy path with a lot of edge cases and possible misconfigurations
 func Test_Handle_TODO(t *testing.T) {
 	/*
-		cfg := &config.Config{
+		cfg := &Config{
 			PoolFeesAddress: "0xa",
 			PoolFeesPercent: 0,
 			CollateralInWei: big.NewInt(1000000),
@@ -1960,7 +1959,7 @@ func Test_CanValidatorSubscribeToPool(t *testing.T) {
 // each one proposing a block
 func Test_ValidatorInfoSize(t *testing.T) {
 	for i := 0; i < 3; i++ {
-		oracle := NewOracle(&config.Config{
+		oracle := NewOracle(&Config{
 			CollateralInWei: big.NewInt(1000),
 		})
 
@@ -2049,7 +2048,7 @@ func Test_ValidatorInfoSize(t *testing.T) {
 // a rough estimate of 100 blocks will have been proposed by the validators.
 func Test_SizeMultipleOnchainState(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
 	})

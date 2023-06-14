@@ -72,7 +72,7 @@ const (
 
 type ApiService struct {
 	srv           *http.Server
-	cfg           *config.Config
+	cfg           *oracle.Config
 	Onchain       *oracle.Onchain
 	oracle        *oracle.Oracle
 	ApiListenAddr string
@@ -80,7 +80,7 @@ type ApiService struct {
 }
 
 func NewApiService(
-	cfg *config.Config,
+	cfg *oracle.Config,
 	oracle *oracle.Oracle,
 	onchain *oracle.Onchain) *ApiService {
 
