@@ -26,6 +26,9 @@ func main() {
 	customFormatter.FullTimestamp = true
 	log.SetFormatter(customFormatter)
 
+	// TODO: Add flag to enable this. Logs the line and file of the log
+	//log.SetReportCaller(true)
+
 	log.Info("Starting smoothing pool oracle")
 	log.Info("Version: ", config.ReleaseVersion)
 

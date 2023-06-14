@@ -12,7 +12,7 @@ go build
 ./mev-sp-oracle --help
 ```
 
-## Docker images
+## Docker images
 
 Latest master is available and identified by its first 7 commit digits. Example:
 ```
@@ -44,7 +44,7 @@ Running in verifier mode:
 ./mev-sp-oracle \
 --consensus-endpoint="http://127.0.0.1:5051" \
 --execution-endpoint="http://127.0.0.1:8545" \
---pool-address=0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243 \
+--pool-address=0xF21fbbA423f3a893A2402d68240B219308AbCA46 \
 --dry-run
 ```
 

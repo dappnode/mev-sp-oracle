@@ -469,10 +469,10 @@ func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherRe
 
 	// EtherReceived event mixes: donations + mev rewards
 	// We need to filter out mev rewards
-	mevReward, _, mevRec := b.MevRewardInWei()
+	mevReward, isMev, mevRec := b.MevRewardInWei()
 
 	// If no MEV reward was sent to the pool, no etherReceived event is mev
-	if !Equals(mevRec, poolAddress) {
+	if isMev && !Equals(mevRec, poolAddress) {
 		// In this case we dont expect any etherReceived event due to MEV
 		return b.events.etherReceived
 	}
