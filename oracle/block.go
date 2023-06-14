@@ -78,6 +78,25 @@ func NewFullBlock(
 	fb := &FullBlock{
 		consensusDuty: consensusDuty,
 		validator:     validator,
+		events: &Events{
+			etherReceived:                make([]*contract.ContractEtherReceived, 0),
+			subscribeValidator:           make([]*contract.ContractSubscribeValidator, 0),
+			claimRewards:                 make([]*contract.ContractClaimRewards, 0),
+			setRewardRecipient:           make([]*contract.ContractSetRewardRecipient, 0),
+			unsubscribeValidator:         make([]*contract.ContractUnsubscribeValidator, 0),
+			initSmoothingPool:            make([]*contract.ContractInitSmoothingPool, 0),
+			updatePoolFee:                make([]*contract.ContractUpdatePoolFee, 0),
+			poolFeeRecipient:             make([]*contract.ContractUpdatePoolFeeRecipient, 0),
+			checkpointSlotSize:           make([]*contract.ContractUpdateCheckpointSlotSize, 0),
+			updateSubscriptionCollateral: make([]*contract.ContractUpdateSubscriptionCollateral, 0),
+			submitReport:                 make([]*contract.ContractSubmitReport, 0),
+			reportConsolidated:           make([]*contract.ContractReportConsolidated, 0),
+			updateQuorum:                 make([]*contract.ContractUpdateQuorum, 0),
+			addOracleMember:              make([]*contract.ContractAddOracleMember, 0),
+			removeOracleMember:           make([]*contract.ContractRemoveOracleMember, 0),
+			transferGovernance:           make([]*contract.ContractTransferGovernance, 0),
+			acceptGovernance:             make([]*contract.ContractAcceptGovernance, 0),
+		},
 	}
 
 	return fb
@@ -437,6 +456,11 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 // via sc: https://goerli.etherscan.io/tx/0x277cec5bcb60852b160a29dc9082b7e18a44333194cbe9c7d7b664e4b89b8c46
 // This fuction detects both by checking the tx and the EtherReceived event
 func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherReceived {
+
+	// If the block was missed, there cant be any donations
+	if b.consensusBlock == nil {
+		return []*contract.ContractEtherReceived{}
+	}
 
 	// Leaving for reference. Donations via "normal tx" are detected with this
 	//for _, rawTx := range b.GetBlockTransactions() {
