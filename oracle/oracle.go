@@ -22,7 +22,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TODO: Remove when migrated to json
 var StateFileName = "state.gob"
+
 var StateFolder = "oracle-data"
 
 var StateJsonName = "state.json"
@@ -33,8 +35,6 @@ type Oracle struct {
 	beaconValidators map[phase0.ValidatorIndex]*v1.Validator
 	mutex            sync.RWMutex
 }
-
-// TODO: Make private the functions that should not be accessed outside of the package
 
 func NewOracle(cfg *Config) *Oracle {
 	state := &OracleState{
@@ -98,45 +98,39 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
 
-	// TODO: Ensure blockPool is == nextSlot to process? or smlt
-
+	// Ensure the slot to process is the last +1
 	if or.state.NextSlotToProcess != (or.state.LatestProcessedSlot + 1) {
 		return 0, errors.New(fmt.Sprint("Next slot to process is not the last processed slot + 1",
 			or.state.NextSlotToProcess, " ", or.state.LatestProcessedSlot))
 	}
 
-	/*
-		err := or.validateParameters(blockPool, blockSubs, blockUnsubs, blockDonations)
-		if err != nil {
-			return 0, err
-		}*/
-	blockPool := fullBlock.SummarizedBlock(or, or.cfg.PoolAddress) // TODO: rename to summarizedBlock
+	summarizedBlock := fullBlock.SummarizedBlock(or, or.cfg.PoolAddress)
 	blockDonations := fullBlock.GetDonations(or.cfg.PoolAddress)
 
 	// Handle subscriptions first thing
 	or.handleManualSubscriptions(fullBlock.events.subscribeValidator)
 
 	// If the validator was subscribed and missed proposed the block in this slot
-	if blockPool.BlockType == MissedProposal && or.isSubscribed(blockPool.ValidatorIndex) {
-		or.handleMissedBlock(blockPool)
+	if summarizedBlock.BlockType == MissedProposal && or.isSubscribed(summarizedBlock.ValidatorIndex) {
+		or.handleMissedBlock(summarizedBlock)
 	}
 
 	// If we have a successful block proposal BUT the validator has BLS keys, we cant auto subscribe it
-	if blockPool.BlockType == OkPoolProposalBlsKeys {
-		or.handleBlsCorrectBlockProposal(blockPool)
+	if summarizedBlock.BlockType == OkPoolProposalBlsKeys {
+		or.handleBlsCorrectBlockProposal(summarizedBlock)
 	}
 
 	// Manual subscription. If feeRec is ok, means the reward was sent to the pool
-	if blockPool.BlockType == OkPoolProposal { /* and isSubscribed*/
-		or.handleCorrectBlockProposal(blockPool)
+	if summarizedBlock.BlockType == OkPoolProposal { /* and isSubscribed*/
+		or.handleCorrectBlockProposal(summarizedBlock)
 	}
 
 	// TODO:
 	/* OkPoolProposal && !isSubscribed*/ // auto subs
 
 	// If the validator was subscribed but the fee recipient was wrong we ban the validator
-	if blockPool.BlockType == WrongFeeRecipient && or.isSubscribed(blockPool.ValidatorIndex) {
-		or.handleBanValidator(blockPool)
+	if summarizedBlock.BlockType == WrongFeeRecipient && or.isSubscribed(summarizedBlock.ValidatorIndex) {
+		or.handleBanValidator(summarizedBlock)
 	}
 
 	// Handle unsubscriptions the last thing after distributing rewards
@@ -148,46 +142,10 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	processedSlot := or.state.NextSlotToProcess
 	or.state.LatestProcessedSlot = processedSlot
 	or.state.NextSlotToProcess++
-	if blockPool.BlockType != MissedProposal {
-		or.state.LatestProcessedBlock = blockPool.Block
+	if summarizedBlock.BlockType != MissedProposal {
+		or.state.LatestProcessedBlock = summarizedBlock.Block
 	}
 	return processedSlot, nil
-}
-
-/*
-func (or *Oracle) validateParameters(
-	blockPool Block,
-	blockSubs []Subscription,
-	blockUnsubs []Unsubscription,
-	blockDonations []Donation) error {
-
-	if blockPool.Slot != or.state.NextSlotToProcess {
-		return errors.New(fmt.Sprint("Slot of blockPool is not the same as the latest slot of the oracle. BlockPool: ",
-			blockPool.Slot, " Oracle: ", or.state.NextSlotToProcess))
-	}
-
-	// TODO: Add more validators to block subs unsubs, donations, etc
-	return nil
-}*/
-
-func (or *Oracle) hashStateLockFree() error {
-	// We remove the hash before hashing, always hashing an empty hash
-	or.state.StateHash = ""
-
-	// Serialize the state
-	jsonData, err := json.Marshal(or.state)
-	if err != nil {
-		return errors.Wrap(err, "could not marshal state to json")
-	}
-
-	// Calculate the hash of the state
-	stateHash := sha256.Sum256(jsonData)
-	stateHashStr := hexutil.Encode(stateHash[:])
-
-	// Set the hash of the state
-	or.state.StateHash = stateHashStr
-
-	return nil
 }
 
 func (or *Oracle) SaveToJson() error {
@@ -327,7 +285,7 @@ func (or *Oracle) SaveStateToFile() {
 	defer file.Close()
 
 	// Dont run this again, take the existing data
-	//mRoot, enoughData := p.GetMerkleRootIfAny()
+	//mRoot, enoughData := p.getMerkleRootIfAny()
 
 	encoder := gob.NewEncoder(file)
 	log.WithFields(log.Fields{
@@ -400,7 +358,7 @@ func (or *Oracle) LoadStateFromFile() error {
 			or.state.Config.PoolFeesPercent, " Got: ", readState.Config.PoolFeesPercent)
 	}
 
-	mRoot, enoughData := or.GetMerkleRootIfAny()
+	mRoot, enoughData := or.getMerkleRootIfAny()
 
 	log.WithFields(log.Fields{
 		"Path":                 path,
@@ -497,6 +455,43 @@ func (or *Oracle) StoreLatestOnchainState() bool {
 	return true
 }
 
+func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
+	if validator.Status != v1.ValidatorStateActiveExiting &&
+		validator.Status != v1.ValidatorStateActiveSlashed &&
+		validator.Status != v1.ValidatorStateExitedUnslashed &&
+		validator.Status != v1.ValidatorStateExitedSlashed &&
+		validator.Status != v1.ValidatorStateWithdrawalPossible &&
+		validator.Status != v1.ValidatorStateWithdrawalDone &&
+		validator.Status != v1.ValidatorStateUnknown {
+		return true
+	}
+	// Accepted states are:
+	// -ValidatorStatePendingInitialized
+	// -ValidatorStatePendingQueued
+	// -ValidatorStateActiveOngoing
+	return false
+}
+
+func (or *Oracle) hashStateLockFree() error {
+	// We remove the hash before hashing, always hashing an empty hash
+	or.state.StateHash = ""
+
+	// Serialize the state
+	jsonData, err := json.Marshal(or.state)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal state to json")
+	}
+
+	// Calculate the hash of the state
+	stateHash := sha256.Sum256(jsonData)
+	stateHashStr := hexutil.Encode(stateHash[:])
+
+	// Set the hash of the state
+	or.state.StateHash = stateHashStr
+
+	return nil
+}
+
 func (or *Oracle) isSubscribed(validatorIndex uint64) bool {
 	for valIndex, validator := range or.state.Validators {
 		if valIndex == validatorIndex &&
@@ -509,7 +504,7 @@ func (or *Oracle) isSubscribed(validatorIndex uint64) bool {
 	return false
 }
 
-func (or *Oracle) IsBanned(validatorIndex uint64) bool {
+func (or *Oracle) isBanned(validatorIndex uint64) bool {
 	validator, found := or.state.Validators[validatorIndex]
 	if !found {
 		return false
@@ -520,7 +515,7 @@ func (or *Oracle) IsBanned(validatorIndex uint64) bool {
 	return false
 }
 
-func (or *Oracle) IsTracked(validatorIndex uint64) bool {
+func (or *Oracle) isTracked(validatorIndex uint64) bool {
 	_, found := or.state.Validators[validatorIndex]
 	if found {
 		return true
@@ -528,7 +523,7 @@ func (or *Oracle) IsTracked(validatorIndex uint64) bool {
 	return false
 }
 
-func (or *Oracle) IsCollateralEnough(collateral *big.Int) bool {
+func (or *Oracle) isCollateralEnough(collateral *big.Int) bool {
 	return collateral.Cmp(or.state.Config.CollateralInWei) >= 0
 }
 
@@ -544,16 +539,16 @@ func (or *Oracle) handleDonations(donations []Donation) {
 		}
 	}
 	for _, donation := range donations {
-		or.IncreaseAllPendingRewards(donation.AmountWei)
+		or.increaseAllPendingRewards(donation.AmountWei)
 		or.state.Donations = append(or.state.Donations, donation)
 	}
 }
 
 func (or *Oracle) handleCorrectBlockProposal(block Block) {
-	or.AddSubscriptionIfNotAlready(block.ValidatorIndex, block.WithdrawalAddress, block.ValidatorKey)
-	or.AdvanceStateMachine(block.ValidatorIndex, ProposalOk)
-	or.IncreaseAllPendingRewards(block.Reward)
-	or.ConsolidateBalance(block.ValidatorIndex)
+	or.addSubscriptionIfNotAlready(block.ValidatorIndex, block.WithdrawalAddress, block.ValidatorKey)
+	or.advanceStateMachine(block.ValidatorIndex, ProposalOk)
+	or.increaseAllPendingRewards(block.Reward)
+	or.consolidateBalance(block.ValidatorIndex)
 	or.state.ProposedBlocks = append(or.state.ProposedBlocks, block)
 }
 
@@ -566,7 +561,7 @@ func (or *Oracle) handleBlsCorrectBlockProposal(block Block) {
 		"Slot":           block.Slot,
 		"ValidatorIndex": block.ValidatorIndex,
 	}).Warn("Block proposal was ok but bls keys are not supported, sending rewards to pool")
-	or.SendRewardToPool(block.Reward)
+	or.sendRewardToPool(block.Reward)
 }
 
 func (or *Oracle) handleManualSubscriptions(
@@ -598,7 +593,7 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for non existing validator, skipping")
 			// Fees go to the pool, since validator does not exist in the pool and it is not tracked
-			or.SendRewardToPool(collateral)
+			or.sendRewardToPool(collateral)
 			continue
 		}
 
@@ -617,7 +612,7 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorState": validator.Status,
 			}).Warn("[Subscription]: for validator that cannot subscribe due to its state, skipping")
 			// Fees go to the pool, since validator is not operational (withdrawn, slashed, etc)
-			or.SendRewardToPool(collateral)
+			or.sendRewardToPool(collateral)
 			continue
 		}
 
@@ -632,7 +627,7 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for validator with invalid withdrawal address (bls), skipping")
 			// Fees go to the pool. A validator with a bls address can not be tracked since it has not been able to subscribe.
-			or.SendRewardToPool(collateral)
+			or.sendRewardToPool(collateral)
 			continue
 		}
 
@@ -648,12 +643,12 @@ func (or *Oracle) handleManualSubscriptions(
 			}).Warn("[Subscription]: but tx sender is not the validator withdrawal address, skipping")
 			// Fees go to the pool.
 			// TODO: maybe we could check if sender has a validator registered with withdrawal address = sender, and if so, give the collateral back to the sender
-			or.SendRewardToPool(collateral)
+			or.sendRewardToPool(collateral)
 			continue
 		}
 
 		// Subscription received for a banned validator
-		if or.IsBanned(valIdx) {
+		if or.isBanned(valIdx) {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Raw.BlockNumber,
 				"Collateral":     sub.SubscriptionCollateral,
@@ -661,7 +656,7 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for banned validator, skipping")
 			// Since we track this validator, give the collateral back
-			or.IncreaseValidatorAccumulatedRewards(valIdx, collateral)
+			or.increaseValidatorAccumulatedRewards(valIdx, collateral)
 			continue
 		}
 
@@ -674,12 +669,12 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for an already subscribed validator, skipping")
 			// Since we track this validator, return the collateral as accumulated balance
-			or.IncreaseValidatorAccumulatedRewards(valIdx, collateral)
+			or.increaseValidatorAccumulatedRewards(valIdx, collateral)
 			continue
 		}
 
 		// Subscription received for a validator with not enough collateral
-		if !or.IsCollateralEnough(collateral) {
+		if !or.isCollateralEnough(collateral) {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Raw.BlockNumber,
 				"Collateral":     sub.SubscriptionCollateral,
@@ -687,17 +682,17 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for a validator with not enough collateral, skipping")
 			// Fees go to the pool, since validator does not exist in the pool
-			or.SendRewardToPool(collateral)
+			or.sendRewardToPool(collateral)
 			continue
 		}
 
 		// Valid subscription
 		if !or.isSubscribed(valIdx) &&
-			!or.IsBanned(valIdx) &&
-			or.IsCollateralEnough(collateral) {
+			!or.isBanned(valIdx) &&
+			or.isCollateralEnough(collateral) {
 
 			// Add valid subscription
-			if !or.IsTracked(valIdx) {
+			if !or.isTracked(valIdx) {
 				// If its not tracked, we create a new subscription
 				or.state.Validators[valIdx] = &ValidatorInfo{
 					ValidatorStatus:       NotSubscribed,
@@ -716,8 +711,8 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorIndex":   valIdx,
 				"WithdrawaAddress": validatorWithdrawal,
 			}).Info("[Subscription]: Validator subscribed ok")
-			or.IncreaseValidatorPendingRewards(valIdx, collateral)
-			or.AdvanceStateMachine(valIdx, ManualSubscription)
+			or.increaseValidatorPendingRewards(valIdx, collateral)
+			or.advanceStateMachine(valIdx, ManualSubscription)
 			or.state.Subscriptions = append(or.state.Subscriptions, sub)
 			continue
 		}
@@ -731,7 +726,7 @@ func (or *Oracle) handleManualSubscriptions(
 			"WithdrawaAddress": validatorWithdrawal,
 		}).Info("[Subscription]: Not considered case meaning wrong subscription, skipping")
 		// Send the collateral to the pool
-		or.SendRewardToPool(collateral)
+		or.sendRewardToPool(collateral)
 	}
 }
 
@@ -796,9 +791,9 @@ func (or *Oracle) handleManualUnsubscriptions(
 
 		// After all the checks, we can proceed with the unsubscription
 		if or.isSubscribed(valIdx) {
-			or.AdvanceStateMachine(valIdx, Unsubscribe)
-			or.IncreaseAllPendingRewards(or.state.Validators[valIdx].PendingRewardsWei)
-			or.ResetPendingRewards(valIdx)
+			or.advanceStateMachine(valIdx, Unsubscribe)
+			or.increaseAllPendingRewards(or.state.Validators[valIdx].PendingRewardsWei)
+			or.resetPendingRewards(valIdx)
 			or.state.Unsubscriptions = append(or.state.Unsubscriptions, unsub)
 			log.WithFields(log.Fields{
 				"BlockNumber":      unsub.Raw.BlockNumber,
@@ -837,22 +832,22 @@ func (or *Oracle) handleManualUnsubscriptions(
 func (or *Oracle) handleBanValidator(block Block) {
 	// First of all advance the state machine, so the banned validator is not
 	// considered for the pending reward share
-	or.AdvanceStateMachine(block.ValidatorIndex, ProposalWrongFee)
-	or.IncreaseAllPendingRewards(or.state.Validators[block.ValidatorIndex].PendingRewardsWei)
-	or.ResetPendingRewards(block.ValidatorIndex)
+	or.advanceStateMachine(block.ValidatorIndex, ProposalWrongFee)
+	or.increaseAllPendingRewards(or.state.Validators[block.ValidatorIndex].PendingRewardsWei)
+	or.resetPendingRewards(block.ValidatorIndex)
 
 	// Store the proof of the wrong fee block. Reason why it was banned
 	or.state.WrongFeeBlocks = append(or.state.WrongFeeBlocks, block)
 }
 
 func (or *Oracle) handleMissedBlock(block Block) {
-	or.AdvanceStateMachine(block.ValidatorIndex, ProposalMissed)
+	or.advanceStateMachine(block.ValidatorIndex, ProposalMissed)
 	or.state.MissedBlocks = append(or.state.MissedBlocks, block)
 }
 
 // TODO: This is more related to automatic subscriptions. Rename and refactor accordingly
-// TODO: rename to handle autoSubscription. Passs v1.Validator Instead.
-func (or *Oracle) AddSubscriptionIfNotAlready(valIndex uint64, WithdrawalAddress string, validatorKey string) {
+// TODO: rename to handle autoSubscription. Passs v1.Validator Instead. Its not really autosubs
+func (or *Oracle) addSubscriptionIfNotAlready(valIndex uint64, WithdrawalAddress string, validatorKey string) {
 	validator, found := or.state.Validators[valIndex]
 	if !found {
 		// If not found and not manually subscribed, we trigger the AutoSubscription event
@@ -869,22 +864,22 @@ func (or *Oracle) AddSubscriptionIfNotAlready(valIndex uint64, WithdrawalAddress
 		or.state.Validators[valIndex] = validator
 
 		// And update it state according to the event
-		or.AdvanceStateMachine(valIndex, AutoSubscription)
+		or.advanceStateMachine(valIndex, AutoSubscription)
 	} else {
 		// If we found the validator and is not subscribed, advance the state machine
 		// Most likely it was subscribed before, then unsubscribed and now auto subscribes
 		if !or.isSubscribed(valIndex) {
-			or.AdvanceStateMachine(valIndex, AutoSubscription)
+			or.advanceStateMachine(valIndex, AutoSubscription)
 		}
 	}
 }
 
-func (or *Oracle) ConsolidateBalance(valIndex uint64) {
+func (or *Oracle) consolidateBalance(valIndex uint64) {
 	or.state.Validators[valIndex].AccumulatedRewardsWei.Add(or.state.Validators[valIndex].AccumulatedRewardsWei, or.state.Validators[valIndex].PendingRewardsWei)
 	or.state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
 }
 
-func (or *Oracle) GetEligibleValidators() []uint64 {
+func (or *Oracle) getEligibleValidators() []uint64 {
 	eligibleValidators := make([]uint64, 0)
 
 	for valIndex, validator := range or.state.Validators {
@@ -899,10 +894,10 @@ func (or *Oracle) GetEligibleValidators() []uint64 {
 // of said rewards. Note that pending rewards cant be claimed until a block is proposed
 // by the validator. But the pool owner can claim the pool cut at any time, so they are
 // added as accumulated rewards.
-func (or *Oracle) IncreaseAllPendingRewards(
+func (or *Oracle) increaseAllPendingRewards(
 	reward *big.Int) {
 
-	eligibleValidators := or.GetEligibleValidators()
+	eligibleValidators := or.getEligibleValidators()
 	numEligibleValidators := big.NewInt(int64(len(eligibleValidators)))
 
 	if len(eligibleValidators) == 0 {
@@ -958,25 +953,38 @@ func (or *Oracle) IncreaseAllPendingRewards(
 	}
 }
 
-func (or *Oracle) IncreaseValidatorPendingRewards(valIndex uint64, reward *big.Int) {
+func (or *Oracle) increaseValidatorPendingRewards(valIndex uint64, reward *big.Int) {
 	or.state.Validators[valIndex].PendingRewardsWei.Add(or.state.Validators[valIndex].PendingRewardsWei, reward)
 }
 
-func (or *Oracle) IncreaseValidatorAccumulatedRewards(valIndex uint64, reward *big.Int) {
+func (or *Oracle) increaseValidatorAccumulatedRewards(valIndex uint64, reward *big.Int) {
 	or.state.Validators[valIndex].AccumulatedRewardsWei.Add(or.state.Validators[valIndex].AccumulatedRewardsWei, reward)
 }
 
-func (or *Oracle) SendRewardToPool(reward *big.Int) {
+func (or *Oracle) sendRewardToPool(reward *big.Int) {
 	or.state.PoolAccumulatedFees.Add(or.state.PoolAccumulatedFees, reward)
 }
 
-func (or *Oracle) ResetPendingRewards(valIndex uint64) {
+func (or *Oracle) resetPendingRewards(valIndex uint64) {
 	or.state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
+}
+
+// TODO: Remove this and get the merkle tree from somewhere else. See stored state
+func (or *Oracle) getMerkleRootIfAny() (string, bool) {
+	mk := NewMerklelizer()
+	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
+	_, _, tree, enoughData := mk.GenerateTreeFromState(or.state)
+	if !enoughData {
+		return "", enoughData
+	}
+	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
+
+	return merkleRootStr, true
 }
 
 // See the spec for state diagram with states and transitions. This tracks all the different
 // states and state transitions that a given validator can have from the oracle point of view
-func (or *Oracle) AdvanceStateMachine(valIndex uint64, event Event) {
+func (or *Oracle) advanceStateMachine(valIndex uint64, event Event) {
 	switch or.state.Validators[valIndex].ValidatorStatus {
 	case Active:
 		switch event {
@@ -1103,45 +1111,4 @@ func (or *Oracle) AdvanceStateMachine(valIndex uint64, event Event) {
 			or.state.Validators[valIndex].ValidatorStatus = Active
 		}
 	}
-}
-
-func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
-	if validator.Status != v1.ValidatorStateActiveExiting &&
-		validator.Status != v1.ValidatorStateActiveSlashed &&
-		validator.Status != v1.ValidatorStateExitedUnslashed &&
-		validator.Status != v1.ValidatorStateExitedSlashed &&
-		validator.Status != v1.ValidatorStateWithdrawalPossible &&
-		validator.Status != v1.ValidatorStateWithdrawalDone &&
-		validator.Status != v1.ValidatorStateUnknown {
-		return true
-	}
-	// Accepted states are:
-	// -ValidatorStatePendingInitialized
-	// -ValidatorStatePendingQueued
-	// -ValidatorStateActiveOngoing
-	return false
-}
-
-func (or *Oracle) LogBalances() {
-	for valIndex, validator := range or.state.Validators {
-		log.WithFields(log.Fields{
-			"LatestProcessedSlot": or.state.LatestProcessedSlot,
-			"ValIndex":            valIndex,
-			"PendingRewards":      validator.PendingRewardsWei,
-			"AccumulatedRewards":  validator.AccumulatedRewardsWei,
-		}).Info("Validator balances")
-	}
-}
-
-// TODO: Remove this and get the merkle tree from somewhere else. See stored state
-func (or *Oracle) GetMerkleRootIfAny() (string, bool) {
-	mk := NewMerklelizer()
-	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
-	_, _, tree, enoughData := mk.GenerateTreeFromState(or.state)
-	if !enoughData {
-		return "", enoughData
-	}
-	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
-
-	return merkleRootStr, true
 }

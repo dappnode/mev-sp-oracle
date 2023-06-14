@@ -187,7 +187,7 @@ func Test_FetchFullBlock(t *testing.T) {
 			onchain.CliCfg.PoolAddress = tt.PoolAddress
 
 			if tt.ProposerSubscribed {
-				oracle.AddSubscriptionIfNotAlready(tt.ExpectedValidatorIndex, "0x", "0x")
+				oracle.addSubscriptionIfNotAlready(tt.ExpectedValidatorIndex, "0x", "0x")
 			}
 
 			fullBlock := onchain.FetchFullBlock(tt.Slot, oracle)

@@ -22,6 +22,29 @@ import (
 
 // TODO: Test merkle roots and proofs generation
 
+// TODO: Test this with some mocked blocks, doing them manually is too much
+func Test_AdvanceStateToNextSlot(t *testing.T) {
+
+	// Single blocks
+	type test struct {
+		// Input
+		name string
+
+		// Output
+		// TODO:
+	}
+
+	tests := []test{
+		//{},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+		})
+	}
+
+}
+
 // TODO:
 func Test_Oracle_ManualSubscription(t *testing.T) {
 	/*
@@ -353,22 +376,22 @@ func GenerateUnsunscriptions(
 
 func Test_AddSubscription(t *testing.T) {
 	oracle := NewOracle(&Config{})
-	oracle.AddSubscriptionIfNotAlready(10, "0x", "0x")
-	oracle.IncreaseAllPendingRewards(big.NewInt(100))
-	oracle.ConsolidateBalance(10)
-	oracle.IncreaseAllPendingRewards(big.NewInt(200))
+	oracle.addSubscriptionIfNotAlready(10, "0x", "0x")
+	oracle.increaseAllPendingRewards(big.NewInt(100))
+	oracle.consolidateBalance(10)
+	oracle.increaseAllPendingRewards(big.NewInt(200))
 	require.Equal(t, big.NewInt(200), oracle.state.Validators[10].PendingRewardsWei)
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
 
 	// check that adding again doesnt reset the subscription
-	oracle.AddSubscriptionIfNotAlready(10, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(10, "0x", "0x")
 	require.Equal(t, big.NewInt(200), oracle.state.Validators[10].PendingRewardsWei)
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
 }
 
-func Test_AddSubscriptionIfNotAlready(t *testing.T) {
+func Test_addSubscriptionIfNotAlready(t *testing.T) {
 	oracle := NewOracle(&Config{})
-	oracle.AddSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
+	oracle.addSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
 	require.Equal(t, 1, len(oracle.state.Validators))
 	require.Equal(t, &ValidatorInfo{
 		ValidatorStatus:       Active,
@@ -385,7 +408,7 @@ func Test_AddSubscriptionIfNotAlready(t *testing.T) {
 	oracle.state.Validators[100].PendingRewardsWei = big.NewInt(87653)
 
 	// If we call it again, it shouldnt be overwritten as its already there
-	oracle.AddSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
+	oracle.addSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
 
 	require.Equal(t, big.NewInt(334545546), oracle.state.Validators[100].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(87653), oracle.state.Validators[100].PendingRewardsWei)
@@ -580,8 +603,8 @@ func Test_handleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 	oracle.handleManualSubscriptions([]*contract.ContractSubscribeValidator{sub1})
 
 	// And has some rewards
-	oracle.IncreaseValidatorAccumulatedRewards(33, big.NewInt(9000))
-	oracle.IncreaseValidatorPendingRewards(33, big.NewInt(44000))
+	oracle.increaseValidatorAccumulatedRewards(33, big.NewInt(9000))
+	oracle.increaseValidatorPendingRewards(33, big.NewInt(44000))
 
 	// Due to some mistake, the user subscribes again and again
 	oracle.handleManualSubscriptions([]*contract.ContractSubscribeValidator{sub1, sub1})
@@ -1003,8 +1026,8 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 		oracle.handleManualSubscriptions(subs)
 
 		// Simulate some proposals increasing the rewards
-		oracle.IncreaseValidatorAccumulatedRewards(valIdx, big.NewInt(3000))
-		oracle.IncreaseValidatorPendingRewards(valIdx, big.NewInt(300000000000000000-500000))
+		oracle.increaseValidatorAccumulatedRewards(valIdx, big.NewInt(3000))
+		oracle.increaseValidatorPendingRewards(valIdx, big.NewInt(300000000000000000-500000))
 	}
 
 	require.Equal(t, 4, len(oracle.state.Validators))
@@ -1229,8 +1252,8 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	}
 
 	// Add some rewards
-	oracle.IncreaseValidatorAccumulatedRewards(valIndex, big.NewInt(1000000000000000000))
-	oracle.IncreaseValidatorPendingRewards(valIndex, big.NewInt(5000000000000000000))
+	oracle.increaseValidatorAccumulatedRewards(valIndex, big.NewInt(1000000000000000000))
+	oracle.increaseValidatorPendingRewards(valIndex, big.NewInt(5000000000000000000))
 
 	// Now it unsubscribes ok
 	unsubs := []*contract.ContractUnsubscribeValidator{
@@ -1347,7 +1370,7 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 	require.Equal(t, big.NewInt(500000), oracle.state.LatestCommitedState.Validators[3].PendingRewardsWei)
 }
 
-func Test_IncreaseAllPendingRewards_1(t *testing.T) {
+func Test_increaseAllPendingRewards_1(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		PoolFeesPercent: 0,
@@ -1355,11 +1378,11 @@ func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 	})
 
 	// Subscribe 3 validators with no balance
-	oracle.AddSubscriptionIfNotAlready(1, "0x", "0x")
-	oracle.AddSubscriptionIfNotAlready(2, "0x", "0x")
-	oracle.AddSubscriptionIfNotAlready(3, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(1, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(2, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(3, "0x", "0x")
 
-	oracle.IncreaseAllPendingRewards(big.NewInt(10000))
+	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
 	// Note that in this case even with PoolFeesPercent: 0, the pool gets the remainder
 	require.Equal(t, big.NewInt(3333), oracle.state.Validators[1].PendingRewardsWei)
@@ -1368,7 +1391,7 @@ func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 	require.Equal(t, big.NewInt(1), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_IncreaseAllPendingRewards_2(t *testing.T) {
+func Test_increaseAllPendingRewards_2(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		PoolFeesPercent: 10 * 100, // 10%
@@ -1376,11 +1399,11 @@ func Test_IncreaseAllPendingRewards_2(t *testing.T) {
 	})
 
 	// Subscribe 3 validators with no balance
-	oracle.AddSubscriptionIfNotAlready(1, "0x", "0x")
-	oracle.AddSubscriptionIfNotAlready(2, "0x", "0x")
-	oracle.AddSubscriptionIfNotAlready(3, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(1, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(2, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(3, "0x", "0x")
 
-	oracle.IncreaseAllPendingRewards(big.NewInt(10000))
+	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
 	// Note that in this case even with PoolFeesPercent: 0, the pool gets the remainder
 	require.Equal(t, big.NewInt(3000), oracle.state.Validators[1].PendingRewardsWei)
@@ -1389,7 +1412,7 @@ func Test_IncreaseAllPendingRewards_2(t *testing.T) {
 	require.Equal(t, big.NewInt(1000), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_IncreaseAllPendingRewards_3(t *testing.T) {
+func Test_increaseAllPendingRewards_3(t *testing.T) {
 
 	// Multiple test with different combinations of: fee, reward, validators
 
@@ -1420,12 +1443,12 @@ func Test_IncreaseAllPendingRewards_3(t *testing.T) {
 		})
 
 		for i := 0; i < test.AmountValidators; i++ {
-			oracle.AddSubscriptionIfNotAlready(uint64(i), "0x", "0x")
+			oracle.addSubscriptionIfNotAlready(uint64(i), "0x", "0x")
 		}
 
 		totalRewards := big.NewInt(0)
 		for _, reward := range test.Reward {
-			oracle.IncreaseAllPendingRewards(reward)
+			oracle.increaseAllPendingRewards(reward)
 			totalRewards.Add(totalRewards, reward)
 		}
 
@@ -1441,7 +1464,7 @@ func Test_IncreaseAllPendingRewards_3(t *testing.T) {
 	}
 }
 
-func Test_IncreaseAllPendingRewards_4(t *testing.T) {
+func Test_increaseAllPendingRewards_4(t *testing.T) {
 
 	// Multiple test with different combinations of: fee, reward, validators
 
@@ -1487,9 +1510,9 @@ func Test_IncreaseAllPendingRewards_4(t *testing.T) {
 			PoolFeesAddress: "0x",
 		})
 		for i := 0; i < test.AmountValidators; i++ {
-			oracle.AddSubscriptionIfNotAlready(uint64(i), "0x", "0x")
+			oracle.addSubscriptionIfNotAlready(uint64(i), "0x", "0x")
 		}
-		oracle.IncreaseAllPendingRewards(test.Reward)
+		oracle.increaseAllPendingRewards(test.Reward)
 		for i := 0; i < test.AmountValidators; i++ {
 			require.Equal(t, test.NewPendingArray[i], oracle.state.Validators[uint64(i)].PendingRewardsWei)
 		}
@@ -1511,7 +1534,7 @@ func Test_IncreaseAllPendingRewards_4(t *testing.T) {
 	}
 }
 
-func Test_IncreaseValidatorPendingRewards(t *testing.T) {
+func Test_increaseValidatorPendingRewards(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[12] = &ValidatorInfo{
 		PendingRewardsWei:     big.NewInt(100),
@@ -1522,44 +1545,44 @@ func Test_IncreaseValidatorPendingRewards(t *testing.T) {
 		AccumulatedRewardsWei: big.NewInt(0),
 	}
 
-	oracle.IncreaseValidatorPendingRewards(12, big.NewInt(8765432))
+	oracle.increaseValidatorPendingRewards(12, big.NewInt(8765432))
 	require.Equal(t, big.NewInt(8765432+100), oracle.state.Validators[12].PendingRewardsWei)
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[12].AccumulatedRewardsWei)
 
-	oracle.IncreaseValidatorPendingRewards(200, big.NewInt(0))
+	oracle.increaseValidatorPendingRewards(200, big.NewInt(0))
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[200].PendingRewardsWei)
 
-	oracle.IncreaseValidatorPendingRewards(12, big.NewInt(1))
+	oracle.increaseValidatorPendingRewards(12, big.NewInt(1))
 	require.Equal(t, big.NewInt(8765432+100+1), oracle.state.Validators[12].PendingRewardsWei)
 }
 
-func Test_IncreaseValidatorAccumulatedRewards(t *testing.T) {
+func Test_increaseValidatorAccumulatedRewards(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[9999999] = &ValidatorInfo{
 		PendingRewardsWei:     big.NewInt(100),
 		AccumulatedRewardsWei: big.NewInt(99999999999999),
 	}
-	oracle.IncreaseValidatorAccumulatedRewards(9999999, big.NewInt(87676545432))
+	oracle.increaseValidatorAccumulatedRewards(9999999, big.NewInt(87676545432))
 	require.Equal(t, big.NewInt(87676545432+99999999999999), oracle.state.Validators[9999999].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[9999999].PendingRewardsWei)
 }
 
-func Test_SendRewardToPool(t *testing.T) {
+func Test_sendRewardToPool(t *testing.T) {
 	oracle := NewOracle(&Config{})
-	oracle.SendRewardToPool(big.NewInt(10456543212340))
+	oracle.sendRewardToPool(big.NewInt(10456543212340))
 	require.Equal(t, big.NewInt(10456543212340), oracle.state.PoolAccumulatedFees)
 
-	oracle.SendRewardToPool(big.NewInt(99999))
+	oracle.sendRewardToPool(big.NewInt(99999))
 	require.Equal(t, big.NewInt(10456543212340+99999), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_ResetPendingRewards(t *testing.T) {
+func Test_resetPendingRewards(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[1] = &ValidatorInfo{
 		PendingRewardsWei:     big.NewInt(99999999999999),
 		AccumulatedRewardsWei: big.NewInt(99999999999999),
 	}
-	oracle.ResetPendingRewards(1)
+	oracle.resetPendingRewards(1)
 
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[1].PendingRewardsWei)
 	require.Equal(t, big.NewInt(99999999999999), oracle.state.Validators[1].AccumulatedRewardsWei)
@@ -1575,7 +1598,7 @@ func Test_IncreasePendingRewards(t *testing.T) {
 	totalAmount := big.NewInt(130)
 
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[12].PendingRewardsWei)
-	oracle.IncreaseAllPendingRewards(totalAmount)
+	oracle.increaseAllPendingRewards(totalAmount)
 	require.Equal(t, big.NewInt(230), oracle.state.Validators[12].PendingRewardsWei)
 }
 
@@ -1585,13 +1608,13 @@ func Test_IncreasePendingEmptyPool(t *testing.T) {
 	oracle := NewOracle(&Config{})
 
 	// This prevents division by zero
-	oracle.IncreaseAllPendingRewards(big.NewInt(10000))
+	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
 	// Pool gets all rewards
 	require.Equal(t, big.NewInt(10000), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_ConsolidateBalance_Eligible(t *testing.T) {
+func Test_consolidateBalance_Eligible(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[10] = &ValidatorInfo{
 		AccumulatedRewardsWei: big.NewInt(77),
@@ -1601,7 +1624,7 @@ func Test_ConsolidateBalance_Eligible(t *testing.T) {
 	require.Equal(t, big.NewInt(77), oracle.state.Validators[10].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(23), oracle.state.Validators[10].PendingRewardsWei)
 
-	oracle.ConsolidateBalance(10)
+	oracle.consolidateBalance(10)
 
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[10].PendingRewardsWei)
@@ -1647,8 +1670,8 @@ func Test_StateMachine(t *testing.T) {
 			ValidatorStatus: testState.From,
 		}
 
-		oracle.AdvanceStateMachine(valIndex1, testState.Event)
-		oracle.AdvanceStateMachine(valIndex2, testState.Event)
+		oracle.advanceStateMachine(valIndex1, testState.Event)
+		oracle.advanceStateMachine(valIndex2, testState.Event)
 
 		require.Equal(t, testState.End, oracle.state.Validators[valIndex1].ValidatorStatus)
 		require.Equal(t, testState.End, oracle.state.Validators[valIndex2].ValidatorStatus)
@@ -1663,14 +1686,14 @@ func Test_SaveReadToFromJson(t *testing.T) {
 		Network:         "mainnet",
 	})
 
-	oracle.AddSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.AddSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
 
 	oracle.StoreLatestOnchainState()
 
-	oracle.AddSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.AddSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
-	oracle.AddSubscriptionIfNotAlready(uint64(643344), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(643344), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
 
 	oracle.StoreLatestOnchainState()
 
@@ -1812,12 +1835,12 @@ func Test_IsValidatorSubscribed(t *testing.T) {
 
 func Test_BanValidator(t *testing.T) {
 	oracle := NewOracle(&Config{})
-	oracle.AddSubscriptionIfNotAlready(1, "0xa", "0xb")
-	oracle.AddSubscriptionIfNotAlready(2, "0xa", "0xb")
-	oracle.AddSubscriptionIfNotAlready(3, "0xa", "0xb")
+	oracle.addSubscriptionIfNotAlready(1, "0xa", "0xb")
+	oracle.addSubscriptionIfNotAlready(2, "0xa", "0xb")
+	oracle.addSubscriptionIfNotAlready(3, "0xa", "0xb")
 
 	// New reward arrives
-	oracle.IncreaseAllPendingRewards(big.NewInt(99))
+	oracle.increaseAllPendingRewards(big.NewInt(99))
 
 	// Shared equally among all validators
 	require.Equal(t, big.NewInt(33), oracle.state.Validators[1].PendingRewardsWei)
@@ -1836,7 +1859,7 @@ func Test_BanValidator(t *testing.T) {
 	require.Equal(t, big.NewInt(1), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_IsBanned(t *testing.T) {
+func Test_isBanned(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[1] = &ValidatorInfo{
 		ValidatorStatus: Active,
@@ -1854,11 +1877,11 @@ func Test_IsBanned(t *testing.T) {
 		ValidatorStatus: Banned,
 	}
 
-	require.Equal(t, false, oracle.IsBanned(1))
-	require.Equal(t, false, oracle.IsBanned(2))
-	require.Equal(t, false, oracle.IsBanned(3))
-	require.Equal(t, false, oracle.IsBanned(4))
-	require.Equal(t, true, oracle.IsBanned(5))
+	require.Equal(t, false, oracle.isBanned(1))
+	require.Equal(t, false, oracle.isBanned(2))
+	require.Equal(t, false, oracle.isBanned(3))
+	require.Equal(t, false, oracle.isBanned(4))
+	require.Equal(t, true, oracle.isBanned(5))
 }
 
 // TODO: Add a Test_Handle_Subscriptions_1 happy path to cover the normal flow
