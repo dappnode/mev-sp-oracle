@@ -4,15 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"math/rand"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -25,10 +22,154 @@ import (
 
 // TODO: Test merkle roots and proofs generation
 
+// TODO: Test this with some mocked blocks, doing them manually is too much
+func Test_AdvanceStateToNextSlot(t *testing.T) {
+
+	// Single blocks
+	type test struct {
+		// Input
+		name string
+
+		// Output
+		// TODO:
+	}
+
+	tests := []test{
+		//{},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+		})
+	}
+
+}
+
+// TODO: Test that if the file changes it fails due to hash
+func Test_SaveReadToFromJson(t *testing.T) {
+	oracle := NewOracle(&Config{
+		PoolAddress:     "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
+		Network:         "mainnet",
+	})
+
+	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+
+	oracle.StoreLatestOnchainState()
+
+	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(643344), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+
+	oracle.StoreLatestOnchainState()
+
+	subs := []*contract.ContractSubscribeValidator{
+		{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}, Topics: []common.Hash{{0x2}}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+	oracle.state.Subscriptions = subs
+	_ = subs
+
+	defer os.Remove(filepath.Join(StateFileName, StateFolder))
+	defer os.RemoveAll(StateFolder)
+	oracle.SaveToJson()
+
+	oracle.LoadFromJson()
+	//defer os.Remove(filepath.Join(StateFileName, StateFolder))
+	//defer os.RemoveAll(StateFolder)
+	jsonData, err := json.MarshalIndent(oracle.state, "", " ")
+	if err != nil {
+		log.Fatal("could not marshal state to json: ", err)
+	}
+
+	fmt.Printf("recovered data: %s\n", jsonData)
+	log.Info(oracle.state.Validators[3].ValidatorStatus)
+
+	require.Equal(t, oracle.state, oracle.state)
+
+	//require.NoError(t, err)
+	//require.Equal(t, state, state)
+}
+
+func Test_StoreLatestOnchainState(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		PoolFeesPercent: 0,
+		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
+	})
+
+	valInfo1 := &ValidatorInfo{
+		ValidatorStatus:       Active,
+		ValidatorIndex:        1,
+		AccumulatedRewardsWei: big.NewInt(1000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
+	}
+
+	valInfo2 := &ValidatorInfo{
+		ValidatorStatus:       NotSubscribed,
+		ValidatorIndex:        2,
+		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		// same withdrawal address as valInfo3
+		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
+	}
+
+	valInfo3 := &ValidatorInfo{
+		ValidatorStatus:       NotSubscribed,
+		ValidatorIndex:        3,
+		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
+		PendingRewardsWei:     big.NewInt(500000),
+		// same withdrawal address as valInfo2
+		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
+	}
+
+	oracle.state.Validators[1] = valInfo1
+	oracle.state.Validators[2] = valInfo2
+	oracle.state.Validators[3] = valInfo3
+
+	// Function under test
+	oracle.StoreLatestOnchainState()
+
+	// Ensure all validators are present in the state
+	require.Equal(t, valInfo1, oracle.state.LatestCommitedState.Validators[1])
+	require.Equal(t, valInfo2, oracle.state.LatestCommitedState.Validators[2])
+	require.Equal(t, valInfo3, oracle.state.LatestCommitedState.Validators[3])
+
+	// Ensure merkle root matches
+	require.Equal(t, "0xd9a1eee574026532cddccbcce6320c0600f370a7c64ce30c5eafc63357449940", oracle.state.LatestCommitedState.MerkleRoot)
+
+	// Ensure proofs and leafs are correct
+	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0xfee0000000000000000000000000000000000000"], []string{"0x8bfb8acff6772a60d6641cb854587bb2b6f2100391fbadff2c34be0b8c20a0cc", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x1000000000000000000000000000000000000000"], []string{"0xaaf838df9c8d5cec6ed77fcbc2cace945e8f2078eede4a0bb7164818d425f24d", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x2000000000000000000000000000000000000000"], []string{"0xd643163144dcba353b4d27c50939b3d11133bd3c6916092de059d07353b4cb5f", "0xda53f5dd3e17f66f4a35c9c9d5fd27c094fa4249e2933fb819ac724476dc9ae1"})
+
+	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0xfee0000000000000000000000000000000000000"], RawLeaf{"0xfee0000000000000000000000000000000000000", big.NewInt(0)})
+	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x1000000000000000000000000000000000000000"], RawLeaf{"0x1000000000000000000000000000000000000000", big.NewInt(1000000000000000000)})
+	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x2000000000000000000000000000000000000000"], RawLeaf{"0x2000000000000000000000000000000000000000", big.NewInt(4000000000000000000)})
+
+	// Ensure LatestCommitedState contains a deep copy of the validators and not just a reference
+	// This is very important since otherwise they will be modified when the state is modified
+	// and we want a frozen snapshot of the state at that moment.
+
+	// Do some changes in validators
+	oracle.state.Validators[2].AccumulatedRewardsWei = big.NewInt(22)
+	oracle.state.Validators[3].PendingRewardsWei = big.NewInt(22)
+
+	// And assert the frozen state is not changes
+	require.Equal(t, big.NewInt(2000000000000000000), oracle.state.LatestCommitedState.Validators[2].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(500000), oracle.state.LatestCommitedState.Validators[3].PendingRewardsWei)
+}
+
 // TODO:
 func Test_Oracle_ManualSubscription(t *testing.T) {
 	/*
-		oracle := NewOracle(&config.Config{
+		oracle := NewOracle(&Config{
 			Network:               "",
 			PoolAddress:           "0xdead000000000000000000000000000000000000",
 			UpdaterAddress:        "",
@@ -102,12 +243,12 @@ func Test_Oracle_ManualSubscription(t *testing.T) {
 // Simulates 100 slots with "AdvanceStateToNextSlot". Each slot is configured randomly with a
 // new sub, unsub or donation. The block proposed can be okproposal, missed or wrongfee.
 // these are all randomly set each block
-
+/*
 func Test_100_slots_test(t *testing.T) {
 	numBlocks := 100
 	log.Infof("Number of blocks to simulate: %d", numBlocks)
 	//set new oracle instance
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		Network:               "mainnet",
 		PoolAddress:           "0xdead000000000000000000000000000000000000",
 		DeployedSlot:          uint64(50000),
@@ -134,40 +275,40 @@ func Test_100_slots_test(t *testing.T) {
 		//throw dice to determine if a new subscription is set in this slot. 1/2 chance
 		dice := rand.Intn(2)
 		if dice == 0 {
-			/*
-				newSubscription = GenerateSubsctiptions(
-					[]uint64{50000 + uint64(i)},
-					[]string{"val" + strconv.FormatUint(50000+uint64(i), 10)},
-					[]*big.Int{big.NewInt(1000000)},
-					[]uint64{50000 + uint64(i)},
-					[]string{"0x1"},
-					[]string{"0xaaa0000000000000000000000000000000000000"},
-				)
-				subsIndex = append(subsIndex, newSubscription[0].ValidatorIndex)
-				totalAssets.Add(totalAssets, newSubscription[0].Collateral)*/
+
+			//newSubscription = GenerateSubsctiptions(
+			//	[]uint64{50000 + uint64(i)},
+			//	[]string{"val" + strconv.FormatUint(50000+uint64(i), 10)},
+			//	[]*big.Int{big.NewInt(1000000)},
+			//	[]uint64{50000 + uint64(i)},
+			//	[]string{"0x1"},
+			//	[]string{"0xaaa0000000000000000000000000000000000000"},
+			//)
+			//subsIndex = append(subsIndex, newSubscription[0].ValidatorIndex)
+			//totalAssets.Add(totalAssets, newSubscription[0].Collateral)
 		}
 
 		//throw dice to determine if a new unsubscription is set in this slot. 1/3 chance
 		//(can only unsubscribe already subbed validators)
 		dice = rand.Intn(3)
 		if dice == 0 && len(subsIndex) > 0 {
-			/*
-				indexRandom := rand.Intn(len(subsIndex))
-				valtoUnsub := subsIndex[indexRandom]
 
-				newUnsubscription = GenerateUnsunscriptions(
-					 []uint64{valtoUnsub},
-					 []string{"val" + strconv.FormatUint(valtoUnsub, 10)},
-					[]string{strconv.FormatUint(50000+uint64(i), 10)},
-					 []uint64{50000 + uint64(i)},
-					 []string{"0x1"},
-					 []string{strconv.FormatUint(50000+uint64(i), 10)},
-				)
-				//unsubsIndex = append(unsubsIndex, newUnsubscription[0].ValidatorIndex)
+			//indexRandom := rand.Intn(len(subsIndex))
+			//valtoUnsub := subsIndex[indexRandom]
+			//
+			//newUnsubscription = GenerateUnsunscriptions(
+			//	 []uint64{valtoUnsub},
+			//	 []string{"val" + strconv.FormatUint(valtoUnsub, 10)},
+			//	[]string{strconv.FormatUint(50000+uint64(i), 10)},
+			//	 []uint64{50000 + uint64(i)},
+			//	 []string{"0x1"},
+			//	 []string{strconv.FormatUint(50000+uint64(i), 10)},
+			//)
+			////unsubsIndex = append(unsubsIndex, newUnsubscription[0].ValidatorIndex)
+			//
+			////delete subbed validator from slice that keeps all subbed validators
+			//subsIndex = append(subsIndex[:indexRandom], subsIndex[indexRandom+1:]...)
 
-				//delete subbed validator from slice that keeps all subbed validators
-				subsIndex = append(subsIndex[:indexRandom], subsIndex[indexRandom+1:]...)
-			*/
 		}
 		//throw dice to determine if a new donation is set in this slot. 1/5 chance
 		dice = rand.Intn(5)
@@ -189,33 +330,32 @@ func Test_100_slots_test(t *testing.T) {
 		//choose randomly a validator to propopse the block (can be an unsubbed validator, so we check automatic subs)
 		valToPropose := uint64(rand.Intn(numBlocks) + 50000)
 
-		/*
-			for _, sub := range newSubscription {
-				log.WithFields(log.Fields{
-					"ValidatorIndex":  sub.ValidatorIndex,
-					"ValidatorKey":    sub.ValidatorKey,
-					"Collateral":      sub.Collateral,
-					"withdrawal address": sub.WithdrawalAddress,
-					"Tx Hash":         sub.TxHash,
-				}).Info("Mocked Event: Subscription")
-			}
-
-			for _, unsub := range newUnsubscription {
-				log.WithFields(log.Fields{
-					"ValidatorIndex":  unsub.ValidatorIndex,
-					"ValidatorKey":    unsub.ValidatorKey,
-					"Sender":          unsub.Sender,
-					"withdrawal address": unsub.WithdrawalAddress,
-					"Tx Hash":         unsub.TxHash,
-				}).Info("Mocked Event: Unsubscription")
-			}
-			for _, don := range don {
-				log.WithFields(log.Fields{
-					"Amount(wei)": don.AmountWei,
-					"Block":       don.Block,
-					"Tx Hash":     don.TxHash,
-				}).Info("Mocked Event: Donation")
-			}*/
+		//for _, sub := range newSubscription {
+		//	log.WithFields(log.Fields{
+		//		"ValidatorIndex":  sub.ValidatorIndex,
+		//		"ValidatorKey":    sub.ValidatorKey,
+		//		"Collateral":      sub.Collateral,
+		//		"withdrawal address": sub.WithdrawalAddress,
+		//		"Tx Hash":         sub.TxHash,
+		//	}).Info("Mocked Event: Subscription")
+		//}
+		//
+		//for _, unsub := range newUnsubscription {
+		//	log.WithFields(log.Fields{
+		//		"ValidatorIndex":  unsub.ValidatorIndex,
+		//		"ValidatorKey":    unsub.ValidatorKey,
+		//		"Sender":          unsub.Sender,
+		//		"withdrawal address": unsub.WithdrawalAddress,
+		//		"Tx Hash":         unsub.TxHash,
+		//	}).Info("Mocked Event: Unsubscription")
+		//}
+		//for _, don := range don {
+		//	log.WithFields(log.Fields{
+		//		"Amount(wei)": don.AmountWei,
+		//		"Block":       don.Block,
+		//		"Tx Hash":     don.TxHash,
+		//	}).Info("Mocked Event: Donation")
+		//}
 
 		log.Infof("Validator Index to propose: %d\n", valToPropose)
 		if dice == 0 {
@@ -261,7 +401,7 @@ func Test_100_slots_test(t *testing.T) {
 	totalLiabilities.Add(totalLiabilities, oracle.State().PoolAccumulatedFees) // TODO: rename wei
 
 	require.Equal(t, totalAssets, totalLiabilities)
-}
+}*/
 
 func Test_Oracle_WrongInputData(t *testing.T) {
 }
@@ -356,23 +496,23 @@ func GenerateUnsunscriptions(
 }*/
 
 func Test_AddSubscription(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
-	oracle.AddSubscriptionIfNotAlready(10, "0x", "0x")
-	oracle.IncreaseAllPendingRewards(big.NewInt(100))
-	oracle.ConsolidateBalance(10)
-	oracle.IncreaseAllPendingRewards(big.NewInt(200))
+	oracle := NewOracle(&Config{})
+	oracle.addSubscriptionIfNotAlready(10, "0x", "0x")
+	oracle.increaseAllPendingRewards(big.NewInt(100))
+	oracle.consolidateBalance(10)
+	oracle.increaseAllPendingRewards(big.NewInt(200))
 	require.Equal(t, big.NewInt(200), oracle.state.Validators[10].PendingRewardsWei)
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
 
 	// check that adding again doesnt reset the subscription
-	oracle.AddSubscriptionIfNotAlready(10, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(10, "0x", "0x")
 	require.Equal(t, big.NewInt(200), oracle.state.Validators[10].PendingRewardsWei)
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
 }
 
-func Test_AddSubscriptionIfNotAlready(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
-	oracle.AddSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
+func Test_addSubscriptionIfNotAlready(t *testing.T) {
+	oracle := NewOracle(&Config{})
+	oracle.addSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
 	require.Equal(t, 1, len(oracle.state.Validators))
 	require.Equal(t, &ValidatorInfo{
 		ValidatorStatus:       Active,
@@ -389,45 +529,53 @@ func Test_AddSubscriptionIfNotAlready(t *testing.T) {
 	oracle.state.Validators[100].PendingRewardsWei = big.NewInt(87653)
 
 	// If we call it again, it shouldnt be overwritten as its already there
-	oracle.AddSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
+	oracle.addSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
 
 	require.Equal(t, big.NewInt(334545546), oracle.state.Validators[100].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(87653), oracle.state.Validators[100].PendingRewardsWei)
 }
 
 func Test_AddDonation(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
-	donations := []Donation{
-		Donation{AmountWei: big.NewInt(765432), Block: uint64(100), TxHash: "0x1"},
-		Donation{AmountWei: big.NewInt(30023456), Block: uint64(100), TxHash: "0x2"},
+	oracle := NewOracle(&Config{})
+	donations := []*contract.ContractEtherReceived{
+		&contract.ContractEtherReceived{
+			DonationAmount: big.NewInt(765432),
+			Raw: types.Log{
+				TxHash:      [32]byte{0x1},
+				BlockNumber: uint64(100),
+			},
+		},
+		&contract.ContractEtherReceived{
+			DonationAmount: big.NewInt(30023456),
+			Raw: types.Log{
+				TxHash:      [32]byte{0x2},
+				BlockNumber: uint64(100),
+			},
+		},
 	}
 	oracle.handleDonations(donations)
 
-	require.Equal(t, big.NewInt(765432), oracle.state.Donations[0].AmountWei)
-	require.Equal(t, uint64(100), oracle.state.Donations[0].Block)
-	require.Equal(t, "0x1", oracle.state.Donations[0].TxHash)
+	require.Equal(t, big.NewInt(765432), oracle.state.Donations[0].DonationAmount)
+	require.Equal(t, uint64(100), oracle.state.Donations[0].Raw.BlockNumber)
+	require.Equal(t, "0x0100000000000000000000000000000000000000000000000000000000000000", oracle.state.Donations[0].Raw.TxHash.String())
 
-	require.Equal(t, big.NewInt(30023456), oracle.state.Donations[1].AmountWei)
-	require.Equal(t, uint64(100), oracle.state.Donations[1].Block)
-	require.Equal(t, "0x2", oracle.state.Donations[1].TxHash)
+	require.Equal(t, big.NewInt(30023456), oracle.state.Donations[1].DonationAmount)
+	require.Equal(t, uint64(100), oracle.state.Donations[1].Raw.BlockNumber)
+	require.Equal(t, "0x0200000000000000000000000000000000000000000000000000000000000000", oracle.state.Donations[1].Raw.TxHash.String())
 }
 
+// TODO: Merge all these tests into one
+// TODO: test 2 ssubscriptions same block
 func Test_handleManualSubscriptions_Valid(t *testing.T) {
 	// Tests a valid subscription, with enough collateral to a not subscribed validator
 	// and sent from the validator's withdrawal address
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -439,8 +587,16 @@ func Test_handleManualSubscriptions_Valid(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions([]Subscription{sub1})
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
 
+	oracle.handleManualSubscriptions(subs)
 	require.Equal(t, oracle.state.Validators[33], &ValidatorInfo{
 		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(0),
@@ -452,25 +608,19 @@ func Test_handleManualSubscriptions_Valid(t *testing.T) {
 	})
 	require.Equal(t, 1, len(oracle.state.Validators))
 	require.Equal(t, 1, len(oracle.state.Subscriptions))
-	require.Equal(t, sub1, oracle.state.Subscriptions[0])
+	require.Equal(t, subs[0], oracle.state.Subscriptions[0])
 }
 
 func Test_handleManualSubscriptions_FromWrongAddress(t *testing.T) {
 	// Tests a subscription sent from a wrong address, meaning that it doesnt
 	// match the validator's withdrawal address. No subscription is produced
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		},
-		Validator: &v1.Validator{
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -482,8 +632,17 @@ func Test_handleManualSubscriptions_FromWrongAddress(t *testing.T) {
 		},
 	}
 
+	sub1 := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		},
+	}
+
 	// No subscriptions are produced
-	oracle.handleManualSubscriptions([]Subscription{sub1})
+	oracle.handleManualSubscriptions(sub1)
 	require.Equal(t, 0, len(oracle.state.Validators))
 	require.Equal(t, 0, len(oracle.state.Subscriptions))
 }
@@ -491,18 +650,12 @@ func Test_handleManualSubscriptions_FromWrongAddress(t *testing.T) {
 func Test_handleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 	// Test a subscription to an already subscribed validator, we return the collateral
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -514,8 +667,29 @@ func Test_handleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 		},
 	}
 
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
 	// Run 3 subscriptions, only one should be added
-	oracle.handleManualSubscriptions([]Subscription{sub1, sub1, sub1})
+	oracle.handleManualSubscriptions(subs)
 
 	require.Equal(t, oracle.state.Validators[33], &ValidatorInfo{
 		ValidatorStatus:       Active,
@@ -534,18 +708,12 @@ func Test_handleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 	// has some balance. Assert that the existing balance is not touched and the
 	// collateral is returned
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -557,15 +725,22 @@ func Test_handleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 		},
 	}
 
+	sub1 := &contract.ContractSubscribeValidator{
+		ValidatorID:            33,
+		SubscriptionCollateral: big.NewInt(1000),
+		Raw:                    types.Log{TxHash: [32]byte{0x1}},
+		Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+	}
+
 	// Validator is subscribed
-	oracle.handleManualSubscriptions([]Subscription{sub1})
+	oracle.handleManualSubscriptions([]*contract.ContractSubscribeValidator{sub1})
 
 	// And has some rewards
-	oracle.IncreaseValidatorAccumulatedRewards(33, big.NewInt(9000))
-	oracle.IncreaseValidatorPendingRewards(33, big.NewInt(44000))
+	oracle.increaseValidatorAccumulatedRewards(33, big.NewInt(9000))
+	oracle.increaseValidatorPendingRewards(33, big.NewInt(44000))
 
 	// Due to some mistake, the user subscribes again and again
-	oracle.handleManualSubscriptions([]Subscription{sub1, sub1})
+	oracle.handleManualSubscriptions([]*contract.ContractSubscribeValidator{sub1, sub1})
 
 	require.Equal(t, oracle.state.Validators[33], &ValidatorInfo{
 		ValidatorStatus:       Active,
@@ -584,18 +759,12 @@ func Test_handleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
 	// is nos subscribed and the collateral is given to the pool, since we dont have a way
 	// to return it to its owner.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -605,7 +774,16 @@ func Test_handleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions([]Subscription{sub1})
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualSubscriptions(subs)
 	require.Equal(t, 0, len(oracle.state.Validators))
 	require.Equal(t, big.NewInt(1000), oracle.state.PoolAccumulatedFees)
 }
@@ -614,21 +792,24 @@ func Test_handleManualSubscriptions_NonExistent(t *testing.T) {
 	// Test a subscription of a non-existent validator. Someone subscribes a validator
 	// index that doesnt exist. Nothing happens, and the pool gets this collateral.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		0: &v1.Validator{}, // dummuy validator
+	}
+
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
 			ValidatorID:            33,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
 			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
-		Validator: nil,
 	}
 
-	oracle.handleManualSubscriptions([]Subscription{sub1})
+	oracle.handleManualSubscriptions(subs)
 	require.Equal(t, 0, len(oracle.state.Validators))
 	require.Equal(t, big.NewInt(1000), oracle.state.PoolAccumulatedFees)
 }
@@ -637,19 +818,12 @@ func Test_handleManualSubscriptions_WrongStateValidator(t *testing.T) {
 	// Test a subscription of a validator in a wrong state (eg slashed validator or exited)
 	// Nothing happens, and the pool gets this collateral.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	// Was slashed and exited
-	sub1 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            33,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateExitedSlashed,
 			Validator: &phase0.Validator{
@@ -657,17 +831,7 @@ func Test_handleManualSubscriptions_WrongStateValidator(t *testing.T) {
 				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			},
 		},
-	}
-
-	// Its active but its exiting
-	sub2 := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            34,
-			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x2}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
+		34: &v1.Validator{
 			Index:  34,
 			Status: v1.ValidatorStateActiveExiting,
 			Validator: &phase0.Validator{
@@ -677,7 +841,24 @@ func Test_handleManualSubscriptions_WrongStateValidator(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions([]Subscription{sub1, sub2})
+	subs := []*contract.ContractSubscribeValidator{
+		// Its active but its exiting
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            34,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x2}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+		// Was slashed and exited
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualSubscriptions(subs)
 
 	require.Equal(t, 0, len(oracle.state.Validators))
 	require.Equal(t, big.NewInt(1000*2), oracle.state.PoolAccumulatedFees)
@@ -688,11 +869,23 @@ func Test_handleManualSubscriptions_BannedValidator(t *testing.T) {
 	// and its kept in Banned state. Since we track this validator, we return the collateral
 	// to the owner in good faith.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
 	bannedIndex := uint64(300000)
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		phase0.ValidatorIndex(bannedIndex): &v1.Validator{
+			Index:  phase0.ValidatorIndex(bannedIndex),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+		},
+	}
+
 	oracle.state.Validators[bannedIndex] = &ValidatorInfo{
 		ValidatorStatus:       Banned,
 		AccumulatedRewardsWei: big.NewInt(0),
@@ -703,23 +896,16 @@ func Test_handleManualSubscriptions_BannedValidator(t *testing.T) {
 		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}
 
-	sub := Subscription{
-		Event: &contract.ContractSubscribeValidator{
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
 			ValidatorID:            bannedIndex,
 			SubscriptionCollateral: big.NewInt(1000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
 			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(bannedIndex),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-		},
 	}
-	oracle.handleManualSubscriptions([]Subscription{sub})
+
+	oracle.handleManualSubscriptions(subs)
 
 	// Banned validator stays banned
 	require.Equal(t, 1, len(oracle.state.Validators))
@@ -736,23 +922,153 @@ func Test_handleManualSubscriptions_BannedValidator(t *testing.T) {
 	}, oracle.state.Validators[bannedIndex])
 }
 
+func Test_Handle_Subscriptions_1(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+
+		34: &v1.Validator{
+			Index:  34,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{130, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+
+		35: &v1.Validator{
+			Index:  35,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 150, 39, 165, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{131, 170, 2, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	//Set up 3 new subs (val index 33,34,35), two valid and one invalid (low collateral)
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            34,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            35,
+			SubscriptionCollateral: big.NewInt(50),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{150, 39, 165, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualSubscriptions(subs)
+
+	// 3 validator tried to sub, 2 ok, 1 not enough collateral
+	require.Equal(t, 2, len(oracle.state.Validators))
+	require.Equal(t, 2, len(oracle.state.Subscriptions))
+
+	require.Equal(t, subs[0], oracle.state.Subscriptions[0])
+
+	//one validator subscribed with wrong collateral --> sent to the pool
+	require.Equal(t, big.NewInt(50), oracle.state.PoolAccumulatedFees)
+
+	// We keep track of [33 & 34] since subscription was valid
+	require.Equal(t, Active, oracle.state.Validators[33].ValidatorStatus)
+	require.Equal(t, Active, oracle.state.Validators[34].ValidatorStatus)
+
+	// Accumulated rewards should be 0
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[33].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[34].AccumulatedRewardsWei)
+
+	// Collateral should be 1000
+	require.Equal(t, big.NewInt(1000), oracle.state.Validators[33].CollateralWei)
+	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].CollateralWei)
+
+	//Set up 2 new subs, both of already subscribed validators one sends configured collateral, the other does not
+	subs2 := []*contract.ContractSubscribeValidator{
+		// validator already subscribed sends subscription again with too much collateral
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(5000000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+
+		// validator already subscribed sends subscription again with correct collateral
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            34,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualSubscriptions(subs2)
+
+	// [33] & [34] should still be active after trying to subscribe again
+	require.Equal(t, Active, oracle.state.Validators[33].ValidatorStatus)
+	require.Equal(t, Active, oracle.state.Validators[34].ValidatorStatus)
+
+	// when an already subscribed validator manually subscribes again, we send the collateral to their accumulated rewards
+	require.Equal(t, big.NewInt(5000000), oracle.state.Validators[33].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].AccumulatedRewardsWei)
+
+	// Collateral does not change
+	require.Equal(t, big.NewInt(1000), oracle.state.Validators[33].CollateralWei)
+	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].CollateralWei)
+
+	// Ban validator 34
+	oracle.handleBanValidator(Block{
+		Slot:           uint64(100),
+		ValidatorIndex: uint64(34),
+	})
+
+	// Validator 34 should be banned
+	require.Equal(t, Banned, oracle.state.Validators[34].ValidatorStatus)
+	// Accumulated does not change
+	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].AccumulatedRewardsWei)
+
+	// Accumulated rewards of other validators does not change because banned validator didnt have pending rewards
+	require.Equal(t, big.NewInt(5000000), oracle.state.Validators[33].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].AccumulatedRewardsWei)
+}
+
 func Test_SubThenUnsubThenAuto(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(500000),
 		PoolFeesPercent: 0,
 	})
 
 	// Subscribe a validator
 	valIdx := uint64(9000)
-	sub := Subscription{
-		Event: &contract.ContractSubscribeValidator{
-			ValidatorID:            valIdx,
-			SubscriptionCollateral: big.NewInt(500000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 common.Address{3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-		},
-		Validator: &v1.Validator{
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		phase0.ValidatorIndex(valIdx): &v1.Validator{
 			Index:  phase0.ValidatorIndex(valIdx),
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -761,30 +1077,31 @@ func Test_SubThenUnsubThenAuto(t *testing.T) {
 			},
 		},
 	}
-	oracle.handleManualSubscriptions([]Subscription{sub})
+
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            valIdx,
+			SubscriptionCollateral: big.NewInt(500000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+	oracle.handleManualSubscriptions(subs)
 
 	// Share some rewards with it
 	oracle.state.Validators[valIdx].PendingRewardsWei = big.NewInt(10000)
 	oracle.state.Validators[valIdx].AccumulatedRewardsWei = big.NewInt(20000)
 
 	// Unsubscribe it
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: valIdx,
 			Sender:      common.Address{3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:         types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIdx),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{7, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
 
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	// Check is no longer subscribed and balances are kept (pending is reset)
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[valIdx].PendingRewardsWei)
@@ -814,56 +1131,50 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	// sent from the withdrawal address of the validator. Check also that when unsubscribing
 	// the pending validator rewards are shared among the rest of the validators.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(500000),
 	})
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{}
+	for _, valIdx := range []uint64{6, 9, 10, 15} {
+		oracle.beaconValidators[phase0.ValidatorIndex(valIdx)] = &v1.Validator{
+			Index:  phase0.ValidatorIndex(valIdx),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key/withdrawal addresses
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		}
+	}
 
 	for _, valIdx := range []uint64{6, 9, 10, 15} {
-		sub := Subscription{
-			Event: &contract.ContractSubscribeValidator{
+		subs := []*contract.ContractSubscribeValidator{
+			&contract.ContractSubscribeValidator{
 				ValidatorID:            valIdx,
 				SubscriptionCollateral: big.NewInt(500000),
 				Raw:                    types.Log{TxHash: [32]byte{0x1}},
 				Sender:                 common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			},
-			Validator: &v1.Validator{
-				Index:  phase0.ValidatorIndex(valIdx),
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// byte(valIdx) just to have different key/withdrawal addresses
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
 		}
-		oracle.handleManualSubscriptions([]Subscription{sub})
+		oracle.handleManualSubscriptions(subs)
 
 		// Simulate some proposals increasing the rewards
-		oracle.IncreaseValidatorAccumulatedRewards(valIdx, big.NewInt(3000))
-		oracle.IncreaseValidatorPendingRewards(valIdx, big.NewInt(300000000000000000-500000))
+		oracle.increaseValidatorAccumulatedRewards(valIdx, big.NewInt(3000))
+		oracle.increaseValidatorPendingRewards(valIdx, big.NewInt(300000000000000000-500000))
 	}
 
 	require.Equal(t, 4, len(oracle.state.Validators))
 
 	// Receive valid unsubscription event for index 6
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: 6,
 			// Same as withdrawal credential without the prefix
 			Sender: common.Address{byte(6), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(6),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key/withdrawal addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(6), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(6), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	require.Equal(t, oracle.state.Validators[6], &ValidatorInfo{
 		ValidatorStatus:       NotSubscribed,    // Validator is still tracked but not subscribed
@@ -876,7 +1187,7 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	})
 	require.Equal(t, 4, len(oracle.state.Validators))
 	require.Equal(t, 1, len(oracle.state.Unsubscriptions))
-	require.Equal(t, unsub, oracle.state.Unsubscriptions[0])
+	require.Equal(t, unsubs[0], oracle.state.Unsubscriptions[0])
 
 	// The rest get the pending of valIndex=6
 	require.Equal(t, oracle.state.Validators[9].PendingRewardsWei, big.NewInt(300000000000000000+300000000000000000/3))
@@ -894,30 +1205,19 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	require.Equal(t, oracle.state.Validators[15].ValidatorStatus, Active)
 
 	// Unsubscribe all remaining validators
-	unsubs := make([]Unsubscription, 0)
+	newUnsubs := make([]*contract.ContractUnsubscribeValidator, 0)
 	for _, valIdx := range []uint64{ /*6*/ 9, 10, 15} {
-		unsub := Unsubscription{
-			Event: &contract.ContractUnsubscribeValidator{
+		newUnsubs = append(newUnsubs,
+			&contract.ContractUnsubscribeValidator{
 				ValidatorID: valIdx,
 				// Same as withdrawal credential without the prefix
 				Sender: common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 				Raw:    types.Log{TxHash: [32]byte{0x1}},
-			},
-			Validator: &v1.Validator{
-				Index:  phase0.ValidatorIndex(valIdx),
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// byte(valIdx) just to have different key/withdrawal addresses
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
-		}
-		unsubs = append(unsubs, unsub)
+			})
 	}
 
 	// Unsubscribe all at once
-	oracle.handleManualUnsubscriptions(unsubs)
+	oracle.handleManualUnsubscriptions(newUnsubs)
 
 	require.Equal(t, 4, len(oracle.state.Validators))
 	require.Equal(t, oracle.state.Validators[6].ValidatorStatus, NotSubscribed)
@@ -935,9 +1235,13 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 	// We receive an unsubscription for a validator that does not exist in the beacon
 	// chain. Nothing happens to existing subscribed validators.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		0: &v1.Validator{}, // dummy validator
+	}
 
 	// Simulate subscription of validator 33
 	oracle.state.Validators[33] = &ValidatorInfo{
@@ -951,16 +1255,15 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 	}
 
 	// Receive event of a validator index that doesnt exist in the beacon chain
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: 900300,
 			// Same as withdrawal credential without the prefix
 			Sender: common.Address{byte(50), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: nil,
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	// Check that the existing validator is not affected
 	require.Equal(t, 1, len(oracle.state.Validators))
@@ -979,30 +1282,25 @@ func Test_HandleUnsubscriptions_NotSubscribedValidator(t *testing.T) {
 	// We receive an unsubscription for a validator that is not subscribed but exists in
 	// the beacon chain. Nothing happens, and no subscriptions are added.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
 
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		0: &v1.Validator{}, // dummy validator
+	}
+
 	// Unsubscribe event of a validator index that BUT is not subscribed
 	valIdx := uint64(730100)
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: valIdx,
 			// Same as withdrawal credential without the prefix
 			Sender: common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIdx),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key/withdrawal addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 	require.Equal(t, 0, len(oracle.state.Validators))
 }
 
@@ -1010,9 +1308,13 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 	// An unsubscription for a subscribed validator is received, but the sender is not the
 	// withdrawal address of that validator. Nothing happens to this validator
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		0: &v1.Validator{}, // dummy validator
+	}
 
 	// Simulate subscription of validator 750100
 	valIndex := uint64(750100)
@@ -1026,24 +1328,15 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}
 
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: valIndex,
 			// Wrong sender address (see WithdrawalCredentials)
 			Sender: common.Address{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIndex),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key/withdrawal addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	// Validator remains intact, since unsubscription event was wrong
 	require.Equal(t, &ValidatorInfo{
@@ -1061,12 +1354,26 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	// A validator subscribes, the unsubscribes and the rejoins. Check that its accumulated balances
 	// are kept, and that it can rejoin succesfully.
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(500000),
 	})
 
-	// Simulate subscription of validator 750100
 	valIndex := uint64(750100)
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		phase0.ValidatorIndex(valIndex): &v1.Validator{
+			Index:  phase0.ValidatorIndex(valIndex),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	// Simulate subscription of validator 750100
+
 	oracle.state.Validators[valIndex] = &ValidatorInfo{
 		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(0),
@@ -1078,28 +1385,19 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	}
 
 	// Add some rewards
-	oracle.IncreaseValidatorAccumulatedRewards(valIndex, big.NewInt(1000000000000000000))
-	oracle.IncreaseValidatorPendingRewards(valIndex, big.NewInt(5000000000000000000))
+	oracle.increaseValidatorAccumulatedRewards(valIndex, big.NewInt(1000000000000000000))
+	oracle.increaseValidatorPendingRewards(valIndex, big.NewInt(5000000000000000000))
 
 	// Now it unsubscribes ok
-	unsub := Unsubscription{
-		Event: &contract.ContractUnsubscribeValidator{
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
 			ValidatorID: valIndex,
 			// Wrong sender address (see WithdrawalCredentials)
 			Sender: common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIndex),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
-	oracle.handleManualUnsubscriptions([]Unsubscription{unsub})
+	oracle.handleManualUnsubscriptions(unsubs)
 
 	// Unsubscription is ok
 	require.Equal(t, &ValidatorInfo{
@@ -1113,24 +1411,15 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	}, oracle.state.Validators[valIndex])
 
 	// Now the same validator tries to rejoin
-	sub := Subscription{
-		Event: &contract.ContractSubscribeValidator{
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
 			ValidatorID:            valIndex,
 			SubscriptionCollateral: big.NewInt(500000),
 			Raw:                    types.Log{TxHash: [32]byte{0x1}},
 			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
-		Validator: &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIndex),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIndex), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		},
 	}
-	oracle.handleManualSubscriptions([]Subscription{sub})
+	oracle.handleManualSubscriptions(subs)
 
 	// Its subscribed again with its old accumulated rewards
 	require.Equal(t, &ValidatorInfo{
@@ -1144,89 +1433,19 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 	}, oracle.state.Validators[valIndex])
 }
 
-func Test_StoreLatestOnchainState(t *testing.T) {
+func Test_increaseAllPendingRewards_1(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
-		PoolFeesPercent: 0,
-		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
-	})
-
-	valInfo1 := &ValidatorInfo{
-		ValidatorStatus:       Active,
-		ValidatorIndex:        1,
-		AccumulatedRewardsWei: big.NewInt(1000000000000000000),
-		PendingRewardsWei:     big.NewInt(500000),
-		WithdrawalAddress:     "0x1000000000000000000000000000000000000000",
-	}
-
-	valInfo2 := &ValidatorInfo{
-		ValidatorStatus:       NotSubscribed,
-		ValidatorIndex:        2,
-		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
-		PendingRewardsWei:     big.NewInt(500000),
-		// same withdrawal address as valInfo3
-		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
-	}
-
-	valInfo3 := &ValidatorInfo{
-		ValidatorStatus:       NotSubscribed,
-		ValidatorIndex:        3,
-		AccumulatedRewardsWei: big.NewInt(2000000000000000000),
-		PendingRewardsWei:     big.NewInt(500000),
-		// same withdrawal address as valInfo2
-		WithdrawalAddress: "0x2000000000000000000000000000000000000000",
-	}
-
-	oracle.state.Validators[1] = valInfo1
-	oracle.state.Validators[2] = valInfo2
-	oracle.state.Validators[3] = valInfo3
-
-	// Function under test
-	oracle.StoreLatestOnchainState()
-
-	// Ensure all validators are present in the state
-	require.Equal(t, valInfo1, oracle.state.LatestCommitedState.Validators[1])
-	require.Equal(t, valInfo2, oracle.state.LatestCommitedState.Validators[2])
-	require.Equal(t, valInfo3, oracle.state.LatestCommitedState.Validators[3])
-
-	// Ensure merkle root matches
-	require.Equal(t, "0xd9a1eee574026532cddccbcce6320c0600f370a7c64ce30c5eafc63357449940", oracle.state.LatestCommitedState.MerkleRoot)
-
-	// Ensure proofs and leafs are correct
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0xfee0000000000000000000000000000000000000"], []string{"0x8bfb8acff6772a60d6641cb854587bb2b6f2100391fbadff2c34be0b8c20a0cc", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x1000000000000000000000000000000000000000"], []string{"0xaaf838df9c8d5cec6ed77fcbc2cace945e8f2078eede4a0bb7164818d425f24d", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x2000000000000000000000000000000000000000"], []string{"0xd643163144dcba353b4d27c50939b3d11133bd3c6916092de059d07353b4cb5f", "0xda53f5dd3e17f66f4a35c9c9d5fd27c094fa4249e2933fb819ac724476dc9ae1"})
-
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0xfee0000000000000000000000000000000000000"], RawLeaf{"0xfee0000000000000000000000000000000000000", big.NewInt(0)})
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x1000000000000000000000000000000000000000"], RawLeaf{"0x1000000000000000000000000000000000000000", big.NewInt(1000000000000000000)})
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x2000000000000000000000000000000000000000"], RawLeaf{"0x2000000000000000000000000000000000000000", big.NewInt(4000000000000000000)})
-
-	// Ensure LatestCommitedState contains a deep copy of the validators and not just a reference
-	// This is very important since otherwise they will be modified when the state is modified
-	// and we want a frozen snapshot of the state at that moment.
-
-	// Do some changes in validators
-	oracle.state.Validators[2].AccumulatedRewardsWei = big.NewInt(22)
-	oracle.state.Validators[3].PendingRewardsWei = big.NewInt(22)
-
-	// And assert the frozen state is not changes
-	require.Equal(t, big.NewInt(2000000000000000000), oracle.state.LatestCommitedState.Validators[2].AccumulatedRewardsWei)
-	require.Equal(t, big.NewInt(500000), oracle.state.LatestCommitedState.Validators[3].PendingRewardsWei)
-}
-
-func Test_IncreaseAllPendingRewards_1(t *testing.T) {
-
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesPercent: 0,
 		PoolFeesAddress: "0x",
 	})
 
 	// Subscribe 3 validators with no balance
-	oracle.AddSubscriptionIfNotAlready(1, "0x", "0x")
-	oracle.AddSubscriptionIfNotAlready(2, "0x", "0x")
-	oracle.AddSubscriptionIfNotAlready(3, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(1, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(2, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(3, "0x", "0x")
 
-	oracle.IncreaseAllPendingRewards(big.NewInt(10000))
+	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
 	// Note that in this case even with PoolFeesPercent: 0, the pool gets the remainder
 	require.Equal(t, big.NewInt(3333), oracle.state.Validators[1].PendingRewardsWei)
@@ -1235,19 +1454,19 @@ func Test_IncreaseAllPendingRewards_1(t *testing.T) {
 	require.Equal(t, big.NewInt(1), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_IncreaseAllPendingRewards_2(t *testing.T) {
+func Test_increaseAllPendingRewards_2(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesPercent: 10 * 100, // 10%
 		PoolFeesAddress: "0x",
 	})
 
 	// Subscribe 3 validators with no balance
-	oracle.AddSubscriptionIfNotAlready(1, "0x", "0x")
-	oracle.AddSubscriptionIfNotAlready(2, "0x", "0x")
-	oracle.AddSubscriptionIfNotAlready(3, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(1, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(2, "0x", "0x")
+	oracle.addSubscriptionIfNotAlready(3, "0x", "0x")
 
-	oracle.IncreaseAllPendingRewards(big.NewInt(10000))
+	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
 	// Note that in this case even with PoolFeesPercent: 0, the pool gets the remainder
 	require.Equal(t, big.NewInt(3000), oracle.state.Validators[1].PendingRewardsWei)
@@ -1256,7 +1475,7 @@ func Test_IncreaseAllPendingRewards_2(t *testing.T) {
 	require.Equal(t, big.NewInt(1000), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_IncreaseAllPendingRewards_3(t *testing.T) {
+func Test_increaseAllPendingRewards_3(t *testing.T) {
 
 	// Multiple test with different combinations of: fee, reward, validators
 
@@ -1281,18 +1500,18 @@ func Test_IncreaseAllPendingRewards_3(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		oracle := NewOracle(&config.Config{
+		oracle := NewOracle(&Config{
 			PoolFeesPercent: test.FeePercent,
 			PoolFeesAddress: "0x",
 		})
 
 		for i := 0; i < test.AmountValidators; i++ {
-			oracle.AddSubscriptionIfNotAlready(uint64(i), "0x", "0x")
+			oracle.addSubscriptionIfNotAlready(uint64(i), "0x", "0x")
 		}
 
 		totalRewards := big.NewInt(0)
 		for _, reward := range test.Reward {
-			oracle.IncreaseAllPendingRewards(reward)
+			oracle.increaseAllPendingRewards(reward)
 			totalRewards.Add(totalRewards, reward)
 		}
 
@@ -1308,7 +1527,7 @@ func Test_IncreaseAllPendingRewards_3(t *testing.T) {
 	}
 }
 
-func Test_IncreaseAllPendingRewards_4(t *testing.T) {
+func Test_increaseAllPendingRewards_4(t *testing.T) {
 
 	// Multiple test with different combinations of: fee, reward, validators
 
@@ -1349,14 +1568,14 @@ func Test_IncreaseAllPendingRewards_4(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		oracle := NewOracle(&config.Config{
+		oracle := NewOracle(&Config{
 			PoolFeesPercent: test.FeePercentX100,
 			PoolFeesAddress: "0x",
 		})
 		for i := 0; i < test.AmountValidators; i++ {
-			oracle.AddSubscriptionIfNotAlready(uint64(i), "0x", "0x")
+			oracle.addSubscriptionIfNotAlready(uint64(i), "0x", "0x")
 		}
-		oracle.IncreaseAllPendingRewards(test.Reward)
+		oracle.increaseAllPendingRewards(test.Reward)
 		for i := 0; i < test.AmountValidators; i++ {
 			require.Equal(t, test.NewPendingArray[i], oracle.state.Validators[uint64(i)].PendingRewardsWei)
 		}
@@ -1378,8 +1597,8 @@ func Test_IncreaseAllPendingRewards_4(t *testing.T) {
 	}
 }
 
-func Test_IncreaseValidatorPendingRewards(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+func Test_increaseValidatorPendingRewards(t *testing.T) {
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[12] = &ValidatorInfo{
 		PendingRewardsWei:     big.NewInt(100),
 		AccumulatedRewardsWei: big.NewInt(0),
@@ -1389,51 +1608,51 @@ func Test_IncreaseValidatorPendingRewards(t *testing.T) {
 		AccumulatedRewardsWei: big.NewInt(0),
 	}
 
-	oracle.IncreaseValidatorPendingRewards(12, big.NewInt(8765432))
+	oracle.increaseValidatorPendingRewards(12, big.NewInt(8765432))
 	require.Equal(t, big.NewInt(8765432+100), oracle.state.Validators[12].PendingRewardsWei)
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[12].AccumulatedRewardsWei)
 
-	oracle.IncreaseValidatorPendingRewards(200, big.NewInt(0))
+	oracle.increaseValidatorPendingRewards(200, big.NewInt(0))
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[200].PendingRewardsWei)
 
-	oracle.IncreaseValidatorPendingRewards(12, big.NewInt(1))
+	oracle.increaseValidatorPendingRewards(12, big.NewInt(1))
 	require.Equal(t, big.NewInt(8765432+100+1), oracle.state.Validators[12].PendingRewardsWei)
 }
 
-func Test_IncreaseValidatorAccumulatedRewards(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+func Test_increaseValidatorAccumulatedRewards(t *testing.T) {
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[9999999] = &ValidatorInfo{
 		PendingRewardsWei:     big.NewInt(100),
 		AccumulatedRewardsWei: big.NewInt(99999999999999),
 	}
-	oracle.IncreaseValidatorAccumulatedRewards(9999999, big.NewInt(87676545432))
+	oracle.increaseValidatorAccumulatedRewards(9999999, big.NewInt(87676545432))
 	require.Equal(t, big.NewInt(87676545432+99999999999999), oracle.state.Validators[9999999].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[9999999].PendingRewardsWei)
 }
 
-func Test_SendRewardToPool(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
-	oracle.SendRewardToPool(big.NewInt(10456543212340))
+func Test_sendRewardToPool(t *testing.T) {
+	oracle := NewOracle(&Config{})
+	oracle.sendRewardToPool(big.NewInt(10456543212340))
 	require.Equal(t, big.NewInt(10456543212340), oracle.state.PoolAccumulatedFees)
 
-	oracle.SendRewardToPool(big.NewInt(99999))
+	oracle.sendRewardToPool(big.NewInt(99999))
 	require.Equal(t, big.NewInt(10456543212340+99999), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_ResetPendingRewards(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+func Test_resetPendingRewards(t *testing.T) {
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[1] = &ValidatorInfo{
 		PendingRewardsWei:     big.NewInt(99999999999999),
 		AccumulatedRewardsWei: big.NewInt(99999999999999),
 	}
-	oracle.ResetPendingRewards(1)
+	oracle.resetPendingRewards(1)
 
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[1].PendingRewardsWei)
 	require.Equal(t, big.NewInt(99999999999999), oracle.state.Validators[1].AccumulatedRewardsWei)
 }
 
 func Test_IncreasePendingRewards(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[12] = &ValidatorInfo{
 		WithdrawalAddress: "0xaa",
 		ValidatorStatus:   Active,
@@ -1442,24 +1661,24 @@ func Test_IncreasePendingRewards(t *testing.T) {
 	totalAmount := big.NewInt(130)
 
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[12].PendingRewardsWei)
-	oracle.IncreaseAllPendingRewards(totalAmount)
+	oracle.increaseAllPendingRewards(totalAmount)
 	require.Equal(t, big.NewInt(230), oracle.state.Validators[12].PendingRewardsWei)
 }
 
 func Test_IncreasePendingEmptyPool(t *testing.T) {
 	// Test a case where a new rewards adds to the pool but no validators are subscribed
 	// This can happen when a donation is recived to the pool but no validators are subscribed
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 
 	// This prevents division by zero
-	oracle.IncreaseAllPendingRewards(big.NewInt(10000))
+	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
 	// Pool gets all rewards
 	require.Equal(t, big.NewInt(10000), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_ConsolidateBalance_Eligible(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+func Test_consolidateBalance_Eligible(t *testing.T) {
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[10] = &ValidatorInfo{
 		AccumulatedRewardsWei: big.NewInt(77),
 		PendingRewardsWei:     big.NewInt(23),
@@ -1468,14 +1687,14 @@ func Test_ConsolidateBalance_Eligible(t *testing.T) {
 	require.Equal(t, big.NewInt(77), oracle.state.Validators[10].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(23), oracle.state.Validators[10].PendingRewardsWei)
 
-	oracle.ConsolidateBalance(10)
+	oracle.consolidateBalance(10)
 
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[10].PendingRewardsWei)
 }
 
 func Test_StateMachine(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	valIndex1 := uint64(1000)
 	valIndex2 := uint64(2000)
 
@@ -1514,78 +1733,16 @@ func Test_StateMachine(t *testing.T) {
 			ValidatorStatus: testState.From,
 		}
 
-		oracle.AdvanceStateMachine(valIndex1, testState.Event)
-		oracle.AdvanceStateMachine(valIndex2, testState.Event)
+		oracle.advanceStateMachine(valIndex1, testState.Event)
+		oracle.advanceStateMachine(valIndex2, testState.Event)
 
 		require.Equal(t, testState.End, oracle.state.Validators[valIndex1].ValidatorStatus)
 		require.Equal(t, testState.End, oracle.state.Validators[valIndex2].ValidatorStatus)
 	}
 }
 
-// TODO: Test that if the file changes it fails due to hash
-func Test_SaveReadToFromJson(t *testing.T) {
-	oracle := NewOracle(&config.Config{
-		PoolAddress:     "0x0000000000000000000000000000000000000000",
-		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
-		Network:         "mainnet",
-	})
-
-	oracle.AddSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.AddSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
-
-	oracle.StoreLatestOnchainState()
-
-	oracle.AddSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.AddSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
-	oracle.AddSubscriptionIfNotAlready(uint64(643344), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
-
-	oracle.StoreLatestOnchainState()
-
-	subs := []Subscription{
-		{
-			Event: &contract.ContractSubscribeValidator{
-				ValidatorID:            33,
-				SubscriptionCollateral: big.NewInt(1000),
-				Raw:                    types.Log{TxHash: [32]byte{0x1}, Topics: []common.Hash{{0x2}}},
-				Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-			Validator: &v1.Validator{
-				Index:  33,
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-					PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
-		}}
-	oracle.state.Subscriptions = subs
-	_ = subs
-
-	defer os.Remove(filepath.Join(StateFileName, StateFolder))
-	defer os.RemoveAll(StateFolder)
-	oracle.SaveToJson()
-
-	oracle.LoadFromJson()
-	//defer os.Remove(filepath.Join(StateFileName, StateFolder))
-	//defer os.RemoveAll(StateFolder)
-	jsonData, err := json.MarshalIndent(oracle.state, "", " ")
-	if err != nil {
-		log.Fatal("could not marshal state to json: ", err)
-	}
-
-	fmt.Printf("recovered data: %s\n", jsonData)
-	log.Info(oracle.state.Validators[3].ValidatorStatus)
-
-	require.Equal(t, oracle.state, oracle.state)
-
-	//require.NoError(t, err)
-	//require.Equal(t, state, state)
-}
-
 func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolAddress:     "0x0000000000000000000000000000000000000000",
 		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
 		Network:         "mainnet",
@@ -1601,18 +1758,20 @@ func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
 }
 func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolAddress:     "0x0000000000000000000000000000000000000000",
 		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
 		Network:         "mainnet",
 	})
 
-	oracle.state.Donations = make([]Donation, 1)
+	oracle.state.Donations = make([]*contract.ContractEtherReceived, 1)
 
-	oracle.state.Donations[0] = Donation{
-		AmountWei: big.NewInt(1000),
-		Block:     1000,
-		TxHash:    "0x",
+	oracle.state.Donations[0] = &contract.ContractEtherReceived{
+		DonationAmount: big.NewInt(1000),
+		Raw: types.Log{
+			TxHash:      [32]byte{0x0},
+			BlockNumber: uint64(1000),
+		},
 	}
 
 	oracle.state.Validators[10] = &ValidatorInfo{
@@ -1655,7 +1814,7 @@ func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
 }
 
 func Test_IsValidatorSubscribed(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[10] = &ValidatorInfo{
 		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(100),
@@ -1689,13 +1848,13 @@ func Test_IsValidatorSubscribed(t *testing.T) {
 }
 
 func Test_BanValidator(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
-	oracle.AddSubscriptionIfNotAlready(1, "0xa", "0xb")
-	oracle.AddSubscriptionIfNotAlready(2, "0xa", "0xb")
-	oracle.AddSubscriptionIfNotAlready(3, "0xa", "0xb")
+	oracle := NewOracle(&Config{})
+	oracle.addSubscriptionIfNotAlready(1, "0xa", "0xb")
+	oracle.addSubscriptionIfNotAlready(2, "0xa", "0xb")
+	oracle.addSubscriptionIfNotAlready(3, "0xa", "0xb")
 
 	// New reward arrives
-	oracle.IncreaseAllPendingRewards(big.NewInt(99))
+	oracle.increaseAllPendingRewards(big.NewInt(99))
 
 	// Shared equally among all validators
 	require.Equal(t, big.NewInt(33), oracle.state.Validators[1].PendingRewardsWei)
@@ -1714,8 +1873,8 @@ func Test_BanValidator(t *testing.T) {
 	require.Equal(t, big.NewInt(1), oracle.state.PoolAccumulatedFees)
 }
 
-func Test_IsBanned(t *testing.T) {
-	oracle := NewOracle(&config.Config{})
+func Test_isBanned(t *testing.T) {
+	oracle := NewOracle(&Config{})
 	oracle.state.Validators[1] = &ValidatorInfo{
 		ValidatorStatus: Active,
 	}
@@ -1732,178 +1891,19 @@ func Test_IsBanned(t *testing.T) {
 		ValidatorStatus: Banned,
 	}
 
-	require.Equal(t, false, oracle.IsBanned(1))
-	require.Equal(t, false, oracle.IsBanned(2))
-	require.Equal(t, false, oracle.IsBanned(3))
-	require.Equal(t, false, oracle.IsBanned(4))
-	require.Equal(t, true, oracle.IsBanned(5))
+	require.Equal(t, false, oracle.isBanned(1))
+	require.Equal(t, false, oracle.isBanned(2))
+	require.Equal(t, false, oracle.isBanned(3))
+	require.Equal(t, false, oracle.isBanned(4))
+	require.Equal(t, true, oracle.isBanned(5))
 }
 
 // TODO: Add a Test_Handle_Subscriptions_1 happy path to cover the normal flow
 
 // Follows an non happy path with a lot of edge cases and possible misconfigurations
-func Test_Handle_Subscriptions_1(t *testing.T) {
-
-	oracle := NewOracle(&config.Config{
-		CollateralInWei: big.NewInt(1000),
-	})
-
-	//Set up 3 new subs (val index 33,34,35), two valid and one invalid (low collateral)
-	subs := []Subscription{
-		{
-			Event: &contract.ContractSubscribeValidator{
-				ValidatorID:            33,
-				SubscriptionCollateral: big.NewInt(1000),
-				Raw:                    types.Log{TxHash: [32]byte{0x1}},
-				Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-			Validator: &v1.Validator{
-				Index:  33,
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-					PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
-		},
-		{
-			Event: &contract.ContractSubscribeValidator{
-				ValidatorID:            34,
-				SubscriptionCollateral: big.NewInt(1000),
-				Raw:                    types.Log{TxHash: [32]byte{0x1}},
-				Sender:                 common.Address{149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-			Validator: &v1.Validator{
-				Index:  34,
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-					PublicKey: phase0.BLSPubKey{130, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
-		},
-		{
-			Event: &contract.ContractSubscribeValidator{
-				ValidatorID:            35,
-				SubscriptionCollateral: big.NewInt(50),
-				Raw:                    types.Log{TxHash: [32]byte{0x1}},
-				Sender:                 common.Address{150, 39, 165, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-			Validator: &v1.Validator{
-				Index:  35,
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 150, 39, 165, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-					PublicKey: phase0.BLSPubKey{131, 170, 2, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
-		},
-	}
-
-	oracle.handleManualSubscriptions(subs)
-
-	// 3 validator tried to sub, 2 ok, 1 not enough collateral
-	require.Equal(t, 2, len(oracle.state.Validators))
-	require.Equal(t, 2, len(oracle.state.Subscriptions))
-
-	require.Equal(t, subs[0], oracle.state.Subscriptions[0])
-
-	//one validator subscribed with wrong collateral --> sent to the pool
-	require.Equal(t, big.NewInt(50), oracle.state.PoolAccumulatedFees)
-
-	// We keep track of [33 & 34] since subscription was valid
-	require.Equal(t, Active, oracle.state.Validators[33].ValidatorStatus)
-	require.Equal(t, Active, oracle.state.Validators[34].ValidatorStatus)
-
-	// Accumulated rewards should be 0
-	require.Equal(t, big.NewInt(0), oracle.state.Validators[33].AccumulatedRewardsWei)
-	require.Equal(t, big.NewInt(0), oracle.state.Validators[34].AccumulatedRewardsWei)
-
-	// Collateral should be 1000
-	require.Equal(t, big.NewInt(1000), oracle.state.Validators[33].CollateralWei)
-	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].CollateralWei)
-
-	//Set up 2 new subs, both of already subscribed validators one sends configured collateral, the other does not
-	subs2 := []Subscription{
-		{
-			// validator already subscribed sends subscription again with too much collateral
-			Event: &contract.ContractSubscribeValidator{
-				ValidatorID:            33,
-				SubscriptionCollateral: big.NewInt(5000000),
-				Raw:                    types.Log{TxHash: [32]byte{0x1}},
-				Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-			Validator: &v1.Validator{
-				Index:  33,
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-					PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
-		},
-		{
-			// validator already subscribed sends subscription again with correct collateral
-			Event: &contract.ContractSubscribeValidator{
-				ValidatorID:            34,
-				SubscriptionCollateral: big.NewInt(1000),
-				Raw:                    types.Log{TxHash: [32]byte{0x1}},
-				Sender:                 common.Address{149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-			},
-			Validator: &v1.Validator{
-				Index:  34,
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-					PublicKey: phase0.BLSPubKey{130, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
-		},
-	}
-
-	oracle.handleManualSubscriptions(subs2)
-
-	// [33] & [34] should still be active after trying to subscribe again
-	require.Equal(t, Active, oracle.state.Validators[33].ValidatorStatus)
-	require.Equal(t, Active, oracle.state.Validators[34].ValidatorStatus)
-
-	// when an already subscribed validator manually subscribes again, we send the collateral to their accumulated rewards
-	require.Equal(t, big.NewInt(5000000), oracle.state.Validators[33].AccumulatedRewardsWei)
-	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].AccumulatedRewardsWei)
-
-	// Collateral does not change
-	require.Equal(t, big.NewInt(1000), oracle.state.Validators[33].CollateralWei)
-	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].CollateralWei)
-
-	// Ban validator 34
-	oracle.handleBanValidator(Block{
-		Slot:           uint64(100),
-		ValidatorIndex: uint64(34),
-	})
-
-	// Validator 34 should be banned
-	require.Equal(t, Banned, oracle.state.Validators[34].ValidatorStatus)
-	// Accumulated does not change
-	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].AccumulatedRewardsWei)
-
-	// Accumulated rewards of other validators does not change because banned validator didnt have pending rewards
-	require.Equal(t, big.NewInt(5000000), oracle.state.Validators[33].AccumulatedRewardsWei)
-	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].AccumulatedRewardsWei)
-}
-
 func Test_Handle_TODO(t *testing.T) {
 	/*
-		cfg := &config.Config{
+		cfg := &Config{
 			PoolFeesAddress: "0xa",
 			PoolFeesPercent: 0,
 			CollateralInWei: big.NewInt(1000000),
@@ -1996,9 +1996,22 @@ func Test_CanValidatorSubscribeToPool(t *testing.T) {
 // each one proposing a block
 func Test_ValidatorInfoSize(t *testing.T) {
 	for i := 0; i < 3; i++ {
-		oracle := NewOracle(&config.Config{
+		oracle := NewOracle(&Config{
 			CollateralInWei: big.NewInt(1000),
 		})
+
+		oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+			33: &v1.Validator{
+				Index:  33,
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+					PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+				},
+			},
+		}
 
 		//save state of 2000 validators
 		numValidators := 2000
@@ -2072,10 +2085,12 @@ func Test_ValidatorInfoSize(t *testing.T) {
 // a rough estimate of 100 blocks will have been proposed by the validators.
 func Test_SizeMultipleOnchainState(t *testing.T) {
 
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
 	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{}
 
 	//prepare 2000 validators
 	numValidators := 2000
@@ -2084,6 +2099,20 @@ func Test_SizeMultipleOnchainState(t *testing.T) {
 	valsID := make([]uint64, numValidators)
 	for i := 0; i < numValidators; i++ {
 		valsID[i] = uint64(i)
+	}
+
+	for i := 0; i < len(valsID); i++ {
+		address := common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567")
+		oracle.beaconValidators[phase0.ValidatorIndex(i)] = &v1.Validator{
+			Index:  phase0.ValidatorIndex(valsID[i]),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// withdrawal credentials = 0x(valID)0000..000
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, address[0], address[1], address[2], address[3], address[4], address[5], address[6], address[7], address[8], address[9], address[10], address[11], address[12], address[13], address[14], address[15], address[16], address[17], address[18], address[19]},
+				// Valdator pubkey: 0x(valID)0000...000
+				PublicKey: phase0.BLSPubKey{byte(valsID[i]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			},
+		}
 	}
 	//subscribe 2000 validators. All validators will have the same withdrawal address.
 	subs := new_subs_slice(common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567"), valsID, big.NewInt(1000))
@@ -2136,26 +2165,14 @@ func Test_SizeMultipleOnchainState(t *testing.T) {
 }
 
 // returns len(valsID) new valid subscriptions
-func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int) []Subscription {
-	subs := make([]Subscription, len(valsID))
+func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int) []*contract.ContractSubscribeValidator {
+	subs := make([]*contract.ContractSubscribeValidator, len(valsID))
 	for i := 0; i < len(valsID); i++ {
-		subs[i] = Subscription{
-			Event: &contract.ContractSubscribeValidator{
-				ValidatorID:            valsID[i],
-				SubscriptionCollateral: collateral,
-				Raw:                    types.Log{TxHash: [32]byte{0x1}},
-				Sender:                 address,
-			},
-			Validator: &v1.Validator{
-				Index:  phase0.ValidatorIndex(valsID[i]),
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// withdrawal credentials = 0x(valID)0000..000
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, address[0], address[1], address[2], address[3], address[4], address[5], address[6], address[7], address[8], address[9], address[10], address[11], address[12], address[13], address[14], address[15], address[16], address[17], address[18], address[19]},
-					// Valdator pubkey: 0x(valID)0000...000
-					PublicKey: phase0.BLSPubKey{byte(valsID[i]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-				},
-			},
+		subs[i] = &contract.ContractSubscribeValidator{
+			ValidatorID:            valsID[i],
+			SubscriptionCollateral: collateral,
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 address,
 		}
 	}
 	return subs

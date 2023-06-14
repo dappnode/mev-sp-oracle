@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"flag"
-	"math/big"
 	"os"
 	"time"
 
@@ -11,23 +10,6 @@ import (
 	"github.com/hako/durafmt"
 	log "github.com/sirupsen/logrus"
 )
-
-type Config struct {
-	ConsensusEndpoint     string   `json:"consensus_endpoint"`
-	ExecutionEndpoint     string   `json:"execution_endpoint"`
-	Network               string   `json:"network"`
-	PoolAddress           string   `json:"pool_address"`
-	DeployedSlot          uint64   `json:"deployed_slot"`
-	DeployedBlock         uint64   `json:"deployed_block"`
-	CheckPointSizeInSlots uint64   `json:"checkpoint_size"`
-	PoolFeesPercent       int      `json:"pool_fees_percent"` // With 2 decimals (eg 1.5% = 150)
-	PoolFeesAddress       string   `json:"pool_fees_address"`
-	DryRun                bool     `json:"dry_run"`
-	NumRetries            int      `json:"num_retries"`
-	CollateralInWei       *big.Int `json:"collateral_in_wei"`
-	UpdaterKeyPass        string   `json:"-"`
-	UpdaterKeyPath        string   `json:"-"`
-}
 
 type CliConfig struct {
 	DryRun            bool

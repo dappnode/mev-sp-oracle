@@ -106,7 +106,7 @@ func main() {
 	log.Info("Oracle gracefully stopped")
 }
 
-func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *config.Config) {
+func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracle.Config) {
 
 	// Check if we are in sync with the latest onchain root. If not we wont be updating
 	// the state until we are in sync with the latest. This prevents from the oracle
@@ -114,7 +114,9 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 	syncedWithOnchainRoot := false
 
 	// Load all the validators from the beacon chain
+	// TODO: This is duplicated, not very nice
 	onchain.RefreshBeaconValidators()
+	oracleInstance.SetBeaconValidators(onchain.Validators())
 
 	log.WithFields(log.Fields{
 		"LatestProcessedSlot": oracleInstance.State().LatestProcessedSlot,
@@ -167,28 +169,10 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		if finalizedSlot >= oracleInstance.State().NextSlotToProcess {
 
 			// Fetch block information
-			poolBlock := onchain.GetBlockFromSlot(oracleInstance.State().NextSlotToProcess, oracleInstance)
+			fullBlock := onchain.FetchFullBlock(oracleInstance.State().NextSlotToProcess, oracleInstance)
 
-			// Fetch subscription data
-			blockSubs, err := onchain.GetBlockSubscriptions(poolBlock.Block)
-			if err != nil {
-				log.Fatal("could not get block subscriptions: ", err)
-			}
-
-			// Fetch unsubscription data
-			blockUnsubs, err := onchain.GetBlockUnsubscriptions(poolBlock.Block)
-			if err != nil {
-				log.Fatal("could not get block unsubscriptions: ", err)
-			}
-
-			// Fetch donations in this block
-			blockDonations, err := onchain.GetDonationEvents(poolBlock.Block, poolBlock) // TODO: Redundant
-			if err != nil {
-				log.Fatal("could not get block donations: ", err)
-			}
-
-			// Advance state to next slot based on the information we got from the block
-			processedSlot, err := oracleInstance.AdvanceStateToNextSlot(poolBlock, blockSubs, blockUnsubs, blockDonations)
+			// Process the block
+			processedSlot, err := oracleInstance.AdvanceStateToNextSlot(fullBlock)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -224,6 +208,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *confi
 		UpdateValidatorsIntervalSlots := uint64(600)
 		if oracleInstance.State().LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
 			onchain.RefreshBeaconValidators()
+			oracleInstance.SetBeaconValidators(onchain.Validators())
 		}
 
 		// Every CheckPointSizeInSlots we commit the state

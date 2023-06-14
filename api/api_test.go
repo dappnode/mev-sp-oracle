@@ -7,7 +7,6 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/ethereum/go-ethereum/common"
@@ -17,7 +16,7 @@ import (
 
 func Test_ApplyNonFinalizedState_Subscription(t *testing.T) {
 
-	api := NewApiService(&config.Config{
+	api := NewApiService(&oracle.Config{
 		CollateralInWei: big.NewInt(1000),
 	}, nil, nil)
 
@@ -102,7 +101,7 @@ func Test_ApplyNonFinalizedState_Subscription(t *testing.T) {
 }
 
 func Test_ApplyNonFinalizedState_Unsubscribe(t *testing.T) {
-	api := NewApiService(&config.Config{
+	api := NewApiService(&oracle.Config{
 		CollateralInWei: big.NewInt(1000),
 	}, nil, nil)
 
@@ -159,7 +158,7 @@ func Test_ApplyNonFinalizedState_Unsubscribe(t *testing.T) {
 }
 
 func Test_ApplyNonFinalizedState_MultipleEvents(t *testing.T) {
-	api := NewApiService(&config.Config{
+	api := NewApiService(&oracle.Config{
 		CollateralInWei: big.NewInt(1000),
 	}, nil, nil)
 

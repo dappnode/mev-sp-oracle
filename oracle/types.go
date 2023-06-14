@@ -5,7 +5,6 @@ import (
 	"math/big"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/pkg/errors"
 )
@@ -67,6 +66,23 @@ const (
 	Eth1Withdrawal WithdrawalType = 1
 )
 
+type Config struct {
+	ConsensusEndpoint     string   `json:"consensus_endpoint"`
+	ExecutionEndpoint     string   `json:"execution_endpoint"`
+	Network               string   `json:"network"`
+	PoolAddress           string   `json:"pool_address"`
+	DeployedSlot          uint64   `json:"deployed_slot"`
+	DeployedBlock         uint64   `json:"deployed_block"`
+	CheckPointSizeInSlots uint64   `json:"checkpoint_size"`
+	PoolFeesPercent       int      `json:"pool_fees_percent"` // With 2 decimals (eg 1.5% = 150)
+	PoolFeesAddress       string   `json:"pool_fees_address"`
+	DryRun                bool     `json:"dry_run"`
+	NumRetries            int      `json:"num_retries"`
+	CollateralInWei       *big.Int `json:"collateral_in_wei"`
+	UpdaterKeyPass        string   `json:"-"`
+	UpdaterKeyPath        string   `json:"-"`
+}
+
 // Represents a block with information relevant for the pool
 // TODO: Call SummarizedBlock?
 // This is to avoid storing the whole block
@@ -79,27 +95,22 @@ type Block struct {
 	Reward            *big.Int   `json:"reward_wei"`
 	RewardType        RewardType `json:"reward_type"`
 	WithdrawalAddress string     `json:"withdrawal_address"`
-}
-
-// Represents a donation made to the pool
-// TODO: deprecate this? donations are detected from the block content
-type Donation struct {
-	AmountWei *big.Int
-	Block     uint64
-	TxHash    string
+	MEVFeeRecipient   string     `json:"mev_fee_recipient"` // TODO: populate
+	FeeRecipient      string     `json:"fee_recipient"`     // TODO: populate
 }
 
 // Subscription event and the associated validator (if any)
-// TODO: Store directly the event?¿
-type Subscription struct {
-	Event     *contract.ContractSubscribeValidator
-	Validator *v1.Validator
+// TODO: Remove and also fix API
+type Subscription struct { //TODO: remove
+	Event     *contract.ContractSubscribeValidator `json:"event"`
+	Validator *v1.Validator                        `json:"validator"`
 }
 
 // Unsubscription event and the associated validator (if any)
-type Unsubscription struct {
-	Event     *contract.ContractUnsubscribeValidator
-	Validator *v1.Validator
+// TODO: Rething and add json:xxx
+type Unsubscription struct { //TODO: remove
+	Event     *contract.ContractUnsubscribeValidator `json:"event"`
+	Validator *v1.Validator                          `json:"validator"`
 }
 
 // Represents all the information that is stored of a validator
@@ -139,15 +150,15 @@ type OracleState struct {
 	PoolFeesAddress     string   `json:"pool_fees_address"`
 	PoolAccumulatedFees *big.Int `json:"pool_accumulated_fees"`
 
-	Subscriptions   []Subscription   `json:"subscriptions"`
-	Unsubscriptions []Unsubscription `json:"unsubscriptions"`
-	Donations       []Donation       `json:"donations"`
-	ProposedBlocks  []Block          `json:"proposed_blocks"`
-	MissedBlocks    []Block          `json:"missed_blocks"`
-	WrongFeeBlocks  []Block          `json:"wrong_fee_blocks"`
+	Subscriptions   []*contract.ContractSubscribeValidator   `json:"subscriptions"`
+	Unsubscriptions []*contract.ContractUnsubscribeValidator `json:"unsubscriptions"`
+	Donations       []*contract.ContractEtherReceived        `json:"donations"`
+	ProposedBlocks  []Block                                  `json:"proposed_blocks"`
+	MissedBlocks    []Block                                  `json:"missed_blocks"`
+	WrongFeeBlocks  []Block                                  `json:"wrong_fee_blocks"`
 
 	// unsure if config should be here. maybe not TODO:
-	Config *config.Config `json:"todo_unsure"`
+	Config *Config `json:"todo_unsure"`
 }
 
 type RawLeaf struct {

@@ -6,13 +6,12 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_GenerateTreeFromState(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 	state := oracle.state
@@ -52,7 +51,7 @@ func Test_GenerateTreeFromState(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_NoAggregation(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 	state := oracle.state
@@ -122,7 +121,7 @@ func Test_AggregateValidatorsIndexes_NoAggregation(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_NoAggregationOrdered(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 	state := oracle.state
@@ -194,7 +193,7 @@ func Test_AggregateValidatorsIndexes_NoAggregationOrdered(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_AggregationAll(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 	state := oracle.state
@@ -245,7 +244,7 @@ func Test_AggregateValidatorsIndexes_AggregationAll(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_Aggregation_And_Leftover(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 	state := oracle.state
@@ -299,7 +298,7 @@ func Test_AggregateValidatorsIndexes_Aggregation_And_Leftover(t *testing.T) {
 
 func Test_AggregateValidatorsIndexes_Aggregation_NoOrder(t *testing.T) {
 	merklelizer := NewMerklelizer()
-	oracle := NewOracle(&config.Config{
+	oracle := NewOracle(&Config{
 		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
 	})
 	state := oracle.state
