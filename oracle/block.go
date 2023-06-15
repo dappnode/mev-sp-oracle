@@ -315,6 +315,7 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 		return big.NewInt(0), false, ""
 	}
 
+	// Get the last tx which is the one that contains the mev reward
 	lastTx := txs[len(txs)-1]
 
 	tx, err := DecodeTx(lastTx)
@@ -338,6 +339,7 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 		return tx.Value(), true, strings.ToLower(tx.To().String())
 	}
 
+	// Otherwise, there is no MEV reward
 	return big.NewInt(0), false, ""
 }
 

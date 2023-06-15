@@ -565,8 +565,8 @@ func (or *Oracle) handleCorrectBlockProposal(block Block) {
 		"Slot":       block.Slot,
 		"Block":      block.Block,
 		"ValIndex":   block.ValidatorIndex,
-		"Reward":     block.Reward,
-		"RewardType": block.RewardType,
+		"RewardWei":  block.Reward,
+		"RewardType": block.RewardType.String(),
 		//"PoolAddress":  xxx.,
 		//"FeeRecipient": xxx,
 	}).Info("[Reward]")
