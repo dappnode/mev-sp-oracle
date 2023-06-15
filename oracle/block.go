@@ -723,3 +723,15 @@ func (b *FullBlock) GetBaseFeePerGas() [32]byte {
 	}
 	return baseFeePerGas
 }
+
+// For completeness but not implemented
+func (b *FullBlock) MarshalJSON() ([]byte, error) {
+	log.Fatal("MarshalJSON not implemented")
+	return []byte{}, nil
+}
+
+// For completeness but not implemented
+func (b *FullBlock) UnmarshalJSON(by []byte) error {
+	log.Fatal("UnmarshalJSON not implemented")
+	return nil
+}
