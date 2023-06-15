@@ -136,22 +136,24 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 	// Function under test
 	oracle.StoreLatestOnchainState()
 
+	commitedSlot := oracle.state.LatestProcessedSlot
+
 	// Ensure all validators are present in the state
-	require.Equal(t, valInfo1, oracle.state.LatestCommitedState.Validators[1])
-	require.Equal(t, valInfo2, oracle.state.LatestCommitedState.Validators[2])
-	require.Equal(t, valInfo3, oracle.state.LatestCommitedState.Validators[3])
+	require.Equal(t, valInfo1, oracle.state.CommitedStates[commitedSlot].Validators[1])
+	require.Equal(t, valInfo2, oracle.state.CommitedStates[commitedSlot].Validators[2])
+	require.Equal(t, valInfo3, oracle.state.CommitedStates[commitedSlot].Validators[3])
 
 	// Ensure merkle root matches
-	require.Equal(t, "0xd9a1eee574026532cddccbcce6320c0600f370a7c64ce30c5eafc63357449940", oracle.state.LatestCommitedState.MerkleRoot)
+	require.Equal(t, "0xd9a1eee574026532cddccbcce6320c0600f370a7c64ce30c5eafc63357449940", oracle.state.CommitedStates[commitedSlot].MerkleRoot)
 
 	// Ensure proofs and leafs are correct
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0xfee0000000000000000000000000000000000000"], []string{"0x8bfb8acff6772a60d6641cb854587bb2b6f2100391fbadff2c34be0b8c20a0cc", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x1000000000000000000000000000000000000000"], []string{"0xaaf838df9c8d5cec6ed77fcbc2cace945e8f2078eede4a0bb7164818d425f24d", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x2000000000000000000000000000000000000000"], []string{"0xd643163144dcba353b4d27c50939b3d11133bd3c6916092de059d07353b4cb5f", "0xda53f5dd3e17f66f4a35c9c9d5fd27c094fa4249e2933fb819ac724476dc9ae1"})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Proofs["0xfee0000000000000000000000000000000000000"], []string{"0x8bfb8acff6772a60d6641cb854587bb2b6f2100391fbadff2c34be0b8c20a0cc", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Proofs["0x1000000000000000000000000000000000000000"], []string{"0xaaf838df9c8d5cec6ed77fcbc2cace945e8f2078eede4a0bb7164818d425f24d", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Proofs["0x2000000000000000000000000000000000000000"], []string{"0xd643163144dcba353b4d27c50939b3d11133bd3c6916092de059d07353b4cb5f", "0xda53f5dd3e17f66f4a35c9c9d5fd27c094fa4249e2933fb819ac724476dc9ae1"})
 
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0xfee0000000000000000000000000000000000000"], RawLeaf{"0xfee0000000000000000000000000000000000000", big.NewInt(0)})
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x1000000000000000000000000000000000000000"], RawLeaf{"0x1000000000000000000000000000000000000000", big.NewInt(1000000000000000000)})
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x2000000000000000000000000000000000000000"], RawLeaf{"0x2000000000000000000000000000000000000000", big.NewInt(4000000000000000000)})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Leafs["0xfee0000000000000000000000000000000000000"], RawLeaf{"0xfee0000000000000000000000000000000000000", big.NewInt(0)})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Leafs["0x1000000000000000000000000000000000000000"], RawLeaf{"0x1000000000000000000000000000000000000000", big.NewInt(1000000000000000000)})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Leafs["0x2000000000000000000000000000000000000000"], RawLeaf{"0x2000000000000000000000000000000000000000", big.NewInt(4000000000000000000)})
 
 	// Ensure LatestCommitedState contains a deep copy of the validators and not just a reference
 	// This is very important since otherwise they will be modified when the state is modified
@@ -162,8 +164,8 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 	oracle.state.Validators[3].PendingRewardsWei = big.NewInt(22)
 
 	// And assert the frozen state is not changes
-	require.Equal(t, big.NewInt(2000000000000000000), oracle.state.LatestCommitedState.Validators[2].AccumulatedRewardsWei)
-	require.Equal(t, big.NewInt(500000), oracle.state.LatestCommitedState.Validators[3].PendingRewardsWei)
+	require.Equal(t, big.NewInt(2000000000000000000), oracle.state.CommitedStates[commitedSlot].Validators[2].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(500000), oracle.state.CommitedStates[commitedSlot].Validators[3].PendingRewardsWei)
 }
 
 // TODO:

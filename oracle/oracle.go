@@ -45,7 +45,8 @@ func NewOracle(cfg *Config) *Oracle {
 		Network:              cfg.Network,
 		PoolAddress:          cfg.PoolAddress,
 
-		Validators: make(map[uint64]*ValidatorInfo, 0),
+		Validators:     make(map[uint64]*ValidatorInfo, 0),
+		CommitedStates: make(map[uint64]*OnchainState, 0),
 
 		PoolFeesPercent:     cfg.PoolFeesPercent,
 		PoolFeesAddress:     cfg.PoolFeesAddress,
@@ -58,15 +59,6 @@ func NewOracle(cfg *Config) *Oracle {
 		MissedBlocks:    make([]Block, 0),
 		WrongFeeBlocks:  make([]Block, 0),
 		Config:          cfg,
-		LatestCommitedState: OnchainState{
-			Validators: make(map[uint64]*ValidatorInfo, 0),
-			Slot:       0,
-			TxHash:     "",
-			MerkleRoot: DefaultRoot,
-			Proofs:     make(map[string][]string, 0),
-			Leafs:      make(map[string]RawLeaf, 0),
-		},
-		CommitedStates: make(map[string]OnchainState, 0),
 	}
 
 	oracle := &Oracle{
@@ -383,7 +375,6 @@ func (or *Oracle) LoadStateFromFile() error {
 	//state.Network = readState.Network
 	//state.PoolAddress = readState.PoolAddress
 	or.state.Validators = readState.Validators
-	or.state.LatestCommitedState = readState.LatestCommitedState
 	or.state.PoolFeesPercent = readState.PoolFeesPercent
 	or.state.PoolFeesAddress = readState.PoolFeesAddress
 	or.state.PoolAccumulatedFees = readState.PoolAccumulatedFees
@@ -441,21 +432,15 @@ func (or *Oracle) StoreLatestOnchainState() bool {
 		leafs[WithdrawalAddress] = rawLeaf
 	}
 
-	or.state.LatestCommitedState = OnchainState{
+	state := &OnchainState{
 		Validators: validatorsCopy,
-		//TxHash:     txHash, // TODO: Not sure if to store it
 		MerkleRoot: merkleRootStr,
 		Slot:       or.state.LatestProcessedSlot,
 		Proofs:     proofs,
 		Leafs:      leafs,
 	}
 
-	// besides the latestCommitedState as a "standalone" state,
-	// we also store it in the commitedStates map, where we keep all
-	// the states that have been commited onchain by hash
-
-	// TODO: This should be the slot not the root I think.
-	or.state.CommitedStates[merkleRootStr] = or.state.LatestCommitedState
+	or.state.CommitedStates[state.Slot] = state
 	return true
 }
 

@@ -142,8 +142,7 @@ type OracleState struct {
 	Network              string                    `json:"network"`
 	PoolAddress          string                    `json:"pool_address"`
 	Validators           map[uint64]*ValidatorInfo `json:"validators"`
-	CommitedStates       map[string]OnchainState   `json:"commited_states"`
-	LatestCommitedState  OnchainState              `json:"latest_commited_state"`
+	CommitedStates       map[uint64]*OnchainState  `json:"commited_states"`
 
 	// TODO: is this redundant? its in the config
 	PoolFeesPercent     int      `json:"pool_fees_percent"` // TODO: is this % or scaled by *100

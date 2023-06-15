@@ -97,6 +97,10 @@ func Test_Getters_Capella(t *testing.T) {
 	require.Equal(t, "0x388C818CA8B9251b393131C08a736A67ccB19297", fullBlock.GetFeeRecipient())
 }
 
+// TODO: Important test donations
+//5862054, //donation normal
+//5862104, //donation via smart contract
+
 func Test_GetProposerTip(t *testing.T) {
 
 	type test struct {

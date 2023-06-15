@@ -13,6 +13,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -289,9 +290,6 @@ func Test_GetDonationEvents(t *testing.T) {
 }
 
 func Test_EndToEnd(t *testing.T) {
-	// TODO: Unfinished
-
-	/* TODO:
 	if skip {
 		t.Skip("Skipping test")
 	}
@@ -299,7 +297,7 @@ func Test_EndToEnd(t *testing.T) {
 	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
-		PoolAddress:       "0x8eba4a4a8d4dfa78bcb734efd1ea9f33b61e3243",
+		PoolAddress:       "0xF21fbbA423f3a893A2402d68240B219308AbCA46",
 	}
 
 	onchain, err := NewOnchain(cfgOnchain, nil)
@@ -309,16 +307,38 @@ func Test_EndToEnd(t *testing.T) {
 
 	oracleInstance := NewOracle(cfg)
 
+	// TODO: missing tongs of things like subscriptions unsubs, etc.
+
 	onchain.RefreshBeaconValidators()
+	oracleInstance.SetBeaconValidators(onchain.Validators()) // TODO: dirty having both
 
 	slotsToProcess := []uint64{
-		5767433, //has pool reward
-		5771359, // has pool reward
-		5773878, // has pool reward
-		5773879, // has NO pool reward
+		5840966, //mev reward
+		5843638, //vanila reward (auto subs)
+		5844947, //vanila reward (auto subs)
+		5846531, //mev reward
+		5846747, //vanila reward (auto subs)
+		5850959, //vanila reward (auto subs)
+		5851651, //vanila reward (auto subs)
+		5852212, //vanila reward (auto subs)
+		5852262, //vanila reward (auto subs)
+		5852659, //vanila reward (auto subs)
+		5853824, //vanila reward (auto subs)
+		5855268, //vanila reward (auto subs)
+		5856619, //vanila reward (auto subs)
+		5858585, //vanila reward (auto subs)
+		//5862054, //donation normal TODO
+		//5862104, //donation via smart contract TODO:
+		// TODO: Add more blocks with subs unsubs etc
+		// TODO: Randomly add blocks without anything interesting
+		// TODO: Randmly add missed blocks
 	}
 
+	prevSlot := slotsToProcess[0]
 	for _, slot := range slotsToProcess {
+		if prevSlot > slot {
+			t.Fatal("Slots are not in order")
+		}
 		// block is not really used
 		//oracleInstance.State().LatestProcessedBlock = 5768580
 
@@ -327,24 +347,19 @@ func Test_EndToEnd(t *testing.T) {
 		oracleInstance.State().LatestProcessedSlot = slot - 1
 
 		// Fetch block information
-		poolBlock := onchain.GetBlockFromSlot(oracleInstance.State().NextSlotToProcess, oracleInstance)
-
-		// Fetch subscription data
-		blockSubs, err := onchain.GetBlockSubscriptions(poolBlock.Block)
-		require.NoError(t, err)
-
-		// Fetch unsubscription data
-		blockUnsubs, err := onchain.GetBlockUnsubscriptions(poolBlock.Block)
-		require.NoError(t, err)
-
-		// Fetch donations in this block
-		blockDonations, err := onchain.GetDonationEvents(poolBlock.Block, poolBlock)
-		require.NoError(t, err)
+		fullBlock := onchain.FetchFullBlock(oracleInstance.State().NextSlotToProcess, oracleInstance)
 
 		// Advance state to next slot based on the information we got from the block
-		processedSlot, err := oracleInstance.AdvanceStateToNextSlot(poolBlock, blockSubs, blockUnsubs, blockDonations)
+		processedSlot, err := oracleInstance.AdvanceStateToNextSlot(fullBlock)
 		require.NoError(t, err)
 
 		log.Info("Processed slot: ", processedSlot)
-	}*/
+	}
+	oracleInstance.StoreLatestOnchainState()
+	oracleInstance.SaveStateToFile()
+	oracleInstance.SaveToJson()
+
+	// root: 0xf0ecfb7afe96f7f7b570598c71aaac8fae3e6880e078227106e3a29446d5dbf8
+	//AccumulatedBalanceWei=131064623899584732 LeafHash=7c049ecd5a07fc5b7d39573db41a1faca70a798112583dce61b0c8761eaa2166 WithdrawalAddress=0xe46f9be81f9a3aca1808bb8c36d353436bb96091
+	//AccumulatedBalanceWei=177243009873641532 LeafHash=83303f7cf1e36186b6d97de80db49c77fca6fd2a4fcdac771b4139d46b9abd1c WithdrawalAddress=0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
 }

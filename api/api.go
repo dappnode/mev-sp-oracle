@@ -691,8 +691,15 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 		return
 	}
 
+	latestCommitedSlot := uint64(0)
+	for slot, _ := range m.oracle.State().CommitedStates {
+		if slot > latestCommitedSlot {
+			latestCommitedSlot = slot
+		}
+	}
+
 	// Check if the oracle root matches the one offchain
-	oracleLatestRoot := m.oracle.State().LatestCommitedState.MerkleRoot
+	oracleLatestRoot := m.oracle.State().CommitedStates[latestCommitedSlot].MerkleRoot
 	if contractRoot != oracleLatestRoot {
 		m.respondError(w, http.StatusInternalServerError,
 			"contract merkle root does not match oracle state: "+contractRoot+" vs "+oracleLatestRoot)
@@ -700,14 +707,14 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 	}
 
 	// Get the proofs of this withdrawal address (to be used onchain to claim rewards)
-	proofs, proofFound := m.oracle.State().LatestCommitedState.Proofs[withdrawalAddress]
+	proofs, proofFound := m.oracle.State().CommitedStates[latestCommitedSlot].Proofs[withdrawalAddress]
 	if !proofFound {
 		m.respondError(w, http.StatusBadRequest, "could not find proof for WithdrawalAddress: "+withdrawalAddress)
 		return
 	}
 
 	// Get the leafs of this withdrawal address (to be used onchain to claim rewards)
-	leafs, leafsFound := m.oracle.State().LatestCommitedState.Leafs[withdrawalAddress]
+	leafs, leafsFound := m.oracle.State().CommitedStates[latestCommitedSlot].Leafs[withdrawalAddress]
 	if !leafsFound {
 		m.respondError(w, http.StatusBadRequest, "could not find leafs for WithdrawalAddress: "+withdrawalAddress)
 		return
@@ -715,7 +722,7 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 	// Get validators that are registered to this withdrawal address in the pool
 	registeredValidators := make([]uint64, 0)
-	for valIndex, validator := range m.oracle.State().LatestCommitedState.Validators {
+	for valIndex, validator := range m.oracle.State().CommitedStates[latestCommitedSlot].Validators {
 		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
 			registeredValidators = append(registeredValidators, valIndex)
 		}
@@ -729,7 +736,7 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 	totalPending := big.NewInt(0)
 
-	for _, validator := range m.oracle.State().LatestCommitedState.Validators {
+	for _, validator := range m.oracle.State().CommitedStates[latestCommitedSlot].Validators {
 		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
 			totalPending.Add(totalPending, validator.PendingRewardsWei)
 		}
@@ -738,8 +745,8 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 	m.respondOK(w, httpOkProofs{
 		LeafWithdrawalAddress:      leafs.WithdrawalAddress,
 		LeafAccumulatedBalance:     leafs.AccumulatedBalanceWei.String(),
-		MerkleRoot:                 m.oracle.State().LatestCommitedState.MerkleRoot,
-		CheckpointSlot:             m.oracle.State().LatestCommitedState.Slot,
+		MerkleRoot:                 m.oracle.State().CommitedStates[latestCommitedSlot].MerkleRoot,
+		CheckpointSlot:             m.oracle.State().CommitedStates[latestCommitedSlot].Slot,
 		Proofs:                     proofs,
 		RegisteredValidators:       registeredValidators,
 		TotalAccumulatedRewardsWei: leafs.AccumulatedBalanceWei.String(),
@@ -771,8 +778,15 @@ func (m *ApiService) handleValidatorOnchainStateByIndex(w http.ResponseWriter, r
 		return
 	}
 
+	latestCommitedSlot := uint64(0)
+	for slot, _ := range m.oracle.State().CommitedStates {
+		if slot > latestCommitedSlot {
+			latestCommitedSlot = slot
+		}
+	}
+
 	// We look into the LatestCommitedState, since its whats its onchain
-	valState, found := m.oracle.State().LatestCommitedState.Validators[uint64(valIndex)]
+	valState, found := m.oracle.State().CommitedStates[latestCommitedSlot].Validators[uint64(valIndex)]
 	if !found {
 		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("validator index not tracked in the oracle: %d", valIndex))
 		return
