@@ -303,7 +303,7 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 	var receipts []*types.Receipt
 	for _, rawTx := range rawTxs {
 		// This should never happen
-		tx, _, err := DecodeTx(rawTx)
+		tx, err := DecodeTx(rawTx)
 		if err != nil {
 			log.Fatal(err)
 		}

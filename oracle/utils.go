@@ -29,19 +29,21 @@ func ToBytes20(x []byte) [20]byte {
 	return y
 }
 
-func DecodeTx(rawTx []byte) (*types.Transaction, *types.Message, error) {
+func DecodeTx(rawTx []byte) (*types.Transaction, error) {
 	var tx types.Transaction
 	err := tx.UnmarshalBinary(rawTx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	return &tx, err
+}
 
-	// Supports EIP-2930 and EIP-2718 and EIP-1559 and EIP-155 and legacy transactions.
-	msg, err := tx.AsMessage(types.LatestSignerForChainID(tx.ChainId()), big.NewInt(0))
+func GetTxSender(tx *types.Transaction) (common.Address, error) {
+	from, err := types.Sender(types.LatestSignerForChainID(tx.ChainId()), tx)
 	if err != nil {
-		return nil, nil, err
+		return common.Address{}, err
 	}
-	return &tx, &msg, err
+	return from, nil
 }
 
 // Sum two numbers, and if the sum is bigger than saturate, return saturate

@@ -317,20 +317,25 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 
 	lastTx := txs[len(txs)-1]
 
-	tx, msg, err := DecodeTx(lastTx)
+	tx, err := DecodeTx(lastTx)
 	if err != nil {
 		log.Fatal("could not decode tx: ", err)
 	}
 
 	// Its nil when its a smart contract deployment. No mev reward
-	if msg.To() == nil {
+	if tx.To() == nil {
 		return big.NewInt(0), false, ""
+	}
+
+	sender, err := GetTxSender(tx)
+	if err != nil {
+		log.Fatal("could not get tx sender: ", err)
 	}
 
 	// Mev rewards are sent in the last tx. This tx sender
 	// matches the fee recipient of the protocol
-	if Equals(b.GetFeeRecipient(), msg.From().String()) {
-		return msg.Value(), true, strings.ToLower(tx.To().String())
+	if Equals(b.GetFeeRecipient(), sender.String()) {
+		return tx.Value(), true, strings.ToLower(tx.To().String())
 	}
 
 	return big.NewInt(0), false, ""
@@ -419,7 +424,7 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 	tips := big.NewInt(0)
 
 	for i, rawTx := range b.GetBlockTransactions() {
-		tx, msg, err := DecodeTx(rawTx)
+		tx, err := DecodeTx(rawTx)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not decode tx")
 		}
@@ -438,7 +443,7 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 			tipFee.Mul(gasPrice, gasUsed)
 		case 2:
 			// Sum gastipcap and basefee or saturate to gasfeecap
-			usedGasPrice := SumAndSaturate(msg.GasTipCap(), b.executionHeader.BaseFee, msg.GasFeeCap())
+			usedGasPrice := SumAndSaturate(tx.GasTipCap(), b.executionHeader.BaseFee, tx.GasFeeCap())
 			tipFee = new(big.Int).Mul(usedGasPrice, gasUsed)
 		default:
 			return nil, errors.New(fmt.Sprintf("unknown tx type: %d", tx.Type()))

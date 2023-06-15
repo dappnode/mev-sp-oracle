@@ -177,10 +177,10 @@ func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[s
 	}
 
 	tree, err := mt.New(&mt.Config{
-		SortSiblingPairs: true,
-		HashFunc:         KeccakHash,
-		Mode:             mt.ModeTreeBuild,
-		DoNotHashLeaves:  true,
+		SortSiblingPairs:   true,
+		HashFunc:           KeccakHash,
+		Mode:               mt.ModeTreeBuild,
+		DisableLeafHashing: true,
 	}, blocks)
 
 	if err != nil {
