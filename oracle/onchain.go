@@ -674,23 +674,23 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 
 		// Not all events are fetched as they are not needed
 		events := &Events{
-			etherReceived:      etherReceived,
-			subscribeValidator: subscribeValidator,
-			//claimRewards: claimRewards,
-			//setRewardRecipient: setRewardRecipient,    // TODO:
-			unsubscribeValidator: unsubscribeValidator,
-			//initSmoothingPool: initSmoothingPool,
-			//updatePoolFee: updatePoolFee,              // TODO:
-			//poolFeeRecipient: poolFeeRecipient,        // TODO:
-			//checkpointSlotSize: checkpointSlotSize,    // TODO:
-			//updateSubscriptionCollateral: updateSubscriptionCollateral, // TODO:
-			//submitReport: submitReport,
-			//reportConsolidated: reportConsolidated,
-			//updateQuorum: updateQuorum,
-			//addOracleMember: addOracleMember,
-			//removeOracleMember: removeOracleMember,
-			//transferGovernance: transferGovernance,
-			//acceptGovernance: acceptGovernance,
+			EtherReceived:      etherReceived,
+			SubscribeValidator: subscribeValidator,
+			//ClaimRewards: claimRewards,
+			//SetRewardRecipient: setRewardRecipient,    // TODO:
+			UnsubscribeValidator: unsubscribeValidator,
+			//InitSmoothingPool: initSmoothingPool,
+			//UpdatePoolFee: updatePoolFee,              // TODO:
+			//PoolFeeRecipient: poolFeeRecipient,        // TODO:
+			//CheckpointSlotSize: checkpointSlotSize,    // TODO:
+			//UpdateSubscriptionCollateral: updateSubscriptionCollateral, // TODO:
+			//SubmitReport: submitReport,
+			//ReportConsolidated: reportConsolidated,
+			//UpdateQuorum: updateQuorum,
+			//AddOracleMember: addOracleMember,
+			//RemoveOracleMember: removeOracleMember,
+			//TransferGovernance: transferGovernance,
+			//AcceptGovernance: acceptGovernance,
 		}
 
 		// Add the events to the block

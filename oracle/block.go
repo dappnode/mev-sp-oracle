@@ -16,47 +16,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// All the events that the contract can emit
-type Events struct {
-	etherReceived                []*contract.ContractEtherReceived
-	subscribeValidator           []*contract.ContractSubscribeValidator
-	claimRewards                 []*contract.ContractClaimRewards
-	setRewardRecipient           []*contract.ContractSetRewardRecipient
-	unsubscribeValidator         []*contract.ContractUnsubscribeValidator
-	initSmoothingPool            []*contract.ContractInitSmoothingPool
-	updatePoolFee                []*contract.ContractUpdatePoolFee
-	poolFeeRecipient             []*contract.ContractUpdatePoolFeeRecipient
-	checkpointSlotSize           []*contract.ContractUpdateCheckpointSlotSize
-	updateSubscriptionCollateral []*contract.ContractUpdateSubscriptionCollateral
-	submitReport                 []*contract.ContractSubmitReport
-	reportConsolidated           []*contract.ContractReportConsolidated
-	updateQuorum                 []*contract.ContractUpdateQuorum
-	addOracleMember              []*contract.ContractAddOracleMember
-	removeOracleMember           []*contract.ContractRemoveOracleMember
-	transferGovernance           []*contract.ContractTransferGovernance
-	acceptGovernance             []*contract.ContractAcceptGovernance
-}
-
-// Information that we need of each block
-type FullBlock struct {
-
-	// consensus data: duty (mandatory, who should propose the block)
-	consensusDuty *api.ProposerDuty
-
-	// consensus data: validator (mandatory, who should propose the block)
-	validator *v1.Validator
-
-	// consensus data: block (optional, only when not missed)
-	consensusBlock *spec.VersionedSignedBeaconBlock
-
-	// execution data: txs (optional, only when interested in vanila reward)
-	executionHeader   *types.Header
-	executionReceipts []*types.Receipt
-
-	// execution data: events (optional, only when the block was not missed)
-	events *Events
-}
-
 // Create a new block with the bare minimum information
 func NewFullBlock(
 	consensusDuty *api.ProposerDuty,
@@ -76,26 +35,26 @@ func NewFullBlock(
 	}
 
 	fb := &FullBlock{
-		consensusDuty: consensusDuty,
-		validator:     validator,
-		events: &Events{
-			etherReceived:                make([]*contract.ContractEtherReceived, 0),
-			subscribeValidator:           make([]*contract.ContractSubscribeValidator, 0),
-			claimRewards:                 make([]*contract.ContractClaimRewards, 0),
-			setRewardRecipient:           make([]*contract.ContractSetRewardRecipient, 0),
-			unsubscribeValidator:         make([]*contract.ContractUnsubscribeValidator, 0),
-			initSmoothingPool:            make([]*contract.ContractInitSmoothingPool, 0),
-			updatePoolFee:                make([]*contract.ContractUpdatePoolFee, 0),
-			poolFeeRecipient:             make([]*contract.ContractUpdatePoolFeeRecipient, 0),
-			checkpointSlotSize:           make([]*contract.ContractUpdateCheckpointSlotSize, 0),
-			updateSubscriptionCollateral: make([]*contract.ContractUpdateSubscriptionCollateral, 0),
-			submitReport:                 make([]*contract.ContractSubmitReport, 0),
-			reportConsolidated:           make([]*contract.ContractReportConsolidated, 0),
-			updateQuorum:                 make([]*contract.ContractUpdateQuorum, 0),
-			addOracleMember:              make([]*contract.ContractAddOracleMember, 0),
-			removeOracleMember:           make([]*contract.ContractRemoveOracleMember, 0),
-			transferGovernance:           make([]*contract.ContractTransferGovernance, 0),
-			acceptGovernance:             make([]*contract.ContractAcceptGovernance, 0),
+		ConsensusDuty: consensusDuty,
+		Validator:     validator,
+		Events: &Events{
+			EtherReceived:                make([]*contract.ContractEtherReceived, 0),
+			SubscribeValidator:           make([]*contract.ContractSubscribeValidator, 0),
+			ClaimRewards:                 make([]*contract.ContractClaimRewards, 0),
+			SetRewardRecipient:           make([]*contract.ContractSetRewardRecipient, 0),
+			UnsubscribeValidator:         make([]*contract.ContractUnsubscribeValidator, 0),
+			InitSmoothingPool:            make([]*contract.ContractInitSmoothingPool, 0),
+			UpdatePoolFee:                make([]*contract.ContractUpdatePoolFee, 0),
+			PoolFeeRecipient:             make([]*contract.ContractUpdatePoolFeeRecipient, 0),
+			CheckpointSlotSize:           make([]*contract.ContractUpdateCheckpointSlotSize, 0),
+			UpdateSubscriptionCollateral: make([]*contract.ContractUpdateSubscriptionCollateral, 0),
+			SubmitReport:                 make([]*contract.ContractSubmitReport, 0),
+			ReportConsolidated:           make([]*contract.ContractReportConsolidated, 0),
+			UpdateQuorum:                 make([]*contract.ContractUpdateQuorum, 0),
+			AddOracleMember:              make([]*contract.ContractAddOracleMember, 0),
+			RemoveOracleMember:           make([]*contract.ContractRemoveOracleMember, 0),
+			TransferGovernance:           make([]*contract.ContractTransferGovernance, 0),
+			AcceptGovernance:             make([]*contract.ContractAcceptGovernance, 0),
 		},
 	}
 
@@ -113,9 +72,9 @@ func (b *FullBlock) SetConsensusBlock(consensusBlock *spec.VersionedSignedBeacon
 		log.Fatal("failed to get slot from consensus block: ", err)
 	}
 
-	if b.consensusDuty.Slot != cBlockSlot {
+	if b.ConsensusDuty.Slot != cBlockSlot {
 		log.Fatal("Slot mismatch between consensus duty and consensus block: ",
-			b.consensusDuty.Slot, " vs ", cBlockSlot)
+			b.ConsensusDuty.Slot, " vs ", cBlockSlot)
 	}
 
 	// Expand for upcoming forks
@@ -131,12 +90,12 @@ func (b *FullBlock) SetConsensusBlock(consensusBlock *spec.VersionedSignedBeacon
 	}
 
 	// Sanity check
-	if uint64(b.consensusDuty.ValidatorIndex) != proposerIndex {
+	if uint64(b.ConsensusDuty.ValidatorIndex) != proposerIndex {
 		log.Fatal("Proposer index mismatch between consensus duty and consensus block: ",
-			b.consensusDuty.ValidatorIndex, " vs ", proposerIndex)
+			b.ConsensusDuty.ValidatorIndex, " vs ", proposerIndex)
 	}
 
-	b.consensusBlock = consensusBlock
+	b.ConsensusBlock = consensusBlock
 }
 
 // Add header and receipts. Only needeed when the block i) sends reward to pool (auto/manual sub)
@@ -149,11 +108,11 @@ func (b *FullBlock) SetHeaderAndReceipts(header *types.Header, receipts []*types
 			"header: ", header, " receipts: ", receipts)
 	}
 
-	if b.consensusBlock == nil {
+	if b.ConsensusBlock == nil {
 		log.Fatal("consensus block can't be nil")
 	}
 
-	if b.consensusDuty == nil {
+	if b.ConsensusDuty == nil {
 		log.Fatal("consensus duty can't be nil")
 	}
 
@@ -169,8 +128,8 @@ func (b *FullBlock) SetHeaderAndReceipts(header *types.Header, receipts []*types
 		}
 	}
 
-	b.executionHeader = header
-	b.executionReceipts = receipts
+	b.ExecutionHeader = header
+	b.ExecutionReceipts = receipts
 }
 
 // Set the events that were triggered in this block. This shall be done always unless the block
@@ -182,126 +141,126 @@ func (b *FullBlock) SetEvents(events *Events) {
 	}
 
 	// More sanity checks, boilerplate but safe
-	for _, event := range events.etherReceived {
+	for _, event := range events.EtherReceived {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in etherReceived events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.subscribeValidator {
+	for _, event := range events.SubscribeValidator {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in subscribeValidator events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.claimRewards {
+	for _, event := range events.ClaimRewards {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in claimRewards events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.setRewardRecipient {
+	for _, event := range events.SetRewardRecipient {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in setRewardRecipient events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.unsubscribeValidator {
+	for _, event := range events.UnsubscribeValidator {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in unsubscribeValidator events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.initSmoothingPool {
+	for _, event := range events.InitSmoothingPool {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in initSmoothingPool events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.updatePoolFee {
+	for _, event := range events.UpdatePoolFee {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in updatePoolFee events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.poolFeeRecipient {
+	for _, event := range events.PoolFeeRecipient {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in poolFeeRecipient events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.checkpointSlotSize {
+	for _, event := range events.CheckpointSlotSize {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in checkpointSlotSize events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.updateSubscriptionCollateral {
+	for _, event := range events.UpdateSubscriptionCollateral {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in updateSubscriptionCollateral events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.submitReport {
+	for _, event := range events.SubmitReport {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in submitReport events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.reportConsolidated {
+	for _, event := range events.ReportConsolidated {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in reportConsolidated events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.updateQuorum {
+	for _, event := range events.UpdateQuorum {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in updateQuorum events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.addOracleMember {
+	for _, event := range events.AddOracleMember {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in addOracleMember events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.removeOracleMember {
+	for _, event := range events.RemoveOracleMember {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in removeOracleMember events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.transferGovernance {
+	for _, event := range events.TransferGovernance {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in transferGovernance events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	for _, event := range events.acceptGovernance {
+	for _, event := range events.AcceptGovernance {
 		if b.GetBlockNumberBigInt().Uint64() != event.Raw.BlockNumber {
 			log.Fatal("Block number mismatch in acceptGovernance events: ",
 				b.GetBlockNumberBigInt().Uint64(), " vs ", event.Raw.BlockNumber)
 		}
 	}
 
-	b.events = events
+	b.Events = events
 }
 
 // Returns if there was an mev reward and its amount and fee recipient if any
@@ -402,18 +361,18 @@ func (b *FullBlock) IsAddressRewarded(address string) bool {
 func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 
 	// Ensure non nil
-	if b.executionReceipts == nil {
+	if b.ExecutionReceipts == nil {
 		return nil, errors.New("receipts of full block are nil, cant calculate tip")
 	}
 
-	if b.executionHeader == nil {
+	if b.ExecutionHeader == nil {
 		return nil, errors.New("header of full block are nil, cant calculate tip")
 	}
 
 	// Ensure tx and their receipts have the same size
-	if len(b.GetBlockTransactions()) != len(b.executionReceipts) {
+	if len(b.GetBlockTransactions()) != len(b.ExecutionReceipts) {
 		return nil, errors.New(fmt.Sprintf("txs and receipts not the same length. txs: %d, receipts: %d",
-			len(b.GetBlockTransactions()), len(b.executionReceipts)))
+			len(b.GetBlockTransactions()), len(b.ExecutionReceipts)))
 	}
 
 	// little-endian to big-endian
@@ -430,13 +389,13 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "could not decode tx")
 		}
-		if tx.Hash() != b.executionReceipts[i].TxHash {
+		if tx.Hash() != b.ExecutionReceipts[i].TxHash {
 			return nil, errors.Wrap(err, "tx hash does not match receipt hash")
 		}
 
 		tipFee := new(big.Int)
 		gasPrice := tx.GasPrice()
-		gasUsed := big.NewInt(int64(b.executionReceipts[i].GasUsed))
+		gasUsed := big.NewInt(int64(b.ExecutionReceipts[i].GasUsed))
 
 		switch tx.Type() {
 		case 0:
@@ -445,7 +404,7 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 			tipFee.Mul(gasPrice, gasUsed)
 		case 2:
 			// Sum gastipcap and basefee or saturate to gasfeecap
-			usedGasPrice := SumAndSaturate(tx.GasTipCap(), b.executionHeader.BaseFee, tx.GasFeeCap())
+			usedGasPrice := SumAndSaturate(tx.GasTipCap(), b.ExecutionHeader.BaseFee, tx.GasFeeCap())
 			tipFee = new(big.Int).Mul(usedGasPrice, gasUsed)
 		default:
 			return nil, errors.New(fmt.Sprintf("unknown tx type: %d", tx.Type()))
@@ -465,7 +424,7 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherReceived {
 
 	// If the block was missed, there cant be any donations
-	if b.consensusBlock == nil {
+	if b.ConsensusBlock == nil {
 		return []*contract.ContractEtherReceived{}
 	}
 
@@ -506,14 +465,14 @@ func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherRe
 	if !isMev || !Equals(mevRec, poolAddress) {
 		// In this case we dont expect any etherReceived event due to MEV
 		// All events are donations
-		return b.events.etherReceived
+		return b.Events.EtherReceived
 	}
 
 	// If the pool got an mev reward, we must filter the mev reward
 	// from the event, as thats not considered a donation
 	filteredEvents := make([]*contract.ContractEtherReceived, 0)
 	foundMev := false
-	for _, etherRxEvent := range b.events.etherReceived {
+	for _, etherRxEvent := range b.Events.EtherReceived {
 		if etherRxEvent.DonationAmount.Cmp(mevReward) == 0 {
 			foundMev = true
 			continue
@@ -524,28 +483,28 @@ func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherRe
 	// Sanity check
 	if !foundMev {
 		log.Fatal("An mev reward was expected but could not find it. "+
-			"Wanted reward: ", mevReward, " Events: ", b.events.etherReceived)
+			"Wanted reward: ", mevReward, " Events: ", b.Events.EtherReceived)
 	}
 
 	return filteredEvents
 }
 
 // Since storing the full block is expensive, we store a summarized version of it
-func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Block { // TODO these inputs are temporal
+func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) SummarizedBlock { // TODO these inputs are temporal
 
 	// Get the withdrawal credentials and type of the validator that should propose the block
-	withdrawalAddress, withdrawalType := GetWithdrawalAndType(b.validator)
+	withdrawalAddress, withdrawalType := GetWithdrawalAndType(b.Validator)
 
 	// Init pool block, with relevant information to the pool
-	poolBlock := Block{
-		Slot:              uint64(b.consensusDuty.Slot),
-		ValidatorIndex:    uint64(b.consensusDuty.ValidatorIndex),
-		ValidatorKey:      b.consensusDuty.PubKey.String(),
+	poolBlock := SummarizedBlock{
+		Slot:              uint64(b.ConsensusDuty.Slot),
+		ValidatorIndex:    uint64(b.ConsensusDuty.ValidatorIndex),
+		ValidatorKey:      b.ConsensusDuty.PubKey.String(),
 		WithdrawalAddress: withdrawalAddress,
 		Reward:            big.NewInt(0),
 	}
 
-	if b.consensusBlock == nil {
+	if b.ConsensusBlock == nil {
 		// nil means missed proposal
 		poolBlock.BlockType = MissedProposal
 		return poolBlock
@@ -603,12 +562,12 @@ func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Block { 
 func (b *FullBlock) GetFeeRecipient() string {
 	var feeRecipient string
 
-	if b.consensusBlock.Altair != nil {
+	if b.ConsensusBlock.Altair != nil {
 		log.Fatal("Altair block has no fee recipient")
-	} else if b.consensusBlock.Bellatrix != nil {
-		feeRecipient = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient.String()
-	} else if b.consensusBlock.Capella != nil {
-		feeRecipient = b.consensusBlock.Capella.Message.Body.ExecutionPayload.FeeRecipient.String()
+	} else if b.ConsensusBlock.Bellatrix != nil {
+		feeRecipient = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient.String()
+	} else if b.ConsensusBlock.Capella != nil {
+		feeRecipient = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.FeeRecipient.String()
 	} else {
 		log.Fatal("Block was empty, cant get fee recipient")
 	}
@@ -619,12 +578,12 @@ func (b *FullBlock) GetFeeRecipient() string {
 func (b *FullBlock) GetBlockTransactions() []bellatrix.Transaction {
 
 	var transactions []bellatrix.Transaction
-	if b.consensusBlock.Altair != nil {
+	if b.ConsensusBlock.Altair != nil {
 		log.Fatal("Altair block has no transactions in the beacon block")
-	} else if b.consensusBlock.Bellatrix != nil {
-		transactions = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.Transactions
-	} else if b.consensusBlock.Capella != nil {
-		transactions = b.consensusBlock.Capella.Message.Body.ExecutionPayload.Transactions
+	} else if b.ConsensusBlock.Bellatrix != nil {
+		transactions = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.Transactions
+	} else if b.ConsensusBlock.Capella != nil {
+		transactions = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.Transactions
 	} else {
 		log.Fatal("Block was empty, cant get transactions")
 	}
@@ -635,12 +594,12 @@ func (b *FullBlock) GetBlockTransactions() []bellatrix.Transaction {
 func (b *FullBlock) GetBlockNumber() uint64 {
 	var blockNumber uint64
 
-	if b.consensusBlock.Altair != nil {
+	if b.ConsensusBlock.Altair != nil {
 		log.Fatal("Altair block has no block number")
-	} else if b.consensusBlock.Bellatrix != nil {
-		blockNumber = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.BlockNumber
-	} else if b.consensusBlock.Capella != nil {
-		blockNumber = b.consensusBlock.Capella.Message.Body.ExecutionPayload.BlockNumber
+	} else if b.ConsensusBlock.Bellatrix != nil {
+		blockNumber = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.BlockNumber
+	} else if b.ConsensusBlock.Capella != nil {
+		blockNumber = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.BlockNumber
 	} else {
 		log.Fatal("Block was empty, cant get block number")
 	}
@@ -656,12 +615,12 @@ func (b *FullBlock) GetBlockNumberBigInt() *big.Int {
 func (b *FullBlock) GetSlot() phase0.Slot {
 	var slot phase0.Slot
 
-	if b.consensusBlock.Altair != nil {
-		slot = b.consensusBlock.Altair.Message.Slot
-	} else if b.consensusBlock.Bellatrix != nil {
-		slot = b.consensusBlock.Bellatrix.Message.Slot
-	} else if b.consensusBlock.Capella != nil {
-		slot = b.consensusBlock.Capella.Message.Slot
+	if b.ConsensusBlock.Altair != nil {
+		slot = b.ConsensusBlock.Altair.Message.Slot
+	} else if b.ConsensusBlock.Bellatrix != nil {
+		slot = b.ConsensusBlock.Bellatrix.Message.Slot
+	} else if b.ConsensusBlock.Capella != nil {
+		slot = b.ConsensusBlock.Capella.Message.Slot
 	} else {
 		log.Fatal("Block was empty, cant get slot")
 	}
@@ -676,12 +635,12 @@ func (b *FullBlock) GetSlotUint64() uint64 {
 func (b *FullBlock) GetProposerIndex() phase0.ValidatorIndex {
 	var proposerIndex phase0.ValidatorIndex
 
-	if b.consensusBlock.Altair != nil {
-		proposerIndex = b.consensusBlock.Altair.Message.ProposerIndex
-	} else if b.consensusBlock.Bellatrix != nil {
-		proposerIndex = b.consensusBlock.Bellatrix.Message.ProposerIndex
-	} else if b.consensusBlock.Capella != nil {
-		proposerIndex = b.consensusBlock.Capella.Message.ProposerIndex
+	if b.ConsensusBlock.Altair != nil {
+		proposerIndex = b.ConsensusBlock.Altair.Message.ProposerIndex
+	} else if b.ConsensusBlock.Bellatrix != nil {
+		proposerIndex = b.ConsensusBlock.Bellatrix.Message.ProposerIndex
+	} else if b.ConsensusBlock.Capella != nil {
+		proposerIndex = b.ConsensusBlock.Capella.Message.ProposerIndex
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
@@ -696,12 +655,12 @@ func (b *FullBlock) GetProposerIndexUint64() uint64 {
 func (b *FullBlock) GetGasUsed() uint64 {
 	var gasUsed uint64
 
-	if b.consensusBlock.Altair != nil {
+	if b.ConsensusBlock.Altair != nil {
 		log.Fatal("Altair block has no gas used")
-	} else if b.consensusBlock.Bellatrix != nil {
-		gasUsed = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.GasUsed
-	} else if b.consensusBlock.Capella != nil {
-		gasUsed = b.consensusBlock.Capella.Message.Body.ExecutionPayload.GasUsed
+	} else if b.ConsensusBlock.Bellatrix != nil {
+		gasUsed = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.GasUsed
+	} else if b.ConsensusBlock.Capella != nil {
+		gasUsed = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.GasUsed
 	} else {
 		log.Fatal("Block was empty, cant get gas used")
 	}
@@ -712,26 +671,14 @@ func (b *FullBlock) GetGasUsed() uint64 {
 func (b *FullBlock) GetBaseFeePerGas() [32]byte {
 	var baseFeePerGas [32]byte
 
-	if b.consensusBlock.Altair != nil {
+	if b.ConsensusBlock.Altair != nil {
 		log.Fatal("Altair block has no base fee per gas")
-	} else if b.consensusBlock.Bellatrix != nil {
-		baseFeePerGas = b.consensusBlock.Bellatrix.Message.Body.ExecutionPayload.BaseFeePerGas
-	} else if b.consensusBlock.Capella != nil {
-		baseFeePerGas = b.consensusBlock.Capella.Message.Body.ExecutionPayload.BaseFeePerGas
+	} else if b.ConsensusBlock.Bellatrix != nil {
+		baseFeePerGas = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.BaseFeePerGas
+	} else if b.ConsensusBlock.Capella != nil {
+		baseFeePerGas = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.BaseFeePerGas
 	} else {
 		log.Fatal("Block was empty, cant get base fee per gas")
 	}
 	return baseFeePerGas
-}
-
-// For completeness but not implemented
-func (b *FullBlock) MarshalJSON() ([]byte, error) {
-	log.Fatal("MarshalJSON not implemented")
-	return []byte{}, nil
-}
-
-// For completeness but not implemented
-func (b *FullBlock) UnmarshalJSON(by []byte) error {
-	log.Fatal("UnmarshalJSON not implemented")
-	return nil
 }

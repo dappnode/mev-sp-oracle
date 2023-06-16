@@ -55,9 +55,9 @@ func NewOracle(cfg *Config) *Oracle {
 		Subscriptions:   make([]*contract.ContractSubscribeValidator, 0),
 		Unsubscriptions: make([]*contract.ContractUnsubscribeValidator, 0),
 		Donations:       make([]*contract.ContractEtherReceived, 0),
-		ProposedBlocks:  make([]Block, 0),
-		MissedBlocks:    make([]Block, 0),
-		WrongFeeBlocks:  make([]Block, 0),
+		ProposedBlocks:  make([]SummarizedBlock, 0),
+		MissedBlocks:    make([]SummarizedBlock, 0),
+		WrongFeeBlocks:  make([]SummarizedBlock, 0),
 		Config:          cfg,
 	}
 
@@ -104,7 +104,7 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	blockDonations := fullBlock.GetDonations(or.cfg.PoolAddress)
 
 	// Handle subscriptions first thing
-	or.handleManualSubscriptions(fullBlock.events.subscribeValidator)
+	or.handleManualSubscriptions(fullBlock.Events.SubscribeValidator)
 
 	// If the validator was subscribed and missed proposed the block in this slot
 	if summarizedBlock.BlockType == MissedProposal && or.isSubscribed(summarizedBlock.ValidatorIndex) {
@@ -130,7 +130,7 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	}
 
 	// Handle unsubscriptions the last thing after distributing rewards
-	or.handleManualUnsubscriptions(fullBlock.events.unsubscribeValidator)
+	or.handleManualUnsubscriptions(fullBlock.Events.UnsubscribeValidator)
 
 	// Handle the donations from this block
 	or.handleDonations(blockDonations)
@@ -313,9 +313,9 @@ func (or *Oracle) LoadStateFromFile() error {
 		Subscriptions:       make([]*contract.ContractSubscribeValidator, 0),
 		Unsubscriptions:     make([]*contract.ContractUnsubscribeValidator, 0),
 		Donations:           make([]*contract.ContractEtherReceived, 0),
-		ProposedBlocks:      make([]Block, 0),
-		MissedBlocks:        make([]Block, 0),
-		WrongFeeBlocks:      make([]Block, 0),
+		ProposedBlocks:      make([]SummarizedBlock, 0),
+		MissedBlocks:        make([]SummarizedBlock, 0),
+		WrongFeeBlocks:      make([]SummarizedBlock, 0),
 		Config:              &Config{},
 	}
 
@@ -623,7 +623,7 @@ func (or *Oracle) handleDonations(donations []*contract.ContractEtherReceived) {
 	}
 }
 
-func (or *Oracle) handleCorrectBlockProposal(block Block) {
+func (or *Oracle) handleCorrectBlockProposal(block SummarizedBlock) {
 	or.addSubscriptionIfNotAlready(block.ValidatorIndex, block.WithdrawalAddress, block.ValidatorKey)
 	or.advanceStateMachine(block.ValidatorIndex, ProposalOk)
 	or.increaseAllPendingRewards(block.Reward)
@@ -641,7 +641,7 @@ func (or *Oracle) handleCorrectBlockProposal(block Block) {
 	}).Info("[Reward]")
 }
 
-func (or *Oracle) handleBlsCorrectBlockProposal(block Block) {
+func (or *Oracle) handleBlsCorrectBlockProposal(block SummarizedBlock) {
 	if block.BlockType != OkPoolProposalBlsKeys {
 		log.Fatal("Block type is not OkPoolProposalBlsKeys, BlockType: ", block.BlockType)
 	}
@@ -918,7 +918,7 @@ func (or *Oracle) handleManualUnsubscriptions(
 
 // Banning a validator implies sharing its pending rewards among the rest
 // of the validators and setting its pending to zero.
-func (or *Oracle) handleBanValidator(block Block) {
+func (or *Oracle) handleBanValidator(block SummarizedBlock) {
 	// First of all advance the state machine, so the banned validator is not
 	// considered for the pending reward share
 	or.advanceStateMachine(block.ValidatorIndex, ProposalWrongFee)
@@ -929,7 +929,7 @@ func (or *Oracle) handleBanValidator(block Block) {
 	or.state.WrongFeeBlocks = append(or.state.WrongFeeBlocks, block)
 }
 
-func (or *Oracle) handleMissedBlock(block Block) {
+func (or *Oracle) handleMissedBlock(block SummarizedBlock) {
 	or.advanceStateMachine(block.ValidatorIndex, ProposalMissed)
 	or.state.MissedBlocks = append(or.state.MissedBlocks, block)
 }

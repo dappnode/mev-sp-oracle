@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"math/big"
 
+	api "github.com/attestantio/go-eth2-client/api/v1"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 )
 
@@ -83,10 +86,52 @@ type Config struct {
 	UpdaterKeyPath        string   `json:"-"`
 }
 
-// Represents a block with information relevant for the pool
-// TODO: Call SummarizedBlock?
-// This is to avoid storing the whole block
-type Block struct {
+// All the events that the contract can emit
+type Events struct {
+	EtherReceived                []*contract.ContractEtherReceived                `json:"ether_received_events"`
+	SubscribeValidator           []*contract.ContractSubscribeValidator           `json:"subscribe_validator_events"`
+	ClaimRewards                 []*contract.ContractClaimRewards                 `json:"claim_rewards_events"`
+	SetRewardRecipient           []*contract.ContractSetRewardRecipient           `json:"set_reward_recipient_events"`
+	UnsubscribeValidator         []*contract.ContractUnsubscribeValidator         `json:"unsubscribe_validator_events"`
+	InitSmoothingPool            []*contract.ContractInitSmoothingPool            `json:"init_smoothing_pool_events"`
+	UpdatePoolFee                []*contract.ContractUpdatePoolFee                `json:"update_pool_fee_events"`
+	PoolFeeRecipient             []*contract.ContractUpdatePoolFeeRecipient       `json:"pool_fee_recipient_events"`
+	CheckpointSlotSize           []*contract.ContractUpdateCheckpointSlotSize     `json:"checkpoint_slot_size_events"`
+	UpdateSubscriptionCollateral []*contract.ContractUpdateSubscriptionCollateral `json:"update_subscription_collateral_events"`
+	SubmitReport                 []*contract.ContractSubmitReport                 `json:"submit_report_events"`
+	ReportConsolidated           []*contract.ContractReportConsolidated           `json:"report_consolidated_events"`
+	UpdateQuorum                 []*contract.ContractUpdateQuorum                 `json:"update_quorum_events"`
+	AddOracleMember              []*contract.ContractAddOracleMember              `json:"add_oracle_member_events"`
+	RemoveOracleMember           []*contract.ContractRemoveOracleMember           `json:"remove_oracle_member_events"`
+	TransferGovernance           []*contract.ContractTransferGovernance           `json:"transfer_governance_events"`
+	AcceptGovernance             []*contract.ContractAcceptGovernance             `json:"accept_governance_events"`
+}
+
+// Information of every block from the blockchain. Some fields are optional
+// eg: if the block is not relevant to the pool
+type FullBlock struct {
+
+	// consensus data: duty (mandatory, who should propose the block)
+	ConsensusDuty *api.ProposerDuty `json:"consensus_duty"`
+
+	// consensus data: validator (mandatory, who should propose the block)
+	Validator *v1.Validator `json:"validator"`
+
+	// consensus data: block (optional, only when not missed)
+	ConsensusBlock *spec.VersionedSignedBeaconBlock `json:"consensus_block"`
+
+	// execution data: txs (optional, only when interested in vanila reward)
+	ExecutionHeader   *types.Header    `json:"execution_header"`
+	ExecutionReceipts []*types.Receipt `json:"execution_receipts"`
+
+	// execution data: events (optional, only when the block was not missed)
+	Events *Events `json:"events"`
+}
+
+// Represents a block with information relevant for the pool, uses Fullblock
+// but stores a subset of the fields (summarized). Otherwise storing everything
+// in memory may be too much
+type SummarizedBlock struct {
 	Slot              uint64     `json:"slot"`
 	Block             uint64     `json:"block"`
 	ValidatorIndex    uint64     `json:"validator_index"`
@@ -152,9 +197,9 @@ type OracleState struct {
 	Subscriptions   []*contract.ContractSubscribeValidator   `json:"subscriptions"`
 	Unsubscriptions []*contract.ContractUnsubscribeValidator `json:"unsubscriptions"`
 	Donations       []*contract.ContractEtherReceived        `json:"donations"`
-	ProposedBlocks  []Block                                  `json:"proposed_blocks"`
-	MissedBlocks    []Block                                  `json:"missed_blocks"`
-	WrongFeeBlocks  []Block                                  `json:"wrong_fee_blocks"`
+	ProposedBlocks  []SummarizedBlock                        `json:"proposed_blocks"`
+	MissedBlocks    []SummarizedBlock                        `json:"missed_blocks"`
+	WrongFeeBlocks  []SummarizedBlock                        `json:"wrong_fee_blocks"`
 
 	// unsure if config should be here. maybe not TODO:
 	Config *Config `json:"todo_unsure"`

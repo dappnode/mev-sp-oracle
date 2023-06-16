@@ -409,7 +409,7 @@ func Test_Oracle_WrongInputData(t *testing.T) {
 }
 
 func Test_Oracle_Donation(t *testing.T) {
-	blockWrongFee := Block{
+	blockWrongFee := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: WrongFeeRecipient,
 		Reward: big.NewInt(0), RewardType: MevBlock,
@@ -418,7 +418,7 @@ func Test_Oracle_Donation(t *testing.T) {
 }
 
 func Test_Oracle_AutomaticSubscription(t *testing.T) {
-	blockWrongFee := Block{
+	blockWrongFee := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: WrongFeeRecipient,
 		Reward: big.NewInt(0), RewardType: MevBlock,
@@ -427,7 +427,7 @@ func Test_Oracle_AutomaticSubscription(t *testing.T) {
 }
 
 func Test_Oracle_WrongFee(t *testing.T) {
-	blockWrongFee := Block{
+	blockWrongFee := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: WrongFeeRecipient,
 		Reward: big.NewInt(0), RewardType: MevBlock,
@@ -436,7 +436,7 @@ func Test_Oracle_WrongFee(t *testing.T) {
 }
 
 func Test_Oracle_Missed_ToYellow(t *testing.T) {
-	blockMissed := Block{
+	blockMissed := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: MissedProposal,
 	}
@@ -446,7 +446,7 @@ func Test_Oracle_Missed_ToYellow(t *testing.T) {
 }
 
 func Test_Oracle_Missed_ToRed(t *testing.T) {
-	blockMissed := Block{
+	blockMissed := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: MissedProposal,
 	}
@@ -1044,7 +1044,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].CollateralWei)
 
 	// Ban validator 34
-	oracle.handleBanValidator(Block{
+	oracle.handleBanValidator(SummarizedBlock{
 		Slot:           uint64(100),
 		ValidatorIndex: uint64(34),
 	})
@@ -1111,7 +1111,7 @@ func Test_SubThenUnsubThenAuto(t *testing.T) {
 	require.Equal(t, NotSubscribed, oracle.state.Validators[valIdx].ValidatorStatus)
 
 	// Force automatic subscription
-	block1 := Block{
+	block1 := SummarizedBlock{
 		Slot:              0,
 		ValidatorIndex:    valIdx,
 		ValidatorKey:      "0x",
@@ -1864,7 +1864,7 @@ func Test_BanValidator(t *testing.T) {
 	require.Equal(t, big.NewInt(33), oracle.state.Validators[3].PendingRewardsWei)
 
 	// Ban validator 3
-	oracle.handleBanValidator(Block{ValidatorIndex: 3})
+	oracle.handleBanValidator(SummarizedBlock{ValidatorIndex: 3})
 
 	// Its pending balance is shared equally among the rest
 	require.Equal(t, big.NewInt(49), oracle.state.Validators[1].PendingRewardsWei)
@@ -2029,7 +2029,7 @@ func Test_ValidatorInfoSize(t *testing.T) {
 
 		//make 2000 validators propose a block
 		for i := 0; i < numValidators; i++ {
-			oracle.handleCorrectBlockProposal(Block{
+			oracle.handleCorrectBlockProposal(SummarizedBlock{
 				Slot:              uint64(i),
 				ValidatorIndex:    uint64(valsID[0]),
 				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
@@ -2126,7 +2126,7 @@ func Test_SizeMultipleOnchainState(t *testing.T) {
 	//each time the state is commited, a rough estimate of 100 blocks will have been proposed by the validators.
 	for i := 0; i < 121; i++ {
 		for j := 0; j < 100; j++ {
-			oracle.handleCorrectBlockProposal(Block{
+			oracle.handleCorrectBlockProposal(SummarizedBlock{
 				Slot:              uint64(100),
 				ValidatorIndex:    uint64(valsID[j]),
 				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
@@ -2264,8 +2264,8 @@ func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int
 	return subs
 }
 
-func MissedBlock(slot uint64, valIndex uint64, pubKey string) Block {
-	return Block{
+func MissedBlock(slot uint64, valIndex uint64, pubKey string) SummarizedBlock {
+	return SummarizedBlock{
 		Slot:           slot,
 		ValidatorIndex: valIndex,
 		ValidatorKey:   pubKey,
@@ -2273,8 +2273,8 @@ func MissedBlock(slot uint64, valIndex uint64, pubKey string) Block {
 	}
 }
 
-func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) Block {
-	return Block{
+func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) SummarizedBlock {
+	return SummarizedBlock{
 		Slot:           slot,
 		ValidatorIndex: valIndex,
 		ValidatorKey:   pubKey,
@@ -2282,8 +2282,8 @@ func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) Block {
 	}
 }
 
-func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, withAddress string) Block {
-	return Block{
+func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, withAddress string) SummarizedBlock {
+	return SummarizedBlock{
 		Slot:              slot,
 		ValidatorIndex:    valIndex,
 		ValidatorKey:      pubKey,

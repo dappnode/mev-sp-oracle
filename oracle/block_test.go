@@ -10,10 +10,14 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 )
 
@@ -262,6 +266,115 @@ func Test_MevReward_Slot_5320342(t *testing.T) {
 	require.Equal(t, big.NewInt(65184406499820485), mevReward)
 	require.Equal(t, mev, true)
 	require.Equal(t, mevFeeRecipient, "0xf8636377b7a998b51a3cf2bd711b870b3ab0ad56")
+}
+
+func Test_Marashal(t *testing.T) {
+
+	// Creates some test data to mock
+	proposalDuty := &v1.ProposerDuty{
+		Slot:           5214140,
+		ValidatorIndex: phase0.ValidatorIndex(12)}
+
+	validator := &v1.Validator{
+		Index: 12,
+		Validator: &phase0.Validator{
+			PublicKey:             phase0.BLSPubKey{1, 2, 3},
+			WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	block := &spec.VersionedSignedBeaconBlock{
+		Version: spec.DataVersionBellatrix,
+		Bellatrix: &bellatrix.SignedBeaconBlock{
+			Message: &bellatrix.BeaconBlock{
+				Slot:          5214140,
+				ProposerIndex: 12,
+				Body: &bellatrix.BeaconBlockBody{
+					ExecutionPayload: &bellatrix.ExecutionPayload{
+						FeeRecipient: [20]byte{56, 140, 129, 140, 168, 185, 37, 27, 57, 49, 49, 192, 138, 115, 106, 103, 204, 177, 146, 151},
+						BlockNumber:  8745218,
+						Transactions: []bellatrix.Transaction{
+							{1, 2},
+							{1, 2}},
+					},
+					ETH1Data: &phase0.ETH1Data{
+						DepositRoot: phase0.Root{},
+						BlockHash:   []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					},
+					ProposerSlashings: []*phase0.ProposerSlashing{},
+					AttesterSlashings: []*phase0.AttesterSlashing{},
+					Attestations:      []*phase0.Attestation{},
+					Deposits:          []*phase0.Deposit{},
+					VoluntaryExits:    []*phase0.SignedVoluntaryExit{},
+					SyncAggregate: &altair.SyncAggregate{
+						SyncCommitteeBits:      bitfield.NewBitvector512(),
+						SyncCommitteeSignature: phase0.BLSSignature{},
+					},
+				},
+			},
+		}}
+
+	events := &Events{
+		EtherReceived: []*contract.ContractEtherReceived{
+			{
+				Sender:         [20]byte{56, 140, 129, 140, 168, 185, 37, 27, 57, 49, 49, 192, 138, 115, 106, 103, 204, 177, 146, 151},
+				DonationAmount: big.NewInt(1000),
+				Raw: types.Log{
+					BlockNumber: 8745218,
+					TxHash:      common.Hash{1, 2, 3},
+					Topics:      []common.Hash{{1, 2, 3}, {1, 2, 3}, {1, 2, 3}},
+				},
+			},
+		},
+	}
+
+	header := &types.Header{
+		Number:     big.NewInt(8745218),
+		Difficulty: big.NewInt(8745218),
+	}
+	receipts := []*types.Receipt{
+		{
+			TxHash:      common.Hash{1, 2, 3},
+			BlockNumber: big.NewInt(8745218),
+			Logs: []*types.Log{
+				{
+					BlockNumber: 8745218,
+					TxHash:      common.Hash{1, 2, 3},
+					Topics:      []common.Hash{{1, 2, 3}, {1, 2, 3}, {1, 2, 3}},
+				},
+			},
+		},
+	}
+
+	// Creates the full block with above data
+	fullBlock := NewFullBlock(proposalDuty, validator)
+	fullBlock.SetConsensusBlock(block)
+	fullBlock.SetEvents(events)
+	fullBlock.SetHeaderAndReceipts(header, receipts)
+
+	// Serialize the fullblock
+	jsonData, err := json.MarshalIndent(fullBlock, "", " ")
+	require.NoError(t, err)
+
+	// This is human readable output
+	//log.Info(fmt.Sprintf("Saving oracle state: %s", jsonData))
+
+	// Recover the full block
+	var recoveredFullBlock FullBlock
+	err = json.Unmarshal(jsonData, &recoveredFullBlock)
+	require.NoError(t, err)
+
+	// Assert the recovered fields match the expected
+	require.Equal(t, phase0.Slot(5214140), recoveredFullBlock.ConsensusDuty.Slot)
+	require.Equal(t, phase0.ValidatorIndex(12), recoveredFullBlock.ConsensusDuty.ValidatorIndex)
+	require.Equal(t, big.NewInt(8745218), recoveredFullBlock.ExecutionHeader.Number)
+	require.Equal(t, big.NewInt(8745218), recoveredFullBlock.ExecutionReceipts[0].BlockNumber)
+	require.Equal(t, big.NewInt(1000), recoveredFullBlock.Events.EtherReceived[0].DonationAmount)
+	require.Equal(t, uint64(8745218), recoveredFullBlock.Events.EtherReceived[0].Raw.BlockNumber)
+	require.Equal(t, "0x388C818CA8B9251b393131C08a736A67ccB19297", recoveredFullBlock.Events.EtherReceived[0].Sender.String())
+	require.Equal(t, "0x388C818CA8B9251b393131C08a736A67ccB19297", recoveredFullBlock.GetFeeRecipient())
+	require.Equal(t, spec.DataVersionBellatrix, recoveredFullBlock.ConsensusBlock.Version)
+
 }
 
 // Util to load from file
