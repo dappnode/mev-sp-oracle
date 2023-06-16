@@ -5,13 +5,13 @@ global:
     monitor: "Monitoring"
 
 scrape_configs:
-  - job_name: "geth"
+  - job_name: "goerli-geth.dappnode"
     static_configs:
-    - targets: ["geth:6060"]
+    - targets: ["goerli-geth.dappnode:6060"]
     metrics_path: /debug/metrics/prometheus
-  - job_name: "teku"
+  - job_name: "beacon-chain.prysm-prater.dappnode"
     static_configs:
-    - targets: ["teku:8008"]
+    - targets: ["beacon-chain.prysm-prater.dappnode:8080"]
   - job_name: "oracle"
     static_configs:
     - targets: ["oracle:8008"]

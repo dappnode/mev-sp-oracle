@@ -23,12 +23,12 @@ services:
     image: "dappnode/mev-sp-oracle:bde1e23"
     restart: "no"
     <<: *logging
-    depends_on:
-      - geth
-      - teku
+    # depends_on:
+    #   - geth
+    #   - teku
     command:
-      - --consensus-endpoint=http://teku:5051
-      - --execution-endpoint=http://geth:8545
+      - --consensus-endpoint=http://beacon-chain.prysm-prater.dappnode:3500
+      - --execution-endpoint=http://goerli-geth.dappnode:8545
       - --pool-address=${POOL_ADDRESS}
       #- --updater-keystore-path=/keystore
       #- --updater-keystore-pass=${UPDATER_KEYSTORE_PASS}
@@ -38,61 +38,63 @@ services:
     volumes:
       - ./oracle-data:/oracle-data
       - ./keystore:/keystore
+    networks:
+      - network1
 
-  geth:
-    image: "ethereum/client-go:v1.11.4"
-    restart: on-failure
-    stop_grace_period: 5m
-    command:
-      - --${NETWORK}
-      - --http
-      - --http.api=eth,net,engine,admin
-      - --http.addr=0.0.0.0
-      - --http.vhosts=*
-      - --authrpc.vhosts=*
-      - --authrpc.addr=0.0.0.0
-      - --authrpc.jwtsecret=/jwtsecret
-      - --datadir=/geth
-      - --port=30303
-      - --txlookuplimit=0
-      - --metrics
-      - --metrics.addr=0.0.0.0
-    ports:
-      - 127.0.0.1:8551:8551
-      - 127.0.0.1:8545:8545
-      - 127.0.0.1:6060:6060
-      - 30303:30303/tcp
-      - 30303:30303/udp
-    volumes:
-      - ./geth:/geth
-      - ./jwtsecret:/jwtsecret
+  # geth:
+  #   image: "ethereum/client-go:v1.11.4"
+  #   restart: on-failure
+  #   stop_grace_period: 5m
+  #   command:
+  #     - --${NETWORK}
+  #     - --http
+  #     - --http.api=eth,net,engine,admin
+  #     - --http.addr=0.0.0.0
+  #     - --http.vhosts=*
+  #     - --authrpc.vhosts=*
+  #     - --authrpc.addr=0.0.0.0
+  #     - --authrpc.jwtsecret=/jwtsecret
+  #     - --datadir=/geth
+  #     - --port=30303
+  #     - --txlookuplimit=0
+  #     - --metrics
+  #     - --metrics.addr=0.0.0.0
+  #   ports:
+  #     - 127.0.0.1:8551:8551
+  #     - 127.0.0.1:8545:8545
+  #     - 127.0.0.1:6060:6060
+  #     - 30303:30303/tcp
+  #     - 30303:30303/udp
+  #   volumes:
+  #     - ./geth:/geth
+  #     - ./jwtsecret:/jwtsecret
 
-  teku:
-    image: consensys/teku:23.3.0
-    restart: on-failure
-    depends_on:
-      - geth
-    command:
-      - --network=${NETWORK}
-      - --data-path=/opt/teku/data
-      - --ee-endpoint=http://geth:8551
-      - --ee-jwt-secret-file=/jwtsecret
-      - --metrics-enabled=true
-      - --metrics-host-allowlist=*
-      - --metrics-interface=0.0.0.0
-      - --metrics-port=8008
-      - --rest-api-enabled=true
-      - --rest-api-host-allowlist=*
-      - --data-storage-archive-frequency=128
-      - --data-storage-mode=archive
-      #- --initial-state=https://xxx/eth/v2/debug/beacon/states/finalized
-    ports:
-      - 127.0.0.1:5051:5051
-      - 127.0.0.1:8008:8008
-      - 9000:9000
-    volumes:
-      - ./teku:/opt/teku/data
-      - ./jwtsecret:/jwtsecret
+  # teku:
+  #   image: consensys/teku:23.3.0
+  #   restart: on-failure
+  #   depends_on:
+  #     - geth
+  #   command:
+  #     - --network=${NETWORK}
+  #     - --data-path=/opt/teku/data
+  #     - --ee-endpoint=http://geth:8551
+  #     - --ee-jwt-secret-file=/jwtsecret
+  #     - --metrics-enabled=true
+  #     - --metrics-host-allowlist=*
+  #     - --metrics-interface=0.0.0.0
+  #     - --metrics-port=8008
+  #     - --rest-api-enabled=true
+  #     - --rest-api-host-allowlist=*
+  #     - --data-storage-archive-frequency=128
+  #     - --data-storage-mode=archive
+  #     #- --initial-state=https://xxx/eth/v2/debug/beacon/states/finalized
+  #   ports:
+  #     - 127.0.0.1:5051:5051
+  #     - 127.0.0.1:8008:8008
+  #     - 9000:9000
+  #   volumes:
+  #     - ./teku:/opt/teku/data
+  #     - ./jwtsecret:/jwtsecret
 
   prometheus:
     image: prom/prometheus:v2.43.1
@@ -101,8 +103,10 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
     ports:
-      - 127.0.0.1:9090:9090
+      - 127.0.0.1:9095:9090
     restart: on-failure
+    networks:
+      - network1
 
   grafana:
     image: grafana/grafana:9.5.1
@@ -117,7 +121,14 @@ services:
       - ./monitoring/configuration/customizations/custom-logo.svg:/usr/share/grafana/public/img/grafana_typelogo.svg
       - ./monitoring/configuration/customizations/custom-logo.png:/usr/share/grafana/public/img/fav32.png
     ports:
-      - 3000:3000
+      - 3005:3000
     restart: on-failure
     depends_on:
       - prometheus
+    networks:
+      - network1
+
+networks:
+  network1:
+    name: dncore_network
+    external: true
