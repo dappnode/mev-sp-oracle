@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -199,26 +200,14 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 		if oracleInstance.State().LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 { // TODO: extract to oracle method
 			log.Info("Checkpoint reached, latest processed slot: ", oracleInstance.State().LatestProcessedSlot)
 
-			// Get onchain root and slot
-			onchainRoot, onchainSlot, err := onchain.GetOnchainSlotAndRoot()
-			if err != nil {
-				log.Fatal("Could not get onchain slot and root: ", err)
-			}
-
-			// Check if the state before the checkpoint is in sync with the chain
-			prevRootInSync, err := oracleInstance.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
-			if err != nil {
-				log.Fatal("Could not check if oracle is in sync with chain: ", err)
-			}
-
-			// Calculate new state with new root
-			enoughData := oracleInstance.StoreLatestOnchainState()
+			// Freeze state
+			enoughData := oracleInstance.StoreLatestOnchainState() // TODO: perhaps not the best name
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 				continue
 			}
 
-			// Get our new state
+			// Get new state
 			newState := oracleInstance.LatestCommitedState()
 
 			// Update metrics
@@ -226,22 +215,59 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				fmt.Sprintf("%d", newState.Slot),
 				newState.MerkleRoot).Set(1)
 
-			// Sanity check
-			expectedOracleSlot := oracleInstance.State().LatestProcessedSlot + cfg.CheckPointSizeInSlots
-			expectedContractSlot := onchainSlot + cfg.CheckPointSizeInSlots
-			if expectedContractSlot != expectedOracleSlot {
-				log.Fatal("Expected new slot to be ", expectedContractSlot, " but got ", expectedOracleSlot)
+			// Get onchain root and slot
+			onchainRoot, onchainSlot, err := onchain.GetOnchainSlotAndRoot()
+			if err != nil {
+				log.Fatal("Could not get onchain slot and root: ", err)
 			}
 
-			if !cfg.DryRun && prevRootInSync && enoughData {
+			// For logging, display if we are in sync with the chain
+			oracleInSync, err := oracleInstance.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+			if err != nil {
+				log.Fatal("Could not check if oracle is in sync with chain: ", err)
+			}
+			if oracleInSync {
+				log.Info("Oracle is now in sync with the chain")
+			} else {
+				log.Info("Oracle is not yet in sync with the chain")
+			}
 
-				// TODO: perhaps add a random delay to avoid a "collison" with other oracles
+			// If the new state is not the one onchain + checkpoint size, do nothing
+			if newState.Slot != onchainSlot+cfg.CheckPointSizeInSlots {
+				continue
+			}
+
+			// Otherwise, we are in the next state, so we can update the contract
+			if !cfg.DryRun && enoughData {
+				// Random sleep between 0 and 10 minutes to avoid all oracles updating at the same time
+				r := rand.Intn(11)
+				time.Sleep(time.Duration(r) * time.Minute)
+
 				err := onchain.UpdateContractMerkleRoot(newState.Slot, newState.MerkleRoot)
 				if err != nil {
 					log.Fatal("Could not update contract merkle root: ", err)
 				}
 
-				// TODO: wait until its consolidated (multioracle)
+				// Wait until the state we submitted is consolidated in the contract
+				for {
+					onchainRoot, onchainSlot, err = onchain.GetOnchainSlotAndRoot()
+					if err != nil {
+						log.Fatal("Could not get onchain slot and root: ", err)
+					}
+
+					if onchainRoot == newState.MerkleRoot && onchainSlot == newState.Slot {
+						log.WithFields(log.Fields{
+							"OnchainRoot": onchainRoot,
+							"OnchainSlot": onchainSlot,
+							"OracleRoot":  newState.MerkleRoot,
+							"OracleSlot":  newState.Slot,
+						}).Info("The submitted state is now consolidated in the contract")
+						break
+					} else {
+						log.Info("Contract not yet updated, waiting")
+						time.Sleep(30 * time.Second)
+					}
+				}
 			}
 
 			// Persist new state in file only if everything went fine

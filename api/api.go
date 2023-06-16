@@ -67,9 +67,7 @@ const (
 	pathOnchainValidatorByIndex       = "/onchain/validator/{valindex}"           // TODO
 	pathOnchainValidatorsByWithdrawal = "/onchain/validators/{withdrawalAddress}" // TODO
 	pathOnchainMerkleRoot             = "/onchain/merkleroot"                     // TODO:
-
-	// TODO: implemented but should have the commited slot as input for safety.
-	pathOnchainMerkleProof = "/onchain/proof/{withdrawalAddress}"
+	pathOnchainMerkleProof            = "/onchain/proof/{withdrawalAddress}"
 )
 
 type ApiService struct {
