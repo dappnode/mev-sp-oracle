@@ -444,6 +444,90 @@ func (or *Oracle) StoreLatestOnchainState() bool {
 	return true
 }
 
+// Returns true and the latest commited slot if there is any commited state
+// false otherwise. Note that if there are checkpoint but without enough data
+// to create a tree, it will still return false
+func (or *Oracle) LatestCommitedSlot() (uint64, bool) {
+	or.mutex.RLock()
+	defer or.mutex.RUnlock()
+
+	if len(or.State().CommitedStates) == 0 {
+		return 0, false
+	}
+
+	latestCommitedSlot := uint64(0)
+	for slot, _ := range or.State().CommitedStates {
+		if slot > latestCommitedSlot {
+			latestCommitedSlot = slot
+		}
+	}
+	return latestCommitedSlot, true
+}
+
+func (or *Oracle) LatestCommitedState() *OnchainState {
+	or.mutex.RLock()
+	defer or.mutex.RUnlock()
+
+	latestCommitedSlot, atLeastOne := or.LatestCommitedSlot()
+
+	// If we havent commited any state yet
+	if !atLeastOne {
+		return nil
+	}
+
+	return or.State().CommitedStates[latestCommitedSlot]
+}
+
+func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64) (bool, error) {
+	latestCommitedSlot, atLeastOne := or.LatestCommitedSlot()
+
+	// If we havent commited any state yet
+	if !atLeastOne {
+		log.Info("Oracle has no commited states, no checkpoints have passed or there is not enough data to create a merkle tree")
+		// If the onchain state is the default, we can consider in sync as the contract has not root also
+		if Equals(onchainRoot, DefaultRoot) {
+			log.WithFields(log.Fields{
+				"OnchainRoot": onchainRoot,
+				"OnchainSlot": onchainSlot,
+			}).Info("Oracle IS in sync with the latest onchain root, nothing was commited onchain yet")
+			return true, nil
+		}
+		// If the onchain state is not the default, we are not in sync
+		log.WithFields(log.Fields{
+			"OnchainRoot": onchainRoot,
+			"OnchainSlot": onchainSlot,
+		}).Info("Oracle IS NOT in sync with the latest onchain root, oracle has no commited states yet")
+		return false, nil
+	}
+
+	latestOracleRoot := or.State().CommitedStates[latestCommitedSlot].MerkleRoot
+
+	if Equals(onchainRoot, latestOracleRoot) && onchainSlot == latestCommitedSlot {
+		log.WithFields(log.Fields{
+			"OnchainRoot": onchainRoot,
+			"OnchainSlot": onchainSlot,
+			"OracleRoot":  latestOracleRoot,
+			"OracleSlot":  latestCommitedSlot,
+		}).Info("Oracle IS in sync with the latest onchain root")
+		return true, nil
+	}
+
+	// If roots match but not slots or viceversa. Something is wrong
+	if (Equals(onchainRoot, latestOracleRoot) && onchainSlot != latestCommitedSlot) ||
+		(!Equals(onchainRoot, latestOracleRoot) && onchainSlot == latestCommitedSlot) {
+		return false, errors.New(fmt.Sprintf("Oracle root/slot does not match the onchain root/slot. "+
+			"OracleRoot: %s, OracleSlot: %d, OnchainRoot: %s, OnchainSlot: %d",
+			latestOracleRoot, latestCommitedSlot, onchainRoot, onchainSlot))
+	}
+
+	log.WithFields(log.Fields{
+		"OnchainRoot": onchainRoot,
+		"OracleRoot":  latestOracleRoot,
+		"OracleSlot":  latestCommitedSlot,
+	}).Info("Oracle IS NOT in sync with the latest onchain root")
+	return false, nil
+}
+
 func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
 	if validator.Status != v1.ValidatorStateActiveExiting &&
 		validator.Status != v1.ValidatorStateActiveSlashed &&

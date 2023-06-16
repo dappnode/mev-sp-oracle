@@ -506,7 +506,7 @@ func (o *Onchain) GetPoolFeeAddress(opts ...retry.Option) (string, error) {
 	return poolFeeAddress.Hex(), nil
 }
 
-func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
+func (o *Onchain) GetRewardsRoot(opts ...retry.Option) (string, error) {
 	var rewardsRootStr string
 
 	// Retries multiple times before errorings
@@ -527,6 +527,43 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	}
 
 	return rewardsRootStr, nil
+}
+
+func (o *Onchain) GetLastConsolidatedSlot(opts ...retry.Option) (uint64, error) {
+	var lastConsolidatedSlot uint64
+
+	// Retries multiple times before errorings
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			contractLastConsolidatedSlot, err := o.Contract.LastConsolidatedSlot(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get last consolidated slot from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get last consolidated slot from contract: " + err.Error())
+			}
+			lastConsolidatedSlot = contractLastConsolidatedSlot
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return 0, errors.New("could not get last consolidated slot from contract: " + err.Error())
+	}
+
+	return lastConsolidatedSlot, nil
+}
+
+func (o *Onchain) GetOnchainSlotAndRoot(opts ...retry.Option) (string, uint64, error) {
+	slot, err := o.GetLastConsolidatedSlot(opts...)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "could not get last consolidated slot")
+	}
+
+	merkleRoot, err := o.GetRewardsRoot(opts...)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "could not get merkle root")
+	}
+
+	return merkleRoot, slot, nil
 }
 
 // TODO: Only in finalized slots!
@@ -1031,7 +1068,7 @@ func (o *Onchain) GetAcceptGovernanceEvents(
 	return events, nil
 }
 
-func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) string {
+func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) error {
 
 	// Support both 0x prefixed and non prefixed merkle roots
 	if strings.HasPrefix(newMerkleRoot, "0x") {
@@ -1043,43 +1080,43 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 	unboundedBytes := common.Hex2Bytes(newMerkleRoot)
 
 	if len(unboundedBytes) != 32 {
-		log.Fatal("wrong merkle root length: ", newMerkleRoot)
+		return errors.New(fmt.Sprintf("merkle root must be 32 bytes: %s", newMerkleRoot))
 	}
 	copy(newMerkleRootBytes[:], common.Hex2Bytes(newMerkleRoot))
 
 	// Sanity check to ensure the converted tree matches the original
 	if hex.EncodeToString(newMerkleRootBytes[:]) != newMerkleRoot {
-		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
+		return errors.New(fmt.Sprintf("merkle trees dont match, expected: %s", newMerkleRoot))
 	}
 
 	publicKey := o.updaterKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
-		log.Fatal("error casting public key to ECDSA")
+		return errors.New("error casting public key to ECDSA")
 	}
 
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 	log.Info("Preparing tx from address: ", fromAddress.Hex())
 	nonce, err := o.ExecutionClient.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
-		log.Fatal("could not get pending nonce: ", err)
+		return errors.New(fmt.Sprintf("could not get pending nonce: %s", err))
 	}
 
 	// Unused, leaving for reference. We rely on automatic gas estimation, see below (nil values)
 	gasTipCap, err := o.ExecutionClient.SuggestGasTipCap(context.Background())
 	if err != nil {
-		log.Fatal("could not get gas price suggestion: ", err)
+		return errors.New(fmt.Sprintf("could not get gas tip cap suggestion: %s", err))
 	}
 	_ = gasTipCap
 
 	chaindId, err := o.ExecutionClient.NetworkID(context.Background())
 	if err != nil {
-		log.Fatal("could not get chaind: ", err)
+		return errors.New(fmt.Sprintf("could not get chaind: %s", err))
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(o.updaterKey, chaindId)
 	if err != nil {
-		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
+		return errors.New(fmt.Sprintf("could not create NewKeyedTransactorWithChainID: %s", err))
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
@@ -1098,13 +1135,13 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)
 	if err != nil {
-		log.Fatal(err)
+		return errors.Wrap(err, "could not create contract instance")
 	}
 
 	// Create a tx calling the update rewards root function with the new merkle root
 	tx, err := instance.SubmitReport(auth, slot, newMerkleRootBytes)
 	if err != nil {
-		log.Fatal(err)
+		return errors.Wrap(err, "could not create tx to call SubmitReport")
 	}
 
 	log.WithFields(log.Fields{
@@ -1120,10 +1157,13 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 	// It stops waiting when the context is canceled.
 	receipt, err := bind.WaitMined(ctx, o.ExecutionClient, tx)
 	if ctx.Err() != nil {
-		log.Fatal("Timeout expired for waiting for tx to be validated, txHash: ", tx.Hash().Hex(), " err:", err)
+		return errors.Wrap(err,
+			fmt.Sprint("timeout expired waiting for tx to be validated txHash: ",
+				tx.Hash().Hex()))
 	}
 	if receipt.Status != types.ReceiptStatusSuccessful {
-		log.Fatal("Tx failed, err: ", receipt.Status, " hash: ", tx.Hash().Hex())
+		return errors.Wrap(err,
+			fmt.Sprintf("tx failed err: %d hash: %s", receipt.Status, tx.Hash().Hex()))
 	}
 
 	// Tx was sent and validated correctly, print receipt info
@@ -1136,7 +1176,7 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 		"BlockNumber":       receipt.BlockNumber,
 	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
-	return tx.Hash().Hex()
+	return nil
 }
 
 // Loads all validator from the beacon chain into the oracle, must be called periodically

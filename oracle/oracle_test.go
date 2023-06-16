@@ -2166,6 +2166,90 @@ func Test_SizeMultipleOnchainState(t *testing.T) {
 	log.Info("File size:", fileSizeMB, "MB")
 }
 
+func Test_LatestCommitedSlot_LatestCommitedState(t *testing.T) {
+	oracle := NewOracle(&Config{
+		CollateralInWei: big.NewInt(1000),
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
+	})
+
+	// No data, no state
+	oracle.StoreLatestOnchainState()
+	slot, stateExistst := oracle.LatestCommitedSlot()
+	state := oracle.LatestCommitedState()
+	require.Equal(t, uint64(0), slot)
+	require.Equal(t, false, stateExistst)
+	require.Nil(t, state)
+
+	// Add state slot = 100
+	oracle.state.LatestProcessedSlot = 100
+	oracle.addSubscriptionIfNotAlready(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.StoreLatestOnchainState()
+	slot, stateExistst = oracle.LatestCommitedSlot()
+	state = oracle.LatestCommitedState()
+	require.Equal(t, uint64(100), slot)
+	require.Equal(t, true, stateExistst)
+	require.Equal(t, uint64(100), state.Slot)
+	require.Equal(t, 3, len(state.Validators))
+
+	// Add state slot = 200
+	oracle.state.LatestProcessedSlot = 200
+	oracle.addSubscriptionIfNotAlready(uint64(13), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(14), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(15), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.StoreLatestOnchainState()
+	slot, stateExistst = oracle.LatestCommitedSlot()
+	state = oracle.LatestCommitedState()
+	require.Equal(t, uint64(200), slot)
+	require.Equal(t, true, stateExistst)
+	require.Equal(t, uint64(200), state.Slot)
+	require.Equal(t, 6, len(state.Validators))
+
+}
+
+func Test_IsOracleInSyncWithChain(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
+	})
+
+	// No states in oracle nor locally
+	onchainRoot := DefaultRoot
+	onchainSlot := uint64(0)
+	isInSync, err := oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, true, isInSync)
+	require.NoError(t, err)
+
+	// Add a state
+	oracle.state.LatestProcessedSlot = 100
+	oracle.addSubscriptionIfNotAlready(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.StoreLatestOnchainState()
+
+	// In sync
+	onchainRoot = "0xbb82bf59b1b6f3b0964c08ffb9336365153b34e2b30fb1230146428d153693b0"
+	onchainSlot = uint64(100)
+	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, true, isInSync)
+	require.NoError(t, err)
+
+	// Not in sync
+	onchainRoot = "0x1000000000000000000000000000000000000000000000000000000000000000"
+	onchainSlot = uint64(200)
+	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, false, isInSync)
+	require.NoError(t, err)
+
+	// Roots match but not slots, expect error
+	onchainRoot = "0xbb82bf59b1b6f3b0964c08ffb9336365153b34e2b30fb1230146428d153693b0"
+	onchainSlot = uint64(200)
+	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, false, isInSync)
+	require.Error(t, err)
+}
+
 // returns len(valsID) new valid subscriptions
 func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int) []*contract.ContractSubscribeValidator {
 	subs := make([]*contract.ContractSubscribeValidator, len(valsID))
