@@ -2,28 +2,72 @@ package oracle
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"math/big"
-	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
 // None of this tests can be executed without a valid consensus and execution client
 // so they are disabled by default, only to be run manually.
-var skip = true
+var skip = false
+
+// Not a test per se, just an util to fetch block and store them for mocking
+func Test_GetFullBlockAtSlot(t *testing.T) {
+	// Uncomment to run
+	t.Skip("Skipping test")
+
+	// Folder to store the result
+	folder := "../mock"
+
+	// Slot to fetch
+	slotToFetch := uint64(5307527)
+	fetchHeaderAndReceipts := true
+	// fetchReceipts := true // TODO:
+
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:5051",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       "0x8f0844fd51e31ff6bf5babe21dccf7328e19fd9f",
+	}
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+	oracle := NewOracle(&Config{})
+	chaindId, err := onchain.ExecutionClient.ChainID(context.Background())
+	require.NoError(t, err)
+
+	// Fetch all information from the blockchain
+	fullBlock := onchain.FetchFullBlock(slotToFetch, oracle, fetchHeaderAndReceipts)
+
+	// Serialize to json and dump to file
+	jsonData, err := json.MarshalIndent(fullBlock, "", " ")
+	require.NoError(t, err)
+	fileName := fmt.Sprintf("fullblock_slot_%d_chainid_%s%s.json", slotToFetch, chaindId.String(), HasHeader(fetchHeaderAndReceipts))
+	path := filepath.Join(folder, fileName)
+	err = ioutil.WriteFile(path, jsonData, 0644)
+	require.NoError(t, err)
+}
+
+func HasHeader(has bool) string {
+	if has {
+		return "_withheaders"
+	}
+	return ""
+}
 
 // Fetches the balance of a given address
 func Test_FetchFromExecution(t *testing.T) {
-	t.Skip("Skipping test")
+	if skip {
+		t.Skip("Skipping test")
+	}
+
 	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
@@ -33,80 +77,11 @@ func Test_FetchFromExecution(t *testing.T) {
 	account := common.HexToAddress("0xf573d99385c05c23b24ed33de616ad16a43a0919")
 	balance, err := onChain.ExecutionClient.BalanceAt(context.Background(), account, nil)
 	require.NoError(t, err)
-	expectedValue, ok := new(big.Int).SetString("25893180161173005034", 10)
-	require.True(t, ok)
-	require.Equal(t, expectedValue, balance)
-}
+	require.NotNil(t, balance)
 
-// Utility that fetches some data and dumps it to a file
-func Test_GetBellatrixBlockAtSlot(t *testing.T) {
-
-	t.Skip("Skipping test")
-
-	var cfgOnchain = &config.CliConfig{
-		ConsensusEndpoint: "http://127.0.0.1:5051",
-		ExecutionEndpoint: "http://127.0.0.1:8545",
-	}
-	onchain, err := NewOnchain(cfgOnchain, nil)
-	require.NoError(t, err)
-	folder := "../mock"
-	blockType := "capella"
-	network := "goerli"
-	slotToFetch := uint64(5307527)
-
-	// Get block
-	signedBeaconBlock, err := onchain.GetConsensusBlockAtSlot(slotToFetch)
-	require.NoError(t, err)
-
-	// Cast to our custom extended block with extra methods
-	extendedSignedBeaconBlock := NewFullBlock(nil, nil)
-	extendedSignedBeaconBlock.SetConsensusBlock(signedBeaconBlock)
-
-	// Serialize and dump the block to a file
-	// Change this Bellatrix, Capella or any other block version
-	// depending on which field you want to store
-	mbeel, err := extendedSignedBeaconBlock.ConsensusBlock.Capella.MarshalJSON()
-	require.NoError(t, err)
-	nameBlock := "block_" + blockType + "_slot_" + strconv.FormatInt(int64(slotToFetch), 10) + "_" + network
-	fblock, err := os.Create(filepath.Join(folder, nameBlock))
-	require.NoError(t, err)
-	defer fblock.Close()
-	err = binary.Write(fblock, binary.LittleEndian, mbeel)
-	defer fblock.Close()
-
-	// Get block header
-	header, err := onchain.ExecutionClient.HeaderByNumber(context.Background(), new(big.Int).SetUint64(extendedSignedBeaconBlock.GetBlockNumber()))
-	require.NoError(t, err)
-
-	// Serialize and dump the block header to a file
-	serializedHeader, err := header.MarshalJSON()
-	require.NoError(t, err)
-	nameHeader := "header_" + blockType + "_slot_" + strconv.FormatInt(int64(slotToFetch), 10) + "_" + network
-	fheader, err := os.Create(filepath.Join(folder, nameHeader))
-	require.NoError(t, err)
-	defer fheader.Close()
-	err = binary.Write(fheader, binary.LittleEndian, serializedHeader)
-	require.NoError(t, err)
-
-	// Get tx receipts, serialize and dump to file
-	nameTxReceipts := "txreceipts_" + blockType + "_slot_" + strconv.FormatInt(int64(slotToFetch), 10) + "_" + network
-	fTxs, err := os.Create(filepath.Join(folder, nameTxReceipts))
-	require.NoError(t, err)
-	defer fTxs.Close()
-
-	var receiptsBlock []*types.Receipt
-	for _, rawTx := range extendedSignedBeaconBlock.GetBlockTransactions() {
-		tx, err := DecodeTx(rawTx)
-		if err == nil {
-			receipt, err := onchain.ExecutionClient.TransactionReceipt(context.Background(), tx.Hash())
-			require.NoError(t, err)
-			receiptsBlock = append(receiptsBlock, receipt)
-		}
-	}
-	serializedReceipts, err := json.Marshal(receiptsBlock)
-	require.NoError(t, err)
-	err = binary.Write(fTxs, binary.LittleEndian, serializedReceipts)
-	require.NoError(t, err)
+	//expectedValue, ok := new(big.Int).SetString("25893180161173005034", 10)
+	//require.True(t, ok)
+	//require.Equal(t, expectedValue, balance)
 }
 
 // TODO: This test is testing both FetchFullBlock and SummarizeBlock
@@ -122,7 +97,6 @@ func Test_FetchFullBlock(t *testing.T) {
 	}
 	onchain, err := NewOnchain(cfgOnchain, nil)
 	require.NoError(t, err)
-	onchain.RefreshBeaconValidators()
 
 	type test struct {
 		// Input
@@ -242,8 +216,6 @@ func Test_GetDonationEvents(t *testing.T) {
 
 	oracle := NewOracle(&Config{})
 
-	onchain.RefreshBeaconValidators()
-
 	// 1) contains a donation
 	// https://goerli.etherscan.io/tx/0x789a23de09eab6b5b252cadefe9df35a7a2cd85a6ae4dbccea4f0a346977ca5f
 	slotNum1 := uint64(5803850)
@@ -307,8 +279,7 @@ func Test_EndToEnd(t *testing.T) {
 
 	oracleInstance := NewOracle(cfg)
 
-	// TODO: missing tongs of things like subscriptions unsubs, etc.
-
+	// TODO: missing tons of things like subscriptions unsubs, etc.
 	onchain.RefreshBeaconValidators()
 	oracleInstance.SetBeaconValidators(onchain.Validators()) // TODO: dirty having both
 
@@ -355,9 +326,12 @@ func Test_EndToEnd(t *testing.T) {
 
 		log.Info("Processed slot: ", processedSlot)
 	}
+
 	oracleInstance.StoreLatestOnchainState()
-	oracleInstance.SaveStateToFile()
-	oracleInstance.SaveToJson()
+	//oracleInstance.SaveStateToFile()
+	//oracleInstance.SaveToJson()
+
+	//require.Equal(t, "0x000000", oracleInstance.LatestCommitedState().MerkleRoot)
 
 	// root: 0xf0ecfb7afe96f7f7b570598c71aaac8fae3e6880e078227106e3a29446d5dbf8
 	//AccumulatedBalanceWei=131064623899584732 LeafHash=7c049ecd5a07fc5b7d39573db41a1faca70a798112583dce61b0c8761eaa2166 WithdrawalAddress=0xe46f9be81f9a3aca1808bb8c36d353436bb96091

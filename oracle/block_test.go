@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"os"
+	"path/filepath"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -17,6 +18,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 )
@@ -104,6 +106,22 @@ func Test_Getters_Capella(t *testing.T) {
 // TODO: Important test donations
 //5862054, //donation normal
 //5862104, //donation via smart contract
+
+func Test_TODOName(t *testing.T) {
+	// TODO: document that these blocks can be fetched with the test in onchain_test
+	fullBlock, err := LoadFullBlock(5307527, "5", true)
+	require.NoError(t, err)
+
+	require.Equal(t, "0x000095E79eAC4d76aab57cB2c1f091d553b36ca0", fullBlock.GetFeeRecipient())
+	mevReward, hasMev, mevRecipient := fullBlock.MevRewardInWei()
+	require.Equal(t, false, hasMev)
+	require.Equal(t, "", mevRecipient)
+	require.Equal(t, big.NewInt(0), mevReward)
+
+	proposerTip, err := fullBlock.GetProposerTip()
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(105735750887810922), proposerTip)
+}
 
 func Test_GetProposerTip(t *testing.T) {
 
@@ -377,6 +395,31 @@ func Test_Marashal(t *testing.T) {
 
 }
 
+func LoadFullBlock(slotNumber uint64, chainId string, hasHeaders bool) (*FullBlock, error) {
+	fileName := fmt.Sprintf("fullblock_slot_%d_chainid_%s%s.json", slotNumber, chainId, HasHeader(hasHeaders))
+	path := filepath.Join("../mock", fileName)
+	jsonFile, err := os.Open(path)
+	defer jsonFile.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not open json file")
+	}
+
+	byteValue, err := ioutil.ReadAll(jsonFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read json file")
+	}
+
+	var fullBlock FullBlock
+
+	err = json.Unmarshal(byteValue, &fullBlock)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal json file")
+	}
+
+	return &fullBlock, nil
+}
+
+// TODO: Remove, deprecated
 // Util to load from file
 func LoadBlockHeaderReceiptsBellatrix(t *testing.T, file string) (bellatrix.SignedBeaconBlock, types.Header, []*types.Receipt) {
 	blockJson, err := os.Open("../mock/block_" + file)

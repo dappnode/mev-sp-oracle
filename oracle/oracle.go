@@ -41,7 +41,7 @@ func NewOracle(cfg *Config) *Oracle {
 		StateHash:            "",
 		LatestProcessedSlot:  cfg.DeployedSlot - 1,
 		LatestProcessedBlock: 0,
-		NextSlotToProcess:    cfg.DeployedSlot,
+		NextSlotToProcess:    cfg.DeployedSlot, // TODO: remove this and rely just on config?
 		Network:              cfg.Network,
 		PoolAddress:          cfg.PoolAddress,
 

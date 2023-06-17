@@ -53,7 +53,9 @@ type Onchain struct {
 	Contract        *contract.Contract
 	NumRetries      int
 	updaterKey      *ecdsa.PrivateKey
-	validators      map[phase0.ValidatorIndex]*v1.Validator
+
+	// This is not used only by the api TOOD: remove?
+	validators map[phase0.ValidatorIndex]*v1.Validator
 }
 
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
@@ -216,6 +218,46 @@ func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.Valid
 		return nil, errors.New("Could not fetch finalized validators: " + err.Error())
 	}
 	return validators, err
+}
+
+func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, opts ...retry.Option) (*api.Validator, error) {
+	var validators map[phase0.ValidatorIndex]*api.Validator
+	var err error
+
+	err = retry.Do(func() error {
+		validatorIndices := []phase0.ValidatorIndex{valIndex}
+		validators, err = o.ConsensusClient.Validators(context.Background(), "finalized", validatorIndices)
+
+		if err != nil {
+			log.Warn("Failed attempt to fetch validator: ", err.Error(), " Retrying...")
+			return errors.New("Error fetching validator: " + err.Error())
+		}
+
+		if len(validators) > 1 {
+			return errors.New("Error fetching validator: Requested one but got many")
+		}
+
+		if len(validators) == 0 {
+			return errors.New("Error fetching validator: Requested one but got none")
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Could not fetch validator: " + err.Error())
+	}
+
+	// Some sanity checks
+	validator, found := validators[valIndex]
+	if !found {
+		return nil, errors.New(fmt.Sprintf("Error fetching validator: Could not find index in response: %d",
+			valIndex))
+	}
+	if validator.Index != valIndex {
+		return nil, errors.New(fmt.Sprintf("Error fetching validator: Index mismatch in response: %d vs %d",
+			valIndex, validator.Index))
+	}
+	return validator, err
 }
 
 func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*types.Block, error) {
@@ -619,10 +661,20 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 	return balanceWei, nil
 }
 
-// TODO: Document logic. events are fetched for every single block.
-// some rewards only if subscriber of pool or reward went to pool.
-// .. etc
-func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
+// Oracle dependancy is injected here since we need to know wether the validator
+// proposing the block at this slot is i) subscribed to the pool or ii) its reward
+// goes to the pool. This allows to fetch less information on the blocks that are
+// not relevant to the pool. If fetchAll is enabled, the whole content of the block
+// is fetched no matter what, just for debugging purposes, will slow down sync
+func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *FullBlock {
+	var fetchAll bool
+	if len(opt) > 1 {
+		log.Fatal("invalid number of arguments, just one opt is allowed")
+	} else if len(opt) == 1 {
+		fetchAll = opt[0]
+	} else {
+		fetchAll = false
+	}
 
 	// Get who should propose the block
 	slotDuty, err := o.GetProposalDuty(slot)
@@ -635,8 +687,14 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 		log.Fatal("slot duty slot does not match requested slot: ", slotDuty.Slot, " vs ", slot)
 	}
 
+	// Get the validator info that proposed (or should have proposed) the block
+	validator, err := o.GetSingleValidator(slotDuty.ValidatorIndex)
+	if err != nil {
+		log.Fatal("could not get single validator: ", err)
+	}
+
 	// Create the full block with the duty, which is the minimum info it can have
-	fullBlock := NewFullBlock(slotDuty, o.Validators()[slotDuty.ValidatorIndex])
+	fullBlock := NewFullBlock(slotDuty, validator)
 
 	// Fetch the whole consensus block
 	proposedBlock, err := o.GetConsensusBlockAtSlot(slot)
@@ -648,7 +706,6 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 		// Mised block, nothing to do
 	} else {
 		// Succesfull proposal, fetch the info we need
-
 		fullBlock.SetConsensusBlock(proposedBlock)
 
 		// Sanity check to ensure the block is the one we requested
@@ -700,13 +757,12 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 		isFromSubscriber := oracle.isSubscribed(fullBlock.GetProposerIndexUint64())
 
 		// Check if the reward was sent to the pool
-		isPoolRewarded := fullBlock.IsAddressRewarded(o.CliCfg.PoolAddress)
+		isPoolRewarded := fullBlock.isAddressRewarded(o.CliCfg.PoolAddress)
 
 		// This calculation is expensive, do it only if the reward went to the pool or
 		// if the block is from a subscribed validator.
-		if isFromSubscriber || isPoolRewarded {
-			blockNumber := new(big.Int).SetUint64(fullBlock.GetBlockNumber())
-			header, receipts, err := o.GetExecHeaderAndReceipts(blockNumber, fullBlock.GetBlockTransactions())
+		if fetchAll || (isFromSubscriber || isPoolRewarded) {
+			header, receipts, err := o.GetExecHeaderAndReceipts(fullBlock.GetBlockNumberBigInt(), fullBlock.GetBlockTransactions())
 			if err != nil {
 				log.Fatal("failed getting header and receipts: ", err)
 			}
