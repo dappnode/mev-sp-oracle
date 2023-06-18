@@ -226,6 +226,18 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				fmt.Sprintf("%d", newState.Slot),
 				newState.MerkleRoot).Set(1)
 
+			// If so we are ready to update the contract, but multiple oracles will be racing here.
+			// Lets say we have m oracles with a quorum on n (n/m). The oracles will be racing to update the root
+			// and only n txs will go through and (m-n) will be reverted, as the new state will be consolidated.
+			// In order to avoid txs being reverted (which costs gas), we add a random sleep between 0 and 15 minutes
+			// to avoid a collision. This is not perfect, but it should be good enough. Statistically, it would be
+			// very improbable that n+1 oracles will wait the same amount of time producing a collision.
+			if !cfg.DryRun && enoughData {
+				// This also blocks sync in some cases, can be optimized
+				r := rand.Intn(16)
+				time.Sleep(time.Duration(r) * time.Minute)
+			}
+
 			// Get onchain root and slot
 			onchainRoot, onchainSlot, err := onchain.GetOnchainSlotAndRoot()
 			if err != nil {
@@ -250,12 +262,12 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 
 			// Otherwise, we are in the next state, so we can update the contract
 			if !cfg.DryRun && enoughData {
-				// Random sleep between 0 and 10 minutes to avoid all oracles updating at the same time
-				r := rand.Intn(11)
-				time.Sleep(time.Duration(r) * time.Minute)
-
 				err := onchain.UpdateContractMerkleRoot(newState.Slot, newState.MerkleRoot)
 				if err != nil {
+					// There is a very improbable case that this tx is expected to fail. If quorum is n for
+					// m oracles, if n+1 oracles submit the tx at the same time, the last tx will revert.
+					// In this case it would be expected to fail, but note that the above delay should
+					// prevent this from happening.
 					log.Fatal("Could not update contract merkle root: ", err)
 				}
 
