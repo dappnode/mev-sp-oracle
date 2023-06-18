@@ -899,20 +899,20 @@ func (onchain *Onchain) GetConfigFromContract(
 	}
 
 	conf := &Config{
-		ConsensusEndpoint:     cliCfg.ConsensusEndpoint,
-		ExecutionEndpoint:     cliCfg.ExecutionEndpoint,
-		Network:               network,
-		PoolAddress:           cliCfg.PoolAddress,
-		DeployedSlot:          deployedSlot,
-		DeployedBlock:         deployedBlock.Uint64(),
-		CheckPointSizeInSlots: checkPointSizeInSlots,
-		PoolFeesPercent:       int(poolFeesPercentTwoDecimals.Uint64()),
-		PoolFeesAddress:       poolFeesAddress,
-		CollateralInWei:       ethCollateralInWei,
-		DryRun:                cliCfg.DryRun,
-		NumRetries:            cliCfg.NumRetries,
-		UpdaterKeyPass:        cliCfg.UpdaterKeyPass,
-		UpdaterKeyPath:        cliCfg.UpdaterKeyPath,
+		ConsensusEndpoint:        cliCfg.ConsensusEndpoint,
+		ExecutionEndpoint:        cliCfg.ExecutionEndpoint,
+		Network:                  network,
+		PoolAddress:              cliCfg.PoolAddress,
+		DeployedSlot:             deployedSlot,
+		DeployedBlock:            deployedBlock.Uint64(),
+		CheckPointSizeInSlots:    checkPointSizeInSlots,
+		PoolFeesPercentOver10000: int(poolFeesPercentTwoDecimals.Uint64()),
+		PoolFeesAddress:          poolFeesAddress,
+		CollateralInWei:          ethCollateralInWei,
+		DryRun:                   cliCfg.DryRun,
+		NumRetries:               cliCfg.NumRetries,
+		UpdaterKeyPass:           cliCfg.UpdaterKeyPass,
+		UpdaterKeyPath:           cliCfg.UpdaterKeyPath,
 	}
 
 	return conf

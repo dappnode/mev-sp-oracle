@@ -77,12 +77,14 @@ func main() {
 	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)
 
-	err = oracleInstance.LoadStateFromFile()
-	if err == nil {
-		log.Info("Found previous state to continue syncing")
+	found, err := oracleInstance.LoadFromJson()
+	if err != nil {
+		log.Fatal("Critical error loading state from json: ", err)
+	}
+	if !found {
+		log.Warn("Previous state not found or could not be loaded, syncing from the begining slot=", oracleInstance.State().DeployedSlot)
 	} else {
-		log.Info("Previous state not found or could not be loaded, syncing from the begining: ", err)
-		log.Info("Starting to process from slot: ", cfg.DeployedSlot)
+		log.Info("Found previous state to continue syncing")
 	}
 
 	api := api.NewApiService(cfg, oracleInstance, onchain)
@@ -99,7 +101,12 @@ func main() {
 
 		// Save state in SIGINT or SIGTERM
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM {
-			oracleInstance.SaveStateToFile()
+			err := oracleInstance.SaveToJson()
+			if err != nil {
+				log.Error("Could not save state to json: ", err)
+			} else {
+				log.Info("State saved to json")
+			}
 		}
 
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM || sig == os.Interrupt || sig == os.Kill {
@@ -271,7 +278,12 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			}
 
 			// Persist new state in file only if everything went fine
-			oracleInstance.SaveStateToFile()
+			err = oracleInstance.SaveToJson()
+			if err != nil {
+				log.Error("Could not save state to json: ", err)
+			} else {
+				log.Info("State saved to json")
+			}
 		}
 	}
 }

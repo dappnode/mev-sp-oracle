@@ -2,7 +2,6 @@ package oracle
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -47,11 +46,17 @@ func Test_AdvanceStateToNextSlot(t *testing.T) {
 
 // TODO: Test that if the file changes it fails due to hash
 func Test_SaveReadToFromJson(t *testing.T) {
-	oracle := NewOracle(&Config{
-		PoolAddress:     "0x0000000000000000000000000000000000000000",
-		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
-		Network:         "mainnet",
-	})
+	config := &Config{
+		PoolAddress:              "0x0000000000000000000000000000000000000000",
+		PoolFeesAddress:          "0x1000000000000000000000000000000000000000",
+		PoolFeesPercentOver10000: 1000,
+		Network:                  "mainnet",
+		DeployedSlot:             1000,
+		DeployedBlock:            1000,
+		CheckPointSizeInSlots:    100,
+		CollateralInWei:          big.NewInt(1000),
+	}
+	oracle := NewOracle(config)
 
 	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
 	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
@@ -68,39 +73,60 @@ func Test_SaveReadToFromJson(t *testing.T) {
 		{
 			ValidatorID:            33,
 			SubscriptionCollateral: big.NewInt(1000),
-			Raw:                    types.Log{TxHash: [32]byte{0x1}, Topics: []common.Hash{{0x2}}},
-			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			Raw: types.Log{
+				TxHash:      [32]byte{0x1},
+				Topics:      []common.Hash{{0x2}},
+				Data:        []byte{0x3},
+				BlockNumber: 124,
+				BlockHash:   [32]byte{0x4},
+				Index:       1,
+				Removed:     false,
+			},
+			Sender: common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 	}
 	oracle.state.Subscriptions = subs
-	_ = subs
 
-	defer os.Remove(filepath.Join(StateFileName, StateFolder))
+	defer os.Remove(filepath.Join(StateFolder, StateJsonName))
 	defer os.RemoveAll(StateFolder)
 	oracle.SaveToJson()
 
-	oracle.LoadFromJson()
-	//defer os.Remove(filepath.Join(StateFileName, StateFolder))
-	//defer os.RemoveAll(StateFolder)
-	jsonData, err := json.MarshalIndent(oracle.state, "", " ")
-	if err != nil {
-		log.Fatal("could not marshal state to json: ", err)
-	}
+	// Oracle with same config
+	newOracle := NewOracle(config)
+	_, err := newOracle.LoadFromJson()
+	require.NoError(t, err)
 
-	fmt.Printf("recovered data: %s\n", jsonData)
-	log.Info(oracle.state.Validators[3].ValidatorStatus)
+	oracle.state.StateHash = ""
+	newOracle.state.StateHash = ""
 
-	require.Equal(t, oracle.state, oracle.state)
+	json1, err := json.MarshalIndent(oracle.state, "", " ")
+	require.NoError(t, err)
 
-	//require.NoError(t, err)
-	//require.Equal(t, state, state)
+	json2, err := json.MarshalIndent(newOracle.state, "", " ")
+	require.NoError(t, err)
+
+	// Serialized versions match
+	require.Equal(t, string(json1), string(json2))
+
+	// Structs match
+	require.Equal(t, oracle.state, newOracle.state)
+
+	// Now change the config
+	config.Network = "testnet"
+	config.PoolFeesAddress = "0xffff000000000000000000000000000000000000"
+
+	oracleDifferentConfig := NewOracle(config)
+	_, err = oracleDifferentConfig.LoadFromJson()
+
+	// Expect error since the config now does now match
+	require.Error(t, err)
 }
 
 func Test_StoreLatestOnchainState(t *testing.T) {
 
 	oracle := NewOracle(&Config{
-		PoolFeesPercent: 0,
-		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
+		PoolFeesPercentOver10000: 0,
+		PoolFeesAddress:          "0xfee0000000000000000000000000000000000000",
 	})
 
 	valInfo1 := &ValidatorInfo{
@@ -177,7 +203,7 @@ func Test_Oracle_ManualSubscription(t *testing.T) {
 			UpdaterAddress:        "",
 			DeployedSlot:          uint64(50000),
 			CheckPointSizeInSlots: uint64(100),
-			PoolFeesPercent:       5,
+			PoolFeesPercentOver10000:       5,
 			PoolFeesAddress:       "0xfee0000000000000000000000000000000000000",
 			CollateralInWei:       big.NewInt(1000000),
 		})
@@ -255,7 +281,7 @@ func Test_100_slots_test(t *testing.T) {
 		PoolAddress:           "0xdead000000000000000000000000000000000000",
 		DeployedSlot:          uint64(50000),
 		CheckPointSizeInSlots: uint64(100),
-		PoolFeesPercent:       5,
+		PoolFeesPercentOver10000:       5,
 		PoolFeesAddress:       "0xfee0000000000000000000000000000000000000",
 		CollateralInWei:       big.NewInt(1000000),
 	})
@@ -1062,8 +1088,8 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 func Test_SubThenUnsubThenAuto(t *testing.T) {
 
 	oracle := NewOracle(&Config{
-		CollateralInWei: big.NewInt(500000),
-		PoolFeesPercent: 0,
+		CollateralInWei:          big.NewInt(500000),
+		PoolFeesPercentOver10000: 0,
 	})
 
 	// Subscribe a validator
@@ -1438,8 +1464,8 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 func Test_increaseAllPendingRewards_1(t *testing.T) {
 
 	oracle := NewOracle(&Config{
-		PoolFeesPercent: 0,
-		PoolFeesAddress: "0x",
+		PoolFeesPercentOver10000: 0,
+		PoolFeesAddress:          "0x",
 	})
 
 	// Subscribe 3 validators with no balance
@@ -1449,7 +1475,7 @@ func Test_increaseAllPendingRewards_1(t *testing.T) {
 
 	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
-	// Note that in this case even with PoolFeesPercent: 0, the pool gets the remainder
+	// Note that in this case even with PoolFeesPercentOver10000: 0, the pool gets the remainder
 	require.Equal(t, big.NewInt(3333), oracle.state.Validators[1].PendingRewardsWei)
 	require.Equal(t, big.NewInt(3333), oracle.state.Validators[2].PendingRewardsWei)
 	require.Equal(t, big.NewInt(3333), oracle.state.Validators[3].PendingRewardsWei)
@@ -1459,8 +1485,8 @@ func Test_increaseAllPendingRewards_1(t *testing.T) {
 func Test_increaseAllPendingRewards_2(t *testing.T) {
 
 	oracle := NewOracle(&Config{
-		PoolFeesPercent: 10 * 100, // 10%
-		PoolFeesAddress: "0x",
+		PoolFeesPercentOver10000: 10 * 100, // 10%
+		PoolFeesAddress:          "0x",
 	})
 
 	// Subscribe 3 validators with no balance
@@ -1470,7 +1496,7 @@ func Test_increaseAllPendingRewards_2(t *testing.T) {
 
 	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
-	// Note that in this case even with PoolFeesPercent: 0, the pool gets the remainder
+	// Note that in this case even with PoolFeesPercentOver10000: 0, the pool gets the remainder
 	require.Equal(t, big.NewInt(3000), oracle.state.Validators[1].PendingRewardsWei)
 	require.Equal(t, big.NewInt(3000), oracle.state.Validators[2].PendingRewardsWei)
 	require.Equal(t, big.NewInt(3000), oracle.state.Validators[3].PendingRewardsWei)
@@ -1503,8 +1529,8 @@ func Test_increaseAllPendingRewards_3(t *testing.T) {
 
 	for _, test := range tests {
 		oracle := NewOracle(&Config{
-			PoolFeesPercent: test.FeePercent,
-			PoolFeesAddress: "0x",
+			PoolFeesPercentOver10000: test.FeePercent,
+			PoolFeesAddress:          "0x",
 		})
 
 		for i := 0; i < test.AmountValidators; i++ {
@@ -1571,8 +1597,8 @@ func Test_increaseAllPendingRewards_4(t *testing.T) {
 
 	for _, test := range tests {
 		oracle := NewOracle(&Config{
-			PoolFeesPercent: test.FeePercentX100,
-			PoolFeesAddress: "0x",
+			PoolFeesPercentOver10000: test.FeePercentX100,
+			PoolFeesAddress:          "0x",
 		})
 		for i := 0; i < test.AmountValidators; i++ {
 			oracle.addSubscriptionIfNotAlready(uint64(i), "0x", "0x")
@@ -1743,78 +1769,6 @@ func Test_StateMachine(t *testing.T) {
 	}
 }
 
-func Test_SaveLoadFromToFile_EmptyState(t *testing.T) {
-	oracle := NewOracle(&Config{
-		PoolAddress:     "0x0000000000000000000000000000000000000000",
-		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
-		Network:         "mainnet",
-	})
-
-	oracle.SaveStateToFile()
-	defer os.Remove(filepath.Join(StateFileName, StateFolder))
-	defer os.RemoveAll(StateFolder)
-
-	err := oracle.LoadStateFromFile()
-	require.NoError(t, err)
-	require.Equal(t, oracle.state, oracle.state)
-}
-func Test_SaveLoadFromToFile_PopulatedState(t *testing.T) {
-
-	oracle := NewOracle(&Config{
-		PoolAddress:     "0x0000000000000000000000000000000000000000",
-		PoolFeesAddress: "0x1000000000000000000000000000000000000000",
-		Network:         "mainnet",
-	})
-
-	oracle.state.Donations = make([]*contract.ContractEtherReceived, 1)
-
-	oracle.state.Donations[0] = &contract.ContractEtherReceived{
-		DonationAmount: big.NewInt(1000),
-		Raw: types.Log{
-			TxHash:      [32]byte{0x0},
-			BlockNumber: uint64(1000),
-		},
-	}
-
-	oracle.state.Validators[10] = &ValidatorInfo{
-		ValidatorStatus:       Active,
-		AccumulatedRewardsWei: big.NewInt(1000),
-		PendingRewardsWei:     big.NewInt(1000),
-		CollateralWei:         big.NewInt(1000),
-		WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
-		ValidatorIndex:        10,
-		ValidatorKey:          "0xc", // TODO: Fix this, should be uint64
-	}
-
-	oracle.state.Validators[20] = &ValidatorInfo{
-		ValidatorStatus:       Active,
-		AccumulatedRewardsWei: big.NewInt(13000),
-		PendingRewardsWei:     big.NewInt(100),
-		CollateralWei:         big.NewInt(1000000),
-		WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
-		ValidatorIndex:        20,
-		ValidatorKey:          "0xc",
-	}
-
-	oracle.state.Validators[30] = &ValidatorInfo{
-		ValidatorStatus:       Active,
-		AccumulatedRewardsWei: big.NewInt(53000),
-		PendingRewardsWei:     big.NewInt(000),
-		CollateralWei:         big.NewInt(4000000),
-		WithdrawalAddress:     "0xa000000000000000000000000000000000000000",
-		ValidatorIndex:        30,
-		ValidatorKey:          "0xc",
-	}
-
-	defer os.Remove(filepath.Join(StateFileName, StateFolder))
-	defer os.RemoveAll(StateFolder)
-	oracle.SaveStateToFile()
-
-	err := oracle.LoadStateFromFile()
-	require.NoError(t, err)
-	require.Equal(t, oracle.state, oracle.state)
-}
-
 func Test_IsValidatorSubscribed(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[10] = &ValidatorInfo{
@@ -1907,7 +1861,7 @@ func Test_Handle_TODO(t *testing.T) {
 	/*
 		cfg := &Config{
 			PoolFeesAddress: "0xa",
-			PoolFeesPercent: 0,
+			PoolFeesPercentOver10000: 0,
 			CollateralInWei: big.NewInt(1000000),
 		}
 
@@ -2062,8 +2016,8 @@ func Test_ValidatorInfoSize(t *testing.T) {
 		// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
 		// 	})
 		// }
-		oracle.SaveStateToFile()
-		filePath := "oracle-data/state.gob"
+		oracle.SaveToJson()
+		filePath := "oracle-data/state.json"
 
 		// Get file information
 		fileInfo, err := os.Stat(filePath)
@@ -2149,8 +2103,8 @@ func Test_SizeMultipleOnchainState(t *testing.T) {
 	//each state contains the information of 2000 validators.
 
 	//save the state to a file
-	oracle.SaveStateToFile()
-	filePath := "oracle-data/state.gob"
+	oracle.SaveToJson()
+	filePath := "oracle-data/state.json"
 
 	// Get file information
 	fileInfo, err := os.Stat(filePath)

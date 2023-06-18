@@ -263,7 +263,7 @@ func Test_SummarizedBlock(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.Name, func(t *testing.T) {
 			oracle := NewOracle(&Config{})
-			oracle.state.Config.PoolAddress = tt.PoolAddress
+			oracle.state.PoolAddress = tt.PoolAddress
 
 			if tt.ProposerSubscribed {
 				oracle.addSubscriptionIfNotAlready(tt.ExpectedValidatorIndex, "0x", "0x")
