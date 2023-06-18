@@ -199,12 +199,6 @@ func Test_FullBlock_All(t *testing.T) {
 }
 
 func Test_SummarizedBlock(t *testing.T) {
-	// TodO: test Summarized, and copy paste from onchain_test
-	// prater.beaconcha.in/slot/5320341: another missed
-	//{ /*in->*/ "5", uint64(5320341), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(38657065851824731), big.NewInt(0), phase0.ValidatorIndex(218475), []*donation{}, false, false, VanilaBlock, big.NewInt(38657065851824731), "0x4D496CcC28058B1D74B7a19541663E21154f9c84", ""},
-
-	// prater.beaconcha.in/slot/5320330: TODO: missed block, use somewhere else
-	// { /*in->*/ "4", uint64(5320330), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(38657065851824731), big.NewInt(0), phase0.ValidatorIndex(218475), []*donation{}, false, false, VanilaBlock, big.NewInt(38657065851824731), "0x4D496CcC28058B1D74B7a19541663E21154f9c84", ""},
 
 	type test struct {
 		// Input
@@ -261,6 +255,9 @@ func Test_SummarizedBlock(t *testing.T) {
 		// non subscribed validator proposes a mev block with a wrong fee recipient (kind of ignored) most blocks are this https://prater.beaconcha.in/slot/5739722
 		// reward is calculated. not used but cheap to calculate it
 		{"12", "0x0000000000000000000000000000000000000000", false, uint64(5739722), uint64(9086717), WrongFeeRecipient, MevBlock, big.NewInt(28327464143130026), uint64(232204), "0xb1294f2c149ee1cd0b2d9dd8bd8781cb4920353623426e64eb4a915b553c4dbefea53bc8c83f6b3dcee44223bdcd3c6c", "0x8f0844fd51e31ff6bf5babe21dccf7328e19fd9f"},
+
+		// missed block
+		{"13", "0x0000000000000000000000000000000000000000", true, uint64(5320341), uint64(0), MissedProposal, UnknownRewardType, big.NewInt(0), uint64(179637), "0x8bd7e3f2896b0cdeb42dc25053086ddc2fda0afcc1a4e6b1f7a048d18d0445f71d46db067318ee0238ca6ec705e471d4", "0x653db96d58d6cce73be5e565d907d8c45bc8bff6a0f04f1a21498671ab204a"},
 	}
 
 	for _, tt := range tests {
@@ -272,7 +269,7 @@ func Test_SummarizedBlock(t *testing.T) {
 				oracle.addSubscriptionIfNotAlready(tt.ExpectedValidatorIndex, "0x", "0x")
 			}
 
-			fullBlock, err := LoadFullBlock(tt.Slot, "5", true) // TODO:
+			fullBlock, err := LoadFullBlock(tt.Slot, "5", tt.ProposerSubscribed)
 			require.NoError(t, err)
 			block := fullBlock.SummarizedBlock(oracle, tt.PoolAddress)
 

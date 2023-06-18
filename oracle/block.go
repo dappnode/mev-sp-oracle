@@ -324,18 +324,7 @@ func (b *FullBlock) GetSentRewardAndType(
 
 		// if the mev reward was sent to the pool address
 		if Equals(mevRecipient, poolAddress) {
-			// Use the EtherReceived event to verify that indeed it was sent
-			found := false
-			for _, event := range b.Events.EtherReceived {
-				if reward.Cmp(event.DonationAmount) == 0 {
-					found = true
-					wasRewardSent = true
-				}
-			}
-			if !found {
-				log.Fatal("could not find mev reward in etherReceived events: ",
-					b.Events.EtherReceived)
-			}
+			wasRewardSent = true
 		}
 
 		return reward, wasRewardSent, txType
