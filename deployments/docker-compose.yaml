@@ -33,7 +33,7 @@ services:
       #- --updater-keystore-path=/keystore
       #- --updater-keystore-pass=${UPDATER_KEYSTORE_PASS}
       - --dry-run
-      - --log-level=info
+      - --log-level=debug
     ports:
       - 7300:7300
     volumes:
