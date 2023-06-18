@@ -22,20 +22,21 @@ var skip = false
 // Not a test per se, just an util to fetch block and store them for mocking
 func Test_GetFullBlockAtSlot(t *testing.T) {
 	// Uncomment to run
-	t.Skip("Skipping test")
+	//t.Skip("Skipping test")
 
 	// Folder to store the result
 	folder := "../mock"
 
-	// Slot to fetch
-	slotToFetch := uint64(5307527)
-	fetchHeaderAndReceipts := true
+	// Config params
+	slotToFetch := uint64(5864096)                              // slot to fetch
+	fetchHeaderAndReceipts := true                              // fetch header and receipts to reconstruct tip
+	poolAddress := "0xF21fbbA423f3a893A2402d68240B219308AbCA46" // contract of address to detect events
 	// fetchReceipts := true // TODO:
 
 	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
-		PoolAddress:       "0x8f0844fd51e31ff6bf5babe21dccf7328e19fd9f",
+		PoolAddress:       poolAddress,
 	}
 	onchain, err := NewOnchain(cfgOnchain, nil)
 	require.NoError(t, err)
@@ -167,6 +168,14 @@ func Test_FetchFullBlock(t *testing.T) {
 
 			fullBlock := onchain.FetchFullBlock(tt.Slot, oracle)
 			block := fullBlock.SummarizedBlock(oracle, tt.PoolAddress)
+
+			// Serialize to json and dump to file
+			jsonData, err := json.MarshalIndent(fullBlock, "", " ")
+			require.NoError(t, err)
+			fileName := fmt.Sprintf("fullblock_slot_%d_chainid_%s%s.json", tt.Slot, "5", HasHeader(tt.ProposerSubscribed))
+			path := filepath.Join("../mock", fileName)
+			err = ioutil.WriteFile(path, jsonData, 0644)
+			require.NoError(t, err)
 
 			require.Equal(t, tt.Slot, block.Slot)
 			require.Equal(t, tt.ExpectedBlock, block.Block)

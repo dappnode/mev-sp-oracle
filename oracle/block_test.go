@@ -103,190 +103,192 @@ func Test_Getters_Capella(t *testing.T) {
 	require.Equal(t, "0x388C818CA8B9251b393131C08a736A67ccB19297", fullBlock.GetFeeRecipient())
 }
 
-// TODO: Important test donations
-//5862054, //donation normal
-//5862104, //donation via smart contract
+// This test uses real mocked blocks that can be fetched and stores with this util:
+// Test_GetFullBlockAtSlot (see onchain_test.go)
+func Test_FullBlock_All(t *testing.T) {
 
-func Test_TODOName(t *testing.T) {
-	// TODO: document that these blocks can be fetched with the test in onchain_test
-	fullBlock, err := LoadFullBlock(5307527, "5", true)
-	require.NoError(t, err)
-
-	require.Equal(t, "0x000095E79eAC4d76aab57cB2c1f091d553b36ca0", fullBlock.GetFeeRecipient())
-	mevReward, hasMev, mevRecipient := fullBlock.MevRewardInWei()
-	require.Equal(t, false, hasMev)
-	require.Equal(t, "", mevRecipient)
-	require.Equal(t, big.NewInt(0), mevReward)
-
-	proposerTip, err := fullBlock.GetProposerTip()
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(105735750887810922), proposerTip)
-}
-
-func Test_GetProposerTip(t *testing.T) {
+	type donation struct {
+		Hash   string
+		Amount *big.Int
+	}
 
 	type test struct {
 		// Input
-		Name                 string
-		BlockNumber          uint64
-		ExpectedTip          *big.Int
-		ExpectedFeeRecipient string
+		Name         string
+		Slot         uint64
+		WithHeeaders bool
+		ChainId      string
+		PoolAddress  string
+
+		// Output
+		ExpectedTip             *big.Int
+		ExpectedMevReward       *big.Int
+		ExpectedProposedIndex   phase0.ValidatorIndex
+		ExpectedDonations       []*donation
+		ExpectedHasMev          bool
+		ExpectedRewardSent      bool
+		ExpectedRewardType      RewardType
+		ExpectedReward          *big.Int
+		ExpectedFeeRecipient    string
+		ExpectedMEVFeeRecipient string
 	}
-	/*
 
-		tests := []test{
-			// subscribed validator proposes mev block with correct fee https://prater.beaconcha.in/slot/5739624
-			{}
-		}
+	tests := []test{
+		// prater.beaconcha.in/slot/5214302: vanila block, no mev, no donation, was not sent to the pool
+		{ /*in->*/ "1", uint64(5214302), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(38657065851824731), big.NewInt(0), phase0.ValidatorIndex(218475), []*donation{}, false, false, VanilaBlock, big.NewInt(38657065851824731), "0x4D496CcC28058B1D74B7a19541663E21154f9c84", ""},
 
-		for _, tt := range tests {
-			t.Run(tt.Name, func(t *testing.T) {
+		// prater.beaconcha.in/slot/5214321: mev reward, no donations, was not sent to the pool
+		{ /*in->*/ "2", uint64(5214321), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(15992505660349526), big.NewInt(15867629069461526), phase0.ValidatorIndex(252922), []*donation{}, true, false, MevBlock, big.NewInt(15867629069461526), "0x8dC847Af872947Ac18d5d63fA646EB65d4D99560", "0x4d496ccc28058b1d74b7a19541663e21154f9c84"},
 
-				//require.Equal(t, tt.ExpeectedWithCred, block.WithdrawalAddress)
-			})
-		}*/
+		// prater.beaconcha.in/slot/5307527: vanila block, no donations, reward sent to pool
+		{ /*in->*/ "3", uint64(5307527), true, "5", "0x000095E79eAC4d76aab57cB2c1f091d553b36ca0" /*expected->*/, big.NewInt(105735750887810922), big.NewInt(0), phase0.ValidatorIndex(289213), []*donation{}, false, true, VanilaBlock, big.NewInt(105735750887810922), "0x000095E79eAC4d76aab57cB2c1f091d553b36ca0", ""},
+
+		// prater.beaconcha.in/slot/5320337: vanila block, no donations, not sent to pool
+		{ /*in->*/ "4", uint64(5320337), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(41380243736782800), big.NewInt(0), phase0.ValidatorIndex(32553), []*donation{}, false, false, VanilaBlock, big.NewInt(41380243736782800), "0x4D496CcC28058B1D74B7a19541663E21154f9c84", ""},
+
+		// prater.beaconcha.in/slot/5320342: vanila block, no donations, sent to pool
+		{ /*in->*/ "5", uint64(5320342), true, "5", "0xc6e2459991BfE27cca6d86722F35da23A1E4Cb97" /*expected->*/, big.NewInt(117335955724211704), big.NewInt(0), phase0.ValidatorIndex(102472), []*donation{}, false, true, VanilaBlock, big.NewInt(117335955724211704), "0xc6e2459991BfE27cca6d86722F35da23A1E4Cb97", ""},
+
+		// prater.beaconcha.in/slot/5344344: vanila block, no donations, not sent to pool
+		{ /*in->*/ "6", uint64(5344344), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(54473697141591874), big.NewInt(0), phase0.ValidatorIndex(224284), []*donation{}, false, false, VanilaBlock, big.NewInt(54473697141591874), "0x4D496CcC28058B1D74B7a19541663E21154f9c84", ""},
+
+		// prater.beaconcha.in/slot/5862054: mev block, contains donation to pool, mev not sent to pool (the donation is a normal tx)
+		{ /*in->*/ "7", uint64(5862054), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(76416355735251731), big.NewInt(76416210831135731), phase0.ValidatorIndex(230624), []*donation{{"0xb647b7c050625d565d8466db954fb6ee2976135ee12b82b25ac308e93fe3e1f4", big.NewInt(113500000000000000)}}, true, false, MevBlock, big.NewInt(76416210831135731), "0xfC0157aA4F5DB7177830ACddB3D5a9BB5BE9cc5e", "0x388ea662ef2c223ec0b047d41bf3c0f362142ad5"},
+
+		// prater.beaconcha.in/slot/5862104: vanila block, contains donation to pool, reward did not go to pool (the donation is done via a smart contract tx aka internal)
+		{ /*in->*/ "8", uint64(5862104), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(3110023195815608), big.NewInt(0), phase0.ValidatorIndex(423933), []*donation{{"0x7446efc78c4e6bdc17d5c2266ea43415edf4aee5fb439883136f8eeeffc2f6fe", big.NewInt(43234345)}}, false, false, VanilaBlock, big.NewInt(3110023195815608), "0x94750381bE1AbA0504C666ee1DB118F68f0780D4", ""},
+
+		// https://prater.beaconcha.in/slot/5864096: mev block, no donations, mev reward was sent to pool
+		{ /*in->*/ "9", uint64(5864096), true, "5", "0xf21fbba423f3a893a2402d68240b219308abca46" /*expected->*/, big.NewInt(5759373075631516), big.NewInt(5759373075365746), phase0.ValidatorIndex(408154), []*donation{}, true, true, MevBlock, big.NewInt(5759373075365746), "0x8dC847Af872947Ac18d5d63fA646EB65d4D99560", "0xf21fbba423f3a893a2402d68240b219308abca46"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.Name, func(t *testing.T) {
+
+			fullBlock, err := LoadFullBlock(tt.Slot, tt.ChainId, tt.WithHeeaders)
+			require.NoError(t, err)
+
+			// Calculate parameters
+			proposerTip, err := fullBlock.GetProposerTip()
+			require.NoError(t, err)
+			feeRecipient := fullBlock.GetFeeRecipient()
+			proposerIndex := fullBlock.GetProposerIndex()
+			donations := fullBlock.GetDonations(tt.PoolAddress)
+			sentReward, sent, rewardType := fullBlock.GetSentRewardAndType(tt.PoolAddress, tt.WithHeeaders)
+			mevReward, mevFound, mevRecipient := fullBlock.MevRewardInWei()
+
+			// Assert
+			require.Equal(t, tt.ExpectedFeeRecipient, feeRecipient)
+			require.Equal(t, tt.ExpectedProposedIndex, proposerIndex)
+			require.Equal(t, len(tt.ExpectedDonations), len(donations))
+			for i := 0; i < len(tt.ExpectedDonations); i++ {
+				require.Equal(t, tt.ExpectedDonations[i].Hash, donations[i].Raw.TxHash.String())
+				require.Equal(t, tt.ExpectedDonations[i].Amount, donations[i].DonationAmount)
+
+			}
+			require.Equal(t, tt.ExpectedTip, proposerTip)
+			require.Equal(t, tt.ExpectedRewardSent, sent)
+			require.Equal(t, tt.ExpectedRewardType, rewardType)
+			require.Equal(t, tt.ExpectedReward, sentReward)
+			require.Equal(t, tt.ExpectedMEVFeeRecipient, mevRecipient)
+			require.Equal(t, tt.ExpectedMevReward, mevReward)
+			require.Equal(t, tt.ExpectedHasMev, mevFound)
+		})
+	}
 
 }
 
-// Proposer tip of vanila block has to be calculated by adding all manually tips
-// there is no field available, and it has to be manually recreated using all tx
-// receipts present in that block.
-func Test_GetProperTip_Mainnet_Slot_5320341(t *testing.T) {
-	// Decode a a hardcoded block/header/receipts
-	fileName := "bellatrix_slot_5320341_mainnet"
-	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionBellatrix, Bellatrix: &block}
-	myBlock := NewFullBlock(&v1.ProposerDuty{
-		Slot:           5320341,
-		ValidatorIndex: phase0.ValidatorIndex(87961),
-	}, &v1.Validator{
-		Index: 87961,
-	})
-	myBlock.SetConsensusBlock(extendedBlock)
-	myBlock.SetHeaderAndReceipts(&header, receipts)
+func Test_SummarizedBlock(t *testing.T) {
+	// TodO: test Summarized, and copy paste from onchain_test
+	// prater.beaconcha.in/slot/5320341: another missed
+	//{ /*in->*/ "5", uint64(5320341), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(38657065851824731), big.NewInt(0), phase0.ValidatorIndex(218475), []*donation{}, false, false, VanilaBlock, big.NewInt(38657065851824731), "0x4D496CcC28058B1D74B7a19541663E21154f9c84", ""},
 
-	// Get proposer tip
-	proposerTip, err := myBlock.GetProposerTip()
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(1944763730864393), proposerTip)
+	// prater.beaconcha.in/slot/5320330: TODO: missed block, use somewhere else
+	// { /*in->*/ "4", uint64(5320330), true, "5", "0xF21fbbA423f3a893A2402d68240B219308AbCA46" /*expected->*/, big.NewInt(38657065851824731), big.NewInt(0), phase0.ValidatorIndex(218475), []*donation{}, false, false, VanilaBlock, big.NewInt(38657065851824731), "0x4D496CcC28058B1D74B7a19541663E21154f9c84", ""},
+
+	type test struct {
+		// Input
+		Name               string
+		PoolAddress        string
+		ProposerSubscribed bool
+		Slot               uint64
+
+		// Output
+		ExpectedBlock          uint64
+		ExpectedBlockType      BlockType
+		ExpectedRewardType     RewardType
+		ExpectedReward         *big.Int
+		ExpectedValidatorIndex uint64
+		ExpectedValKey         string
+		ExpeectedWithCred      string
+	}
+
+	tests := []test{
+		// subscribed validator proposes mev block with correct fee https://prater.beaconcha.in/slot/5739624
+		{"1", "0xf4e8263979a89dc357d7f9f79533febc7f3e287b", true, uint64(5739624), uint64(9086632), OkPoolProposal, MevBlock, big.NewInt(23547931077241917), uint64(234515), "0xa2240e4a358a4f87dfece4c85f08b41abda91b558fe2e544885ed21163681576f41af2ec0161955c735803adb5fee910", "0x8f0844fd51e31ff6bf5babe21dccf7328e19fd9f"},
+
+		// subscribed validator proposes vanila block with correct fee https://prater.beaconcha.in/slot/5739629
+		{"2", "0x94750381be1aba0504c666ee1db118f68f0780d4", true, uint64(5739629), uint64(9086637), OkPoolProposal, VanilaBlock, big.NewInt(15960095948338108), uint64(426736), "0xb6283b7cc2eaedde6f0ced4bffb8bc99c1e9cb3de77d6be8be02bf78fa850b74ee57f6b960fc48ca0ccd4b683521f3f9", "0x59b0d71688da01057c08e4c1baa8faa629819c2a"},
+
+		// non subscribed validator proposes vanila block with correct fee https://prater.beaconcha.in/slot/5739634
+		{"3", "0xa111B576408B1CcDacA3eF26f22f082C49bcaa55", false, uint64(5739634), uint64(9086639), OkPoolProposal, VanilaBlock, big.NewInt(41035389197072885), uint64(408206), "0xa57f9cbd211d3219ac54c8f329d1e2a4c65c54978444d7e5ff71d6129dd33ebc2e26bdfd611fc391a7a84b4d43418ac0", "0xa111b576408b1ccdaca3ef26f22f082c49bcaa55"},
+
+		// non subscribed validator proposes mev block with correct fee https://prater.beaconcha.in/slot/5739644
+		{"4", "0xF4e8263979A89Dc357d7f9F79533Febc7f3e287B", false, uint64(5739644), uint64(9086648), OkPoolProposal, MevBlock, big.NewInt(37799556930427516), uint64(234604), "0xb67e026940ccc26a478dcb020767d1391ccd6dc1f66f5bee328750cbbc4eb909665f7340c58411b6c29c01bdca3951c4", "0x8f0844fd51e31ff6bf5babe21dccf7328e19fd9f"},
+
+		// subscribed validator proposes a mev block with wrong fee recipient https://prater.beaconcha.in/slot/5739624
+		{"5", "0x0000000000000000000000000000000000000000", true, uint64(5739624), uint64(9086632), WrongFeeRecipient, MevBlock, big.NewInt(23547931077241917), uint64(234515), "0xa2240e4a358a4f87dfece4c85f08b41abda91b558fe2e544885ed21163681576f41af2ec0161955c735803adb5fee910", "0x8f0844fd51e31ff6bf5babe21dccf7328e19fd9f"},
+
+		// subscribed validator proposes a vanila block with wrong fee recipient https://prater.beaconcha.in/slot/5739637
+		{"6", "0x0000000000000000000000000000000000000000", true, uint64(5739637), uint64(9086642), WrongFeeRecipient, VanilaBlock, big.NewInt(11591726353544658), uint64(468452), "0x8371d199579f91a966732bf5eaaa940ac037084f95018ddd6530f9003c6b028f0181f52b50bdbe692f49f72c6fc9ad38", "0x0158fea37a1654d872c19f8326df00b7cb07c5cf"},
+
+		// non subscribed validator proposes a block with wrong fee recipient (kind of ignored) https://prater.beaconcha.in/slot/5739637
+		{"7", "0x0000000000000000000000000000000000000000", false, uint64(5739637), uint64(9086642), WrongFeeRecipient, UnknownRewardType, big.NewInt(0), uint64(468452), "0x8371d199579f91a966732bf5eaaa940ac037084f95018ddd6530f9003c6b028f0181f52b50bdbe692f49f72c6fc9ad38", "0x0158fea37a1654d872c19f8326df00b7cb07c5cf"},
+
+		// subscribed validator misses a block https://prater.beaconcha.in/slot/5739640
+		{"8", "0x0000000000000000000000000000000000000000", true, uint64(5739640), uint64(0), MissedProposal, UnknownRewardType, big.NewInt(0), uint64(458817), "0xb3fda21f2e4d6d93432d0d70c83c81159b2c625576eadbab80a2b55538ebd54a975cdc8a5cbb3909bbbb02bd08a3a009", "0x0997fdeffd9d29710436b2155ed702d845f7061a"},
+
+		// unsubscribed validator misses a block (kind of ignored) https://prater.beaconcha.in/slot/5739640
+		{"9", "0x0000000000000000000000000000000000000000", false, uint64(5739640), uint64(0), MissedProposal, UnknownRewardType, big.NewInt(0), uint64(458817), "0xb3fda21f2e4d6d93432d0d70c83c81159b2c625576eadbab80a2b55538ebd54a975cdc8a5cbb3909bbbb02bd08a3a009", "0x0997fdeffd9d29710436b2155ed702d845f7061a"},
+
+		// subscribed validator proposes a block with correct fee recipient but BLS credentials (note: this test can fail if withdrawal is updated) https://prater.beaconcha.in/slot/5739736
+		{"10", "0xe0a2Bd4258D2768837BAa26A28fE71Dc079f84c7", true, uint64(5739736), uint64(9086730), OkPoolProposalBlsKeys, VanilaBlock, big.NewInt(12805869897561244), uint64(319479), "0xb3e1c989c0d27824da29480a4bc09f4c561c2ce75d0a2ba7b3a57480d93d5ddb627d5fa0923402fd33145ded5eaa9d98", "0x95068c3ce9e71d7d4ca51df4230045e150d28d6c49727cb0d994d50b1cdeff"},
+
+		// non subscribed validator proposes a vanila block with a wrong fee recipient (kind of ignored) most blocks are this https://prater.beaconcha.in/slot/5739707
+		// reward is not calculated as its very expensive
+		{"11", "0x0000000000000000000000000000000000000000", false, uint64(5739707), uint64(9086704), WrongFeeRecipient, UnknownRewardType, big.NewInt(0), uint64(474819), "0xa20fb16d127a22c7502e70db4eef33d1f11070d8bb232c91bf2b8beeadae8836d02774f7b5e96893ed80e9c7020e0d2a", "0x5bdd7b7a48d146b23969218eac5f152760bc072e"},
+
+		// non subscribed validator proposes a mev block with a wrong fee recipient (kind of ignored) most blocks are this https://prater.beaconcha.in/slot/5739722
+		// reward is calculated. not used but cheap to calculate it
+		{"12", "0x0000000000000000000000000000000000000000", false, uint64(5739722), uint64(9086717), WrongFeeRecipient, MevBlock, big.NewInt(28327464143130026), uint64(232204), "0xb1294f2c149ee1cd0b2d9dd8bd8781cb4920353623426e64eb4a915b553c4dbefea53bc8c83f6b3dcee44223bdcd3c6c", "0x8f0844fd51e31ff6bf5babe21dccf7328e19fd9f"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.Name, func(t *testing.T) {
+			oracle := NewOracle(&Config{})
+			oracle.state.Config.PoolAddress = tt.PoolAddress
+
+			if tt.ProposerSubscribed {
+				oracle.addSubscriptionIfNotAlready(tt.ExpectedValidatorIndex, "0x", "0x")
+			}
+
+			fullBlock, err := LoadFullBlock(tt.Slot, "5", true) // TODO:
+			require.NoError(t, err)
+			block := fullBlock.SummarizedBlock(oracle, tt.PoolAddress)
+
+			require.Equal(t, tt.Slot, block.Slot)
+			require.Equal(t, tt.ExpectedBlock, block.Block)
+			require.Equal(t, tt.ExpectedBlockType, block.BlockType)
+			require.Equal(t, tt.ExpectedRewardType, block.RewardType)
+			require.Equal(t, tt.ExpectedReward, block.Reward)
+			require.Equal(t, tt.ExpectedValidatorIndex, block.ValidatorIndex)
+			require.Equal(t, tt.ExpectedValKey, block.ValidatorKey)
+			require.Equal(t, tt.ExpeectedWithCred, block.WithdrawalAddress)
+		})
+	}
 }
 
-// This block contains a tx with a smart contract deployment
-// Tests if the fee is calculated properly as these tx
-// are a bit different.
-func Test_GetProperTip_Mainnet_Slot_5344344(t *testing.T) {
-	fileName := "bellatrix_slot_5344344_mainnet"
-	block, header, receipts := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionBellatrix, Bellatrix: &block}
-	myBlock := NewFullBlock(&v1.ProposerDuty{
-		Slot:           5344344,
-		ValidatorIndex: phase0.ValidatorIndex(356208),
-	}, &v1.Validator{
-		Index: 356208,
-	})
-	myBlock.SetConsensusBlock(extendedBlock)
-	myBlock.SetHeaderAndReceipts(&header, receipts)
-
-	mevReward, mev, mevFeeRecipient := myBlock.MevRewardInWei()
-	require.Equal(t, big.NewInt(99952842017043014), mevReward)
-	require.Equal(t, mev, true)
-	require.Equal(t, mevFeeRecipient, "0x388c818ca8b9251b393131c08a736a67ccb19297")
-
-	proposerTip, err := myBlock.GetProposerTip()
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(95434044627649514), proposerTip)
-}
-
-func Test_GetProperTip_Goerli_Slot_5214302(t *testing.T) {
-	fileName := "capella_slot_5214302_goerli"
-	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
-	extendedBlock := spec.VersionedSignedBeaconBlock{Version: spec.DataVersionCapella, Capella: &block}
-	myBlock := NewFullBlock(&v1.ProposerDuty{
-		Slot:           5214302,
-		ValidatorIndex: phase0.ValidatorIndex(218475),
-	}, &v1.Validator{
-		Index: 218475,
-	})
-	myBlock.SetConsensusBlock(&extendedBlock)
-	myBlock.SetHeaderAndReceipts(&header, receipts)
-
-	proposerTip, err := myBlock.GetProposerTip()
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(38657065851824731), proposerTip)
-}
-
-func Test_GetMevReward_Goerli_Slot_5214321(t *testing.T) {
-	fileName := "capella_slot_5214321_goerli"
-	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionCapella, Capella: &block}
-	myBlock := NewFullBlock(&v1.ProposerDuty{
-		Slot:           5214321,
-		ValidatorIndex: phase0.ValidatorIndex(252922),
-	}, &v1.Validator{
-		Index: 252922,
-	})
-	myBlock.SetConsensusBlock(extendedBlock)
-	myBlock.SetHeaderAndReceipts(&header, receipts)
-
-	// Gets the MEV reward that was sent to a specific address
-	mevReward, mev, mevFeeRecipient := myBlock.MevRewardInWei()
-	require.Equal(t, big.NewInt(15867629069461526), mevReward)
-	require.Equal(t, mev, true)
-	require.Equal(t, mevFeeRecipient, "0x4d496ccc28058b1d74b7a19541663e21154f9c84")
-
-	// This block was a MEV block, but we can also test the tip
-	proposerTip, err := myBlock.GetProposerTip()
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(15992505660349526), proposerTip)
-}
-
-func Test_GetMevReward_Goerli_Slot_5307527(t *testing.T) {
-	// This block contains a tx to 0x553bd5a94bcc09ffab6550274d5db140a95ae9bc
-	// but its a normal tx not an MEV one. Detect it doesnt produce a false positive
-	// https://prater.beaconcha.in/slot/5307527
-	fileName := "capella_slot_5307527_goerli"
-	block, header, receipts := LoadBlockHeaderReceiptsCapella(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionCapella, Capella: &block}
-	myBlock := NewFullBlock(&v1.ProposerDuty{
-		Slot:           5307527,
-		ValidatorIndex: phase0.ValidatorIndex(289213),
-	}, &v1.Validator{
-		Index: 289213,
-	})
-	myBlock.SetConsensusBlock(extendedBlock)
-	myBlock.SetHeaderAndReceipts(&header, receipts)
-
-	// No mev reward
-	_, mev, mevFeeRecipient := myBlock.MevRewardInWei()
-	require.Equal(t, mev, false)
-	require.Equal(t, mevFeeRecipient, "")
-
-	// This block was a MEV block, but we can also test the tip
-	proposerTip, err := myBlock.GetProposerTip()
-	require.NoError(t, err)
-	require.Equal(t, big.NewInt(105735750887810922), proposerTip)
-}
-
-func Test_MevReward_Slot_5320342(t *testing.T) {
-	fileName := "bellatrix_slot_5320342_mainnet"
-	block, _, _ := LoadBlockHeaderReceiptsBellatrix(t, fileName)
-	extendedBlock := &spec.VersionedSignedBeaconBlock{Version: spec.DataVersionBellatrix, Bellatrix: &block}
-	myBlock := NewFullBlock(&v1.ProposerDuty{
-		Slot:           5320342,
-		ValidatorIndex: phase0.ValidatorIndex(42156),
-	}, &v1.Validator{
-		Index: 42156,
-	})
-	myBlock.SetConsensusBlock(extendedBlock)
-
-	// Check that mev reward is correct and sent to the address
-	mevReward, mev, mevFeeRecipient := myBlock.MevRewardInWei()
-	require.Equal(t, big.NewInt(65184406499820485), mevReward)
-	require.Equal(t, mev, true)
-	require.Equal(t, mevFeeRecipient, "0xf8636377b7a998b51a3cf2bd711b870b3ab0ad56")
-}
-
-func Test_Marashal(t *testing.T) {
+func Test_Marashal_FullBlock(t *testing.T) {
 
 	// Creates some test data to mock
 	proposalDuty := &v1.ProposerDuty{
@@ -417,57 +419,4 @@ func LoadFullBlock(slotNumber uint64, chainId string, hasHeaders bool) (*FullBlo
 	}
 
 	return &fullBlock, nil
-}
-
-// TODO: Remove, deprecated
-// Util to load from file
-func LoadBlockHeaderReceiptsBellatrix(t *testing.T, file string) (bellatrix.SignedBeaconBlock, types.Header, []*types.Receipt) {
-	blockJson, err := os.Open("../mock/block_" + file)
-	require.NoError(t, err)
-	blockByte, err := ioutil.ReadAll(blockJson)
-	require.NoError(t, err)
-	var bellatrixblock bellatrix.SignedBeaconBlock
-	err = bellatrixblock.UnmarshalJSON(blockByte)
-	require.NoError(t, err)
-
-	var headerBlock types.Header
-	headerJson, err := os.Open("../mock/header_" + file)
-	headerByte, err := ioutil.ReadAll(headerJson)
-	err = headerBlock.UnmarshalJSON(headerByte)
-	require.NoError(t, err)
-
-	var txReceipts []*types.Receipt
-	txReceiptsJson, err := os.Open("../mock/txreceipts_" + file)
-	txReceiptsByte, err := ioutil.ReadAll(txReceiptsJson)
-	err = json.Unmarshal(txReceiptsByte, &txReceipts)
-	require.NoError(t, err)
-
-	return bellatrixblock, headerBlock, txReceipts
-}
-
-func LoadBlockHeaderReceiptsCapella(t *testing.T, file string) (capella.SignedBeaconBlock, types.Header, []*types.Receipt) {
-	blockJson, err := os.Open("../mock/block_" + file)
-	require.NoError(t, err)
-	blockByte, err := ioutil.ReadAll(blockJson)
-	require.NoError(t, err)
-	var capellaBlock capella.SignedBeaconBlock
-	err = capellaBlock.UnmarshalJSON(blockByte)
-	require.NoError(t, err)
-
-	var headerBlock types.Header
-	headerJson, err := os.Open("../mock/header_" + file)
-	require.NoError(t, err)
-	fmt.Println("jeader", headerJson)
-	headerByte, err := ioutil.ReadAll(headerJson)
-	require.NoError(t, err)
-	err = headerBlock.UnmarshalJSON(headerByte)
-	require.NoError(t, err)
-
-	var txReceipts []*types.Receipt
-	txReceiptsJson, err := os.Open("../mock/txreceipts_" + file)
-	txReceiptsByte, err := ioutil.ReadAll(txReceiptsJson)
-	err = json.Unmarshal(txReceiptsByte, &txReceipts)
-	require.NoError(t, err)
-
-	return capellaBlock, headerBlock, txReceipts
 }

@@ -302,7 +302,9 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 	return big.NewInt(0), false, ""
 }
 
-// Returns if the address received any reward, its amount and its type
+// Returns if the address received any reward, its amount and its type. A reward
+// can be i) mev (MEV reward) or ii) vanila (just fees as per EIP1559)
+// For the oracle, a reward is either one type or the other. It cannot be both
 func (b *FullBlock) GetSentRewardAndType(
 	poolAddress string,
 	isSubscriber bool) (*big.Int, bool, RewardType) {
@@ -311,10 +313,37 @@ func (b *FullBlock) GetSentRewardAndType(
 	var txType RewardType = UnknownRewardType
 	var wasRewardSent bool = false
 
-	// TODO: Wondering if I could run the mevReward first as its cheaper
+	// i) check if mev reward (first as its cheaper to check)
+	mevReward, mevPresent, mevRecipient := b.MevRewardInWei()
 
-	// We only calculate the tip for automatic subscribers or subscribed validators
-	// since its very expensive to calculate the tip for block we are not interested
+	if mevPresent {
+		// there is mev, store its value and set type
+		txType = MevBlock
+		reward = mevReward
+		wasRewardSent = false
+
+		// if the mev reward was sent to the pool address
+		if Equals(mevRecipient, poolAddress) {
+			// Use the EtherReceived event to verify that indeed it was sent
+			found := false
+			for _, event := range b.Events.EtherReceived {
+				if reward.Cmp(event.DonationAmount) == 0 {
+					found = true
+					wasRewardSent = true
+				}
+			}
+			if !found {
+				log.Fatal("could not find mev reward in etherReceived events: ",
+					b.Events.EtherReceived)
+			}
+		}
+
+		return reward, wasRewardSent, txType
+	}
+
+	// ii) check if vanila reward (calculating this is expensive as requires headers)
+	// so its done only if needed. Note that this reward does not trigger EtherReceived
+	// events, as its built in the protocol
 	if Equals(b.GetFeeRecipient(), poolAddress) || isSubscriber {
 		vanilaReward, err := b.GetProposerTip()
 		if err != nil {
@@ -325,21 +354,12 @@ func (b *FullBlock) GetSentRewardAndType(
 			wasRewardSent = true
 		}
 		txType = VanilaBlock
+
+		// This reward is only set here, otherwise we dont realy care about it
+		// and its expensive to calculate as it requires the headers
 		reward = vanilaReward
 	}
 
-	// possible mev block
-	var mevReward *big.Int = big.NewInt(0)
-	mevReward, mevPresent, mevRecipient := b.MevRewardInWei()
-
-	if mevPresent {
-		txType = MevBlock
-		reward = mevReward
-	}
-
-	if mevPresent && Equals(mevRecipient, poolAddress) {
-		wasRewardSent = true
-	}
 	return reward, wasRewardSent, txType
 }
 
