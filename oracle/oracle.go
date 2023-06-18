@@ -96,9 +96,10 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 			or.state.NextSlotToProcess, " ", or.state.LatestProcessedSlot))
 	}
 
-	// TODO: Debug print etherReceived events. source of truth for rewards + vanila block
-
-	// TODO: Wondering if i should store the FullBlock
+	err := or.validateFullBlockConfig(fullBlock, or.cfg)
+	if err != nil {
+		return 0, errors.Wrap(err, "Error validating full block config")
+	}
 
 	summarizedBlock := fullBlock.SummarizedBlock(or, or.cfg.PoolAddress)
 	blockDonations := fullBlock.GetDonations(or.cfg.PoolAddress)
@@ -142,6 +143,43 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 		or.state.LatestProcessedBlock = summarizedBlock.Block
 	}
 	return processedSlot, nil
+}
+
+func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) error {
+	// We use the following events to validate that the config has not changed. Dynamic
+	// parameters are not supported.
+	// UpdatePoolFee: Indicates the cut in %*100 the pool gets
+	// PoolFeeRecipient: Indicates the address that receives the pool fees
+	// CheckpointSlotSize: Indicates the size of the checkpoint in slots
+	// UpdateSubscriptionCollateral: Indicates the amount of ETH required to subscribe
+	if len(fullBlock.Events.UpdatePoolFee) > 1 ||
+		len(fullBlock.Events.PoolFeeRecipient) > 1 ||
+		len(fullBlock.Events.CheckpointSlotSize) > 1 ||
+		len(fullBlock.Events.UpdateSubscriptionCollateral) > 1 {
+		return errors.New("more than one event of the same type in the same block, weird")
+	}
+
+	if len(fullBlock.Events.UpdatePoolFee) != 0 && big.NewInt(int64(config.PoolFeesPercent)).Cmp(fullBlock.Events.UpdatePoolFee[0].NewPoolFee) != 0 {
+		return errors.New(fmt.Sprintf("pool fee has changed. config: %d, block: %d",
+			config.PoolFeesPercent, fullBlock.Events.UpdatePoolFee[0].NewPoolFee))
+	}
+
+	if len(fullBlock.Events.PoolFeeRecipient) != 0 && Equals(config.PoolFeesAddress, fullBlock.Events.PoolFeeRecipient[0].NewPoolFeeRecipient.String()) {
+		return errors.New(fmt.Sprintf("pool fee recipient has changed. config: %s, block: %s",
+			config.PoolFeesAddress, fullBlock.Events.PoolFeeRecipient[0].NewPoolFeeRecipient.String()))
+	}
+
+	if len(fullBlock.Events.CheckpointSlotSize) != 0 && config.CheckPointSizeInSlots != fullBlock.Events.CheckpointSlotSize[0].NewCheckpointSlotSize {
+		return errors.New(fmt.Sprintf("checkpoint size has changed. config: %d, block: %d",
+			config.CheckPointSizeInSlots, fullBlock.Events.CheckpointSlotSize[0].NewCheckpointSlotSize))
+	}
+
+	if len(fullBlock.Events.UpdateSubscriptionCollateral) != 0 && config.CollateralInWei.Cmp(fullBlock.Events.UpdateSubscriptionCollateral[0].NewSubscriptionCollateral) != 0 {
+		return errors.New(fmt.Sprintf("subscription collateral has changed. config: %d, block: %d",
+			config.CollateralInWei, fullBlock.Events.UpdateSubscriptionCollateral[0].NewSubscriptionCollateral))
+	}
+
+	return nil
 }
 
 func (or *Oracle) SaveToJson() error {

@@ -729,18 +729,38 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 			log.Fatal("failed getting unsubscribe validator events: ", err)
 		}
 
+		updatePoolFee, err := o.GetUpdatePoolFeeEvents(fullBlock.GetBlockNumber())
+		if err != nil {
+			log.Fatal("failed getting update pool fee events: ", err)
+		}
+
+		poolFeeRecipient, err := o.GetPoolFeeRecipientEvents(fullBlock.GetBlockNumber())
+		if err != nil {
+			log.Fatal("failed getting pool fee recipient events: ", err)
+		}
+
+		checkpointSlotSize, err := o.GetCheckpointSlotSizeEvents(fullBlock.GetBlockNumber())
+		if err != nil {
+			log.Fatal("failed getting checkpoint slot size events: ", err)
+		}
+
+		updateSubscriptionCollateral, err := o.GetUpdateSubscriptionCollateralEvents(fullBlock.GetBlockNumber())
+		if err != nil {
+			log.Fatal("failed getting update subscription collateral events: ", err)
+		}
+
 		// Not all events are fetched as they are not needed
 		events := &Events{
 			EtherReceived:      etherReceived,
 			SubscribeValidator: subscribeValidator,
 			//ClaimRewards: claimRewards,
-			//SetRewardRecipient: setRewardRecipient,    // TODO:
+			//SetRewardRecipient: setRewardRecipient,
 			UnsubscribeValidator: unsubscribeValidator,
 			//InitSmoothingPool: initSmoothingPool,
-			//UpdatePoolFee: updatePoolFee,              // TODO:
-			//PoolFeeRecipient: poolFeeRecipient,        // TODO:
-			//CheckpointSlotSize: checkpointSlotSize,    // TODO:
-			//UpdateSubscriptionCollateral: updateSubscriptionCollateral, // TODO:
+			UpdatePoolFee:                updatePoolFee,
+			PoolFeeRecipient:             poolFeeRecipient,
+			CheckpointSlotSize:           checkpointSlotSize,
+			UpdateSubscriptionCollateral: updateSubscriptionCollateral,
 			//SubmitReport: submitReport,
 			//ReportConsolidated: reportConsolidated,
 			//UpdateQuorum: updateQuorum,
@@ -1039,32 +1059,140 @@ func (o *Onchain) GetUpdatePoolFeeEvents(
 	blockNumber uint64,
 	opts ...retry.Option) ([]*contract.ContractUpdatePoolFee, error) {
 
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractUpdatePoolFeeIterator
+
+	err = retry.Do(func() error {
+		itr, err = o.Contract.FilterUpdatePoolFee(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt GetUpdatePoolFeeEvents for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return err
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get UpdatePoolFeeEvents events")
+	}
+
 	var events []*contract.ContractUpdatePoolFee
-	log.Fatal("Not implemented: GetUpdatePoolFeeEvents it not implemented")
+	for itr.Next() {
+		events = append(events, itr.Event)
+	}
+	err = itr.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close ContractUpdatePoolFee iterator")
+	}
 	return events, nil
 }
 func (o *Onchain) GetPoolFeeRecipientEvents(
 	blockNumber uint64,
 	opts ...retry.Option) ([]*contract.ContractUpdatePoolFeeRecipient, error) {
 
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractUpdatePoolFeeRecipientIterator
+
+	err = retry.Do(func() error {
+		itr, err = o.Contract.FilterUpdatePoolFeeRecipient(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt GetPoolFeeRecipientEvents for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return err
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get PoolFeeRecipient events")
+	}
+
 	var events []*contract.ContractUpdatePoolFeeRecipient
-	log.Fatal("Not implemented: GetPoolFeeRecipientEvents it not implemented")
+	for itr.Next() {
+		events = append(events, itr.Event)
+	}
+	err = itr.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close ContractUpdatePoolFeeRecipient iterator")
+	}
 	return events, nil
 }
 func (o *Onchain) GetCheckpointSlotSizeEvents(
 	blockNumber uint64,
 	opts ...retry.Option) ([]*contract.ContractUpdateCheckpointSlotSize, error) {
 
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractUpdateCheckpointSlotSizeIterator
+
+	err = retry.Do(func() error {
+		itr, err = o.Contract.FilterUpdateCheckpointSlotSize(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt GetCheckpointSlotSizeEvents for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return err
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get CheckpointSlotSize events")
+	}
+
 	var events []*contract.ContractUpdateCheckpointSlotSize
-	log.Fatal("Not implemented: GetCheckpointSlotSizeEvents it not implemented")
+	for itr.Next() {
+		events = append(events, itr.Event)
+	}
+	err = itr.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close ContractUpdateCheckpointSlotSize iterator")
+	}
 	return events, nil
 }
 func (o *Onchain) GetUpdateSubscriptionCollateralEvents(
 	blockNumber uint64,
 	opts ...retry.Option) ([]*contract.ContractUpdateSubscriptionCollateral, error) {
 
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
+
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractUpdateSubscriptionCollateralIterator
+
+	err = retry.Do(func() error {
+		itr, err = o.Contract.FilterUpdateSubscriptionCollateral(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt GetUpdateSubscriptionCollateralEvents for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return err
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get UpdateSubscriptionCollateral events")
+	}
+
 	var events []*contract.ContractUpdateSubscriptionCollateral
-	log.Fatal("Not implemented: GetUpdateSubscriptionCollateralEvents it not implemented")
+	for itr.Next() {
+		events = append(events, itr.Event)
+	}
+	err = itr.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close ContractUpdateSubscriptionCollateral iterator")
+	}
 	return events, nil
 }
 func (o *Onchain) GetSubmitReportEvents(
