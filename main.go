@@ -22,22 +22,27 @@ import (
 var SlotsInEpoch = uint64(32)
 
 func main() {
-	customFormatter := new(log.TextFormatter)
-	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
-	customFormatter.FullTimestamp = true
-	log.SetFormatter(customFormatter)
-
-	// TODO: Add flag to enable this. Logs the line and file of the log
-	//log.SetReportCaller(true)
-
-	log.Info("Starting smoothing pool oracle")
-	log.Info("Version: ", config.ReleaseVersion)
-
 	// Load config from cli
 	cliCfg, err := config.NewCliConfig()
 	if err != nil {
 		log.Fatal("error parsing the cli config: ", err)
 	}
+
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter.FullTimestamp = true
+	log.SetFormatter(customFormatter)
+	//log.SetReportCaller(true)
+
+	log.Info("Starting smoothing pool oracle")
+	log.Info("Version: ", config.ReleaseVersion)
+
+	// Set log-level
+	logLevel, err := log.ParseLevel(cliCfg.LogLevel)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.SetLevel(logLevel)
 
 	// Load key with rights to update the oracle (if not dry run)
 	var updaterKey *ecdsa.PrivateKey
@@ -186,11 +191,10 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
 
 		} else {
-			/*log.WithFields(log.Fields{
-				"FinalizedSlot":   finalizedSlot,
-				"FinalizedEpoch":  finalizedEpoch,
-				"OracleStateSlot": oracleInstance.State.LatestSlot,
-			}).Info("Waiting for new finalized slot")*/
+			log.WithFields(log.Fields{
+				"ChainFinalizedSlot": finalizedSlot,
+				"OracleStateSlot":    oracleInstance.State().LatestProcessedSlot,
+			}).Debug("Waiting for new finalized slot")
 			// No new finalized slot, wait a bit
 			time.Sleep(1 * time.Minute)
 			continue

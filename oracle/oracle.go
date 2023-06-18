@@ -911,8 +911,20 @@ func (or *Oracle) addSubscriptionIfNotAlready(valIndex uint64, WithdrawalAddress
 }
 
 func (or *Oracle) consolidateBalance(valIndex uint64) {
+
+	beforePending := or.state.Validators[valIndex].PendingRewardsWei
+	beforeAccumulated := or.state.Validators[valIndex].AccumulatedRewardsWei
+
 	or.state.Validators[valIndex].AccumulatedRewardsWei.Add(or.state.Validators[valIndex].AccumulatedRewardsWei, or.state.Validators[valIndex].PendingRewardsWei)
 	or.state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
+
+	log.WithFields(log.Fields{
+		"AccumulatedAfter":  or.state.Validators[valIndex].AccumulatedRewardsWei,
+		"AccumulatedBefore": beforeAccumulated,
+		"PendingAfter":      or.state.Validators[valIndex].PendingRewardsWei,
+		"PendingBefore":     beforePending,
+		"ValIndex":          valIndex,
+	}).Debug("Consolidating balance")
 }
 
 func (or *Oracle) getEligibleValidators() []uint64 {
@@ -990,25 +1002,52 @@ func (or *Oracle) increaseAllPendingRewards(
 }
 
 func (or *Oracle) increaseValidatorPendingRewards(valIndex uint64, reward *big.Int) {
+	beforePending := or.state.Validators[valIndex].PendingRewardsWei
 	or.state.Validators[valIndex].PendingRewardsWei.Add(or.state.Validators[valIndex].PendingRewardsWei, reward)
+
+	log.WithFields(log.Fields{
+		"PendingAfter":  or.state.Validators[valIndex].PendingRewardsWei,
+		"PendingBefore": beforePending,
+		"RewardShare":   reward,
+		"ValIndex":      valIndex,
+	}).Debug("Increasing validator pending rewards")
 }
 
 func (or *Oracle) increaseValidatorAccumulatedRewards(valIndex uint64, reward *big.Int) {
+	accumulatedBefore := or.state.Validators[valIndex].AccumulatedRewardsWei
+
 	or.state.Validators[valIndex].AccumulatedRewardsWei.Add(or.state.Validators[valIndex].AccumulatedRewardsWei, reward)
+
+	log.WithFields(log.Fields{
+		"AccumulatedAfter":  or.state.Validators[valIndex].PendingRewardsWei,
+		"AccumulatedBefore": accumulatedBefore,
+		"RewardShare":       reward,
+		"ValIndex":          valIndex,
+	}).Debug("Increasing validator accumulated rewards")
 }
 
 func (or *Oracle) sendRewardToPool(reward *big.Int) {
+
+	poolAccumulatedBefore := or.state.PoolAccumulatedFees
 	or.state.PoolAccumulatedFees.Add(or.state.PoolAccumulatedFees, reward)
+
+	log.WithFields(log.Fields{
+		"PoolAccumulatedBefore": poolAccumulatedBefore,
+		"PoolAccumulatedAfter":  or.state.PoolAccumulatedFees,
+		"RewardShare":           reward,
+	}).Debug("Sending reward cut to pool reward address")
 }
 
 func (or *Oracle) resetPendingRewards(valIndex uint64) {
+	log.WithFields(log.Fields{
+		"PendingRewardsBefore": or.state.Validators[valIndex].PendingRewardsWei,
+		"ValIndex":             valIndex,
+	}).Debug("Resetting pending rewards")
 	or.state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
 }
 
-// TODO: Remove this and get the merkle tree from somewhere else. See stored state
 func (or *Oracle) getMerkleRootIfAny() (string, bool) {
 	mk := NewMerklelizer()
-	// TODO: returning orderedRawLeafs as a quick workaround to get the proofs
 	_, _, tree, enoughData := mk.GenerateTreeFromState(or.state)
 	if !enoughData {
 		return "", enoughData
