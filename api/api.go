@@ -684,30 +684,35 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 		return
 	}
 
-	// Get the merkle root stored onchain
-	contractRoot, err := m.Onchain.GetContractMerkleRoot(apiRetryOpts...)
+	contractRoot, contractSlot, err := m.Onchain.GetOnchainSlotAndRoot(apiRetryOpts...)
 	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not get contract merkle root: "+err.Error())
+		m.respondError(w, http.StatusInternalServerError, "could not get onchain slot and root: "+err.Error())
+		return
+	}
+
+	_, found := m.oracle.State().CommitedStates[contractSlot]
+	if !found {
+		m.respondError(w, http.StatusInternalServerError, "could not find onchain slot in oracle state: "+strconv.FormatUint(contractSlot, 10))
 		return
 	}
 
 	// Check if the oracle root matches the one offchain
-	oracleLatestRoot := m.oracle.State().LatestCommitedState.MerkleRoot
-	if contractRoot != oracleLatestRoot {
+	if contractRoot != m.oracle.State().CommitedStates[contractSlot].MerkleRoot {
 		m.respondError(w, http.StatusInternalServerError,
-			"contract merkle root does not match oracle state: "+contractRoot+" vs "+oracleLatestRoot)
+			"contract merkle root does not match oracle state: "+
+				contractRoot+" vs "+m.oracle.State().CommitedStates[contractSlot].MerkleRoot)
 		return
 	}
 
 	// Get the proofs of this withdrawal address (to be used onchain to claim rewards)
-	proofs, proofFound := m.oracle.State().LatestCommitedState.Proofs[withdrawalAddress]
+	proofs, proofFound := m.oracle.State().CommitedStates[contractSlot].Proofs[withdrawalAddress]
 	if !proofFound {
 		m.respondError(w, http.StatusBadRequest, "could not find proof for WithdrawalAddress: "+withdrawalAddress)
 		return
 	}
 
 	// Get the leafs of this withdrawal address (to be used onchain to claim rewards)
-	leafs, leafsFound := m.oracle.State().LatestCommitedState.Leafs[withdrawalAddress]
+	leafs, leafsFound := m.oracle.State().CommitedStates[contractSlot].Leafs[withdrawalAddress]
 	if !leafsFound {
 		m.respondError(w, http.StatusBadRequest, "could not find leafs for WithdrawalAddress: "+withdrawalAddress)
 		return
@@ -715,7 +720,7 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 	// Get validators that are registered to this withdrawal address in the pool
 	registeredValidators := make([]uint64, 0)
-	for valIndex, validator := range m.oracle.State().LatestCommitedState.Validators {
+	for valIndex, validator := range m.oracle.State().CommitedStates[contractSlot].Validators {
 		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
 			registeredValidators = append(registeredValidators, valIndex)
 		}
@@ -729,7 +734,7 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 	totalPending := big.NewInt(0)
 
-	for _, validator := range m.oracle.State().LatestCommitedState.Validators {
+	for _, validator := range m.oracle.State().CommitedStates[contractSlot].Validators {
 		if strings.ToLower(validator.WithdrawalAddress) == strings.ToLower(withdrawalAddress) {
 			totalPending.Add(totalPending, validator.PendingRewardsWei)
 		}
@@ -738,53 +743,14 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 	m.respondOK(w, httpOkProofs{
 		LeafWithdrawalAddress:      leafs.WithdrawalAddress,
 		LeafAccumulatedBalance:     leafs.AccumulatedBalanceWei.String(),
-		MerkleRoot:                 m.oracle.State().LatestCommitedState.MerkleRoot,
-		CheckpointSlot:             m.oracle.State().LatestCommitedState.Slot,
+		MerkleRoot:                 m.oracle.State().CommitedStates[contractSlot].MerkleRoot,
+		CheckpointSlot:             m.oracle.State().CommitedStates[contractSlot].Slot,
 		Proofs:                     proofs,
 		RegisteredValidators:       registeredValidators,
 		TotalAccumulatedRewardsWei: leafs.AccumulatedBalanceWei.String(),
 		ClaimableRewardsWei:        new(big.Int).Sub(leafs.AccumulatedBalanceWei, claimed).String(),
 		AlreadyClaimedRewardsWei:   claimed.String(),
 		PendingRewardsWei:          totalPending.String(),
-	})
-}
-
-func (m *ApiService) handleLatestMerkleRoot(w http.ResponseWriter, req *http.Request) {
-	// This is the latest merkle root tracked from the oracle.
-	//oracleMerkleRoot := "0x" + m.OracleState.LatestCommitedState.MerkleRoot
-
-	contractMerkleRoot, err := m.Onchain.GetContractMerkleRoot(apiRetryOpts...)
-	if err != nil {
-		m.respondError(w, http.StatusBadRequest, "could not get latest merkle root from chain")
-		return
-	}
-	m.respondOK(w, httpOkMerkleRoot{
-		MerkleRoot: contractMerkleRoot,
-	})
-}
-
-func (m *ApiService) handleValidatorOnchainStateByIndex(w http.ResponseWriter, req *http.Request) {
-	vars := mux.Vars(req)
-	valIndex, err := strconv.ParseUint(vars["valindex"], 10, 64)
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not parse valIndex: "+err.Error())
-		return
-	}
-
-	// We look into the LatestCommitedState, since its whats its onchain
-	valState, found := m.oracle.State().LatestCommitedState.Validators[uint64(valIndex)]
-	if !found {
-		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("validator index not tracked in the oracle: %d", valIndex))
-		return
-	}
-	m.respondOK(w, httpOkValidatorState{
-		ValidatorStatus:       valState.ValidatorStatus.String(),
-		AccumulatedRewardsWei: valState.AccumulatedRewardsWei.String(),
-		PendingRewardsWei:     valState.PendingRewardsWei.String(),
-		CollateralWei:         valState.CollateralWei.String(),
-		WithdrawalAddress:     valState.WithdrawalAddress,
-		ValidatorIndex:        valState.ValidatorIndex,
-		ValidatorKey:          valState.ValidatorKey,
 	})
 }
 

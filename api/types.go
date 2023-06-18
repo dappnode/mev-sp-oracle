@@ -74,16 +74,6 @@ type httpOkMemoryStatistics struct {
 	TotalWrongFeeBlocks        uint64 `json:"total_wrongfee_blocks"`
 }
 
-type httpOkValidatorState struct {
-	ValidatorStatus       string `json:"status"`
-	AccumulatedRewardsWei string `json:"accumulated_rewards_wei"`
-	PendingRewardsWei     string `json:"pending_rewards_wei"`
-	CollateralWei         string `json:"collateral_rewards_wei"`
-	WithdrawalAddress     string `json:"withdrawal_address"`
-	ValidatorIndex        uint64 `json:"validator_index"`
-	ValidatorKey          string `json:"validator_key"`
-}
-
 type httpOkProofs struct {
 	LeafWithdrawalAddress      string   `json:"leaf_withdrawal_address"`
 	LeafAccumulatedBalance     string   `json:"leaf_accumulated_balance"`

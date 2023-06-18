@@ -1,0 +1,44 @@
+{
+ "consensus_duty": {
+  "pubkey": "0x8bd7e3f2896b0cdeb42dc25053086ddc2fda0afcc1a4e6b1f7a048d18d0445f71d46db067318ee0238ca6ec705e471d4",
+  "slot": "5320341",
+  "validator_index": "179637"
+ },
+ "validator": {
+  "index": "179637",
+  "balance": "32149588980",
+  "status": "active_ongoing",
+  "validator": {
+   "pubkey": "0x8bd7e3f2896b0cdeb42dc25053086ddc2fda0afcc1a4e6b1f7a048d18d0445f71d46db067318ee0238ca6ec705e471d4",
+   "withdrawal_credentials": "0x00653db96d58d6cce73be5e565d907d8c45bc8bff6a0f04f1a21498671ab204a",
+   "effective_balance": "32000000000",
+   "slashed": false,
+   "activation_eligibility_epoch": "0",
+   "activation_epoch": "0",
+   "exit_epoch": "18446744073709551615",
+   "withdrawable_epoch": "18446744073709551615"
+  }
+ },
+ "consensus_block": null,
+ "execution_header": null,
+ "execution_receipts": null,
+ "events": {
+  "ether_received_events": [],
+  "subscribe_validator_events": [],
+  "claim_rewards_events": [],
+  "set_reward_recipient_events": [],
+  "unsubscribe_validator_events": [],
+  "init_smoothing_pool_events": [],
+  "update_pool_fee_events": [],
+  "pool_fee_recipient_events": [],
+  "checkpoint_slot_size_events": [],
+  "update_subscription_collateral_events": [],
+  "submit_report_events": [],
+  "report_consolidated_events": [],
+  "update_quorum_events": [],
+  "add_oracle_member_events": [],
+  "remove_oracle_member_events": [],
+  "transfer_governance_events": [],
+  "accept_governance_events": []
+ }
+}

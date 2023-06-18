@@ -53,7 +53,9 @@ type Onchain struct {
 	Contract        *contract.Contract
 	NumRetries      int
 	updaterKey      *ecdsa.PrivateKey
-	validators      map[phase0.ValidatorIndex]*v1.Validator
+
+	// This is not used only by the api TOOD: remove?
+	validators map[phase0.ValidatorIndex]*v1.Validator
 }
 
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
@@ -216,6 +218,46 @@ func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.Valid
 		return nil, errors.New("Could not fetch finalized validators: " + err.Error())
 	}
 	return validators, err
+}
+
+func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, opts ...retry.Option) (*api.Validator, error) {
+	var validators map[phase0.ValidatorIndex]*api.Validator
+	var err error
+
+	err = retry.Do(func() error {
+		validatorIndices := []phase0.ValidatorIndex{valIndex}
+		validators, err = o.ConsensusClient.Validators(context.Background(), "finalized", validatorIndices)
+
+		if err != nil {
+			log.Warn("Failed attempt to fetch validator: ", err.Error(), " Retrying...")
+			return errors.New("Error fetching validator: " + err.Error())
+		}
+
+		if len(validators) > 1 {
+			return errors.New("Error fetching validator: Requested one but got many")
+		}
+
+		if len(validators) == 0 {
+			return errors.New("Error fetching validator: Requested one but got none")
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Could not fetch validator: " + err.Error())
+	}
+
+	// Some sanity checks
+	validator, found := validators[valIndex]
+	if !found {
+		return nil, errors.New(fmt.Sprintf("Error fetching validator: Could not find index in response: %d",
+			valIndex))
+	}
+	if validator.Index != valIndex {
+		return nil, errors.New(fmt.Sprintf("Error fetching validator: Index mismatch in response: %d vs %d",
+			valIndex, validator.Index))
+	}
+	return validator, err
 }
 
 func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*types.Block, error) {
@@ -506,7 +548,7 @@ func (o *Onchain) GetPoolFeeAddress(opts ...retry.Option) (string, error) {
 	return poolFeeAddress.Hex(), nil
 }
 
-func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
+func (o *Onchain) GetRewardsRoot(opts ...retry.Option) (string, error) {
 	var rewardsRootStr string
 
 	// Retries multiple times before errorings
@@ -527,6 +569,43 @@ func (o *Onchain) GetContractMerkleRoot(opts ...retry.Option) (string, error) {
 	}
 
 	return rewardsRootStr, nil
+}
+
+func (o *Onchain) GetLastConsolidatedSlot(opts ...retry.Option) (uint64, error) {
+	var lastConsolidatedSlot uint64
+
+	// Retries multiple times before errorings
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			contractLastConsolidatedSlot, err := o.Contract.LastConsolidatedSlot(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get last consolidated slot from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get last consolidated slot from contract: " + err.Error())
+			}
+			lastConsolidatedSlot = contractLastConsolidatedSlot
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return 0, errors.New("could not get last consolidated slot from contract: " + err.Error())
+	}
+
+	return lastConsolidatedSlot, nil
+}
+
+func (o *Onchain) GetOnchainSlotAndRoot(opts ...retry.Option) (string, uint64, error) {
+	slot, err := o.GetLastConsolidatedSlot(opts...)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "could not get last consolidated slot")
+	}
+
+	merkleRoot, err := o.GetRewardsRoot(opts...)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "could not get merkle root")
+	}
+
+	return merkleRoot, slot, nil
 }
 
 // TODO: Only in finalized slots!
@@ -582,10 +661,20 @@ func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int,
 	return balanceWei, nil
 }
 
-// TODO: Document logic. events are fetched for every single block.
-// some rewards only if subscriber of pool or reward went to pool.
-// .. etc
-func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
+// Oracle dependancy is injected here since we need to know wether the validator
+// proposing the block at this slot is i) subscribed to the pool or ii) its reward
+// goes to the pool. This allows to fetch less information on the blocks that are
+// not relevant to the pool. If fetchAll is enabled, the whole content of the block
+// is fetched no matter what, just for debugging purposes, will slow down sync
+func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *FullBlock {
+	var fetchAll bool
+	if len(opt) > 1 {
+		log.Fatal("invalid number of arguments, just one opt is allowed")
+	} else if len(opt) == 1 {
+		fetchAll = opt[0]
+	} else {
+		fetchAll = false
+	}
 
 	// Get who should propose the block
 	slotDuty, err := o.GetProposalDuty(slot)
@@ -598,8 +687,14 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 		log.Fatal("slot duty slot does not match requested slot: ", slotDuty.Slot, " vs ", slot)
 	}
 
+	// Get the validator info that proposed (or should have proposed) the block
+	validator, err := o.GetSingleValidator(slotDuty.ValidatorIndex)
+	if err != nil {
+		log.Fatal("could not get single validator: ", err)
+	}
+
 	// Create the full block with the duty, which is the minimum info it can have
-	fullBlock := NewFullBlock(slotDuty, o.Validators()[slotDuty.ValidatorIndex])
+	fullBlock := NewFullBlock(slotDuty, validator)
 
 	// Fetch the whole consensus block
 	proposedBlock, err := o.GetConsensusBlockAtSlot(slot)
@@ -611,7 +706,6 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 		// Mised block, nothing to do
 	} else {
 		// Succesfull proposal, fetch the info we need
-
 		fullBlock.SetConsensusBlock(proposedBlock)
 
 		// Sanity check to ensure the block is the one we requested
@@ -637,23 +731,23 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 
 		// Not all events are fetched as they are not needed
 		events := &Events{
-			etherReceived:      etherReceived,
-			subscribeValidator: subscribeValidator,
-			//claimRewards: claimRewards,
-			//setRewardRecipient: setRewardRecipient,    // TODO:
-			unsubscribeValidator: unsubscribeValidator,
-			//initSmoothingPool: initSmoothingPool,
-			//updatePoolFee: updatePoolFee,              // TODO:
-			//poolFeeRecipient: poolFeeRecipient,        // TODO:
-			//checkpointSlotSize: checkpointSlotSize,    // TODO:
-			//updateSubscriptionCollateral: updateSubscriptionCollateral, // TODO:
-			//submitReport: submitReport,
-			//reportConsolidated: reportConsolidated,
-			//updateQuorum: updateQuorum,
-			//addOracleMember: addOracleMember,
-			//removeOracleMember: removeOracleMember,
-			//transferGovernance: transferGovernance,
-			//acceptGovernance: acceptGovernance,
+			EtherReceived:      etherReceived,
+			SubscribeValidator: subscribeValidator,
+			//ClaimRewards: claimRewards,
+			//SetRewardRecipient: setRewardRecipient,    // TODO:
+			UnsubscribeValidator: unsubscribeValidator,
+			//InitSmoothingPool: initSmoothingPool,
+			//UpdatePoolFee: updatePoolFee,              // TODO:
+			//PoolFeeRecipient: poolFeeRecipient,        // TODO:
+			//CheckpointSlotSize: checkpointSlotSize,    // TODO:
+			//UpdateSubscriptionCollateral: updateSubscriptionCollateral, // TODO:
+			//SubmitReport: submitReport,
+			//ReportConsolidated: reportConsolidated,
+			//UpdateQuorum: updateQuorum,
+			//AddOracleMember: addOracleMember,
+			//RemoveOracleMember: removeOracleMember,
+			//TransferGovernance: transferGovernance,
+			//AcceptGovernance: acceptGovernance,
 		}
 
 		// Add the events to the block
@@ -663,13 +757,12 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle) *FullBlock {
 		isFromSubscriber := oracle.isSubscribed(fullBlock.GetProposerIndexUint64())
 
 		// Check if the reward was sent to the pool
-		isPoolRewarded := fullBlock.IsAddressRewarded(o.CliCfg.PoolAddress)
+		isPoolRewarded := fullBlock.isAddressRewarded(o.CliCfg.PoolAddress)
 
 		// This calculation is expensive, do it only if the reward went to the pool or
 		// if the block is from a subscribed validator.
-		if isFromSubscriber || isPoolRewarded {
-			blockNumber := new(big.Int).SetUint64(fullBlock.GetBlockNumber())
-			header, receipts, err := o.GetExecHeaderAndReceipts(blockNumber, fullBlock.GetBlockTransactions())
+		if fetchAll || (isFromSubscriber || isPoolRewarded) {
+			header, receipts, err := o.GetExecHeaderAndReceipts(fullBlock.GetBlockNumberBigInt(), fullBlock.GetBlockTransactions())
 			if err != nil {
 				log.Fatal("failed getting header and receipts: ", err)
 			}
@@ -1031,7 +1124,7 @@ func (o *Onchain) GetAcceptGovernanceEvents(
 	return events, nil
 }
 
-func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) string {
+func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) error {
 
 	// Support both 0x prefixed and non prefixed merkle roots
 	if strings.HasPrefix(newMerkleRoot, "0x") {
@@ -1043,43 +1136,43 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 	unboundedBytes := common.Hex2Bytes(newMerkleRoot)
 
 	if len(unboundedBytes) != 32 {
-		log.Fatal("wrong merkle root length: ", newMerkleRoot)
+		return errors.New(fmt.Sprintf("merkle root must be 32 bytes: %s", newMerkleRoot))
 	}
 	copy(newMerkleRootBytes[:], common.Hex2Bytes(newMerkleRoot))
 
 	// Sanity check to ensure the converted tree matches the original
 	if hex.EncodeToString(newMerkleRootBytes[:]) != newMerkleRoot {
-		log.Fatal("merkle trees dont match, expected: ", newMerkleRoot)
+		return errors.New(fmt.Sprintf("merkle trees dont match, expected: %s", newMerkleRoot))
 	}
 
 	publicKey := o.updaterKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
-		log.Fatal("error casting public key to ECDSA")
+		return errors.New("error casting public key to ECDSA")
 	}
 
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 	log.Info("Preparing tx from address: ", fromAddress.Hex())
 	nonce, err := o.ExecutionClient.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
-		log.Fatal("could not get pending nonce: ", err)
+		return errors.New(fmt.Sprintf("could not get pending nonce: %s", err))
 	}
 
 	// Unused, leaving for reference. We rely on automatic gas estimation, see below (nil values)
 	gasTipCap, err := o.ExecutionClient.SuggestGasTipCap(context.Background())
 	if err != nil {
-		log.Fatal("could not get gas price suggestion: ", err)
+		return errors.New(fmt.Sprintf("could not get gas tip cap suggestion: %s", err))
 	}
 	_ = gasTipCap
 
 	chaindId, err := o.ExecutionClient.NetworkID(context.Background())
 	if err != nil {
-		log.Fatal("could not get chaind: ", err)
+		return errors.New(fmt.Sprintf("could not get chaind: %s", err))
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(o.updaterKey, chaindId)
 	if err != nil {
-		log.Fatal("could not create NewKeyedTransactorWithChainID:", err)
+		return errors.New(fmt.Sprintf("could not create NewKeyedTransactorWithChainID: %s", err))
 	}
 	auth.Nonce = big.NewInt(int64(nonce))
 
@@ -1098,13 +1191,13 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)
 	if err != nil {
-		log.Fatal(err)
+		return errors.Wrap(err, "could not create contract instance")
 	}
 
 	// Create a tx calling the update rewards root function with the new merkle root
 	tx, err := instance.SubmitReport(auth, slot, newMerkleRootBytes)
 	if err != nil {
-		log.Fatal(err)
+		return errors.Wrap(err, "could not create tx to call SubmitReport")
 	}
 
 	log.WithFields(log.Fields{
@@ -1120,10 +1213,13 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 	// It stops waiting when the context is canceled.
 	receipt, err := bind.WaitMined(ctx, o.ExecutionClient, tx)
 	if ctx.Err() != nil {
-		log.Fatal("Timeout expired for waiting for tx to be validated, txHash: ", tx.Hash().Hex(), " err:", err)
+		return errors.Wrap(err,
+			fmt.Sprint("timeout expired waiting for tx to be validated txHash: ",
+				tx.Hash().Hex()))
 	}
 	if receipt.Status != types.ReceiptStatusSuccessful {
-		log.Fatal("Tx failed, err: ", receipt.Status, " hash: ", tx.Hash().Hex())
+		return errors.Wrap(err,
+			fmt.Sprintf("tx failed err: %d hash: %s", receipt.Status, tx.Hash().Hex()))
 	}
 
 	// Tx was sent and validated correctly, print receipt info
@@ -1136,7 +1232,7 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) st
 		"BlockNumber":       receipt.BlockNumber,
 	}).Info("Tx: ", tx.Hash().Hex(), " was validated ok. Receipt info:")
 
-	return tx.Hash().Hex()
+	return nil
 }
 
 // Loads all validator from the beacon chain into the oracle, must be called periodically

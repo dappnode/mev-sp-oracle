@@ -41,11 +41,12 @@ func NewOracle(cfg *Config) *Oracle {
 		StateHash:            "",
 		LatestProcessedSlot:  cfg.DeployedSlot - 1,
 		LatestProcessedBlock: 0,
-		NextSlotToProcess:    cfg.DeployedSlot,
+		NextSlotToProcess:    cfg.DeployedSlot, // TODO: remove this and rely just on config?
 		Network:              cfg.Network,
 		PoolAddress:          cfg.PoolAddress,
 
-		Validators: make(map[uint64]*ValidatorInfo, 0),
+		Validators:     make(map[uint64]*ValidatorInfo, 0),
+		CommitedStates: make(map[uint64]*OnchainState, 0),
 
 		PoolFeesPercent:     cfg.PoolFeesPercent,
 		PoolFeesAddress:     cfg.PoolFeesAddress,
@@ -54,19 +55,10 @@ func NewOracle(cfg *Config) *Oracle {
 		Subscriptions:   make([]*contract.ContractSubscribeValidator, 0),
 		Unsubscriptions: make([]*contract.ContractUnsubscribeValidator, 0),
 		Donations:       make([]*contract.ContractEtherReceived, 0),
-		ProposedBlocks:  make([]Block, 0),
-		MissedBlocks:    make([]Block, 0),
-		WrongFeeBlocks:  make([]Block, 0),
+		ProposedBlocks:  make([]SummarizedBlock, 0),
+		MissedBlocks:    make([]SummarizedBlock, 0),
+		WrongFeeBlocks:  make([]SummarizedBlock, 0),
 		Config:          cfg,
-		LatestCommitedState: OnchainState{
-			Validators: make(map[uint64]*ValidatorInfo, 0),
-			Slot:       0,
-			TxHash:     "",
-			MerkleRoot: DefaultRoot,
-			Proofs:     make(map[string][]string, 0),
-			Leafs:      make(map[string]RawLeaf, 0),
-		},
-		CommitedStates: make(map[string]OnchainState, 0),
 	}
 
 	oracle := &Oracle{
@@ -112,7 +104,7 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	blockDonations := fullBlock.GetDonations(or.cfg.PoolAddress)
 
 	// Handle subscriptions first thing
-	or.handleManualSubscriptions(fullBlock.events.subscribeValidator)
+	or.handleManualSubscriptions(fullBlock.Events.SubscribeValidator)
 
 	// If the validator was subscribed and missed proposed the block in this slot
 	if summarizedBlock.BlockType == MissedProposal && or.isSubscribed(summarizedBlock.ValidatorIndex) {
@@ -138,7 +130,7 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	}
 
 	// Handle unsubscriptions the last thing after distributing rewards
-	or.handleManualUnsubscriptions(fullBlock.events.unsubscribeValidator)
+	or.handleManualUnsubscriptions(fullBlock.Events.UnsubscribeValidator)
 
 	// Handle the donations from this block
 	or.handleDonations(blockDonations)
@@ -321,9 +313,9 @@ func (or *Oracle) LoadStateFromFile() error {
 		Subscriptions:       make([]*contract.ContractSubscribeValidator, 0),
 		Unsubscriptions:     make([]*contract.ContractUnsubscribeValidator, 0),
 		Donations:           make([]*contract.ContractEtherReceived, 0),
-		ProposedBlocks:      make([]Block, 0),
-		MissedBlocks:        make([]Block, 0),
-		WrongFeeBlocks:      make([]Block, 0),
+		ProposedBlocks:      make([]SummarizedBlock, 0),
+		MissedBlocks:        make([]SummarizedBlock, 0),
+		WrongFeeBlocks:      make([]SummarizedBlock, 0),
 		Config:              &Config{},
 	}
 
@@ -383,7 +375,6 @@ func (or *Oracle) LoadStateFromFile() error {
 	//state.Network = readState.Network
 	//state.PoolAddress = readState.PoolAddress
 	or.state.Validators = readState.Validators
-	or.state.LatestCommitedState = readState.LatestCommitedState
 	or.state.PoolFeesPercent = readState.PoolFeesPercent
 	or.state.PoolFeesAddress = readState.PoolFeesAddress
 	or.state.PoolAccumulatedFees = readState.PoolAccumulatedFees
@@ -441,22 +432,100 @@ func (or *Oracle) StoreLatestOnchainState() bool {
 		leafs[WithdrawalAddress] = rawLeaf
 	}
 
-	or.state.LatestCommitedState = OnchainState{
+	state := &OnchainState{
 		Validators: validatorsCopy,
-		//TxHash:     txHash, // TODO: Not sure if to store it
 		MerkleRoot: merkleRootStr,
 		Slot:       or.state.LatestProcessedSlot,
 		Proofs:     proofs,
 		Leafs:      leafs,
 	}
 
-	// besides the latestCommitedState as a "standalone" state,
-	// we also store it in the commitedStates map, where we keep all
-	// the states that have been commited onchain by hash
-
-	// TODO: This should be the slot not the root I think.
-	or.state.CommitedStates[merkleRootStr] = or.state.LatestCommitedState
+	or.state.CommitedStates[state.Slot] = state
 	return true
+}
+
+// Returns true and the latest commited slot if there is any commited state
+// false otherwise. Note that if there are checkpoint but without enough data
+// to create a tree, it will still return false
+func (or *Oracle) LatestCommitedSlot() (uint64, bool) {
+	or.mutex.RLock()
+	defer or.mutex.RUnlock()
+
+	if len(or.State().CommitedStates) == 0 {
+		return 0, false
+	}
+
+	latestCommitedSlot := uint64(0)
+	for slot, _ := range or.State().CommitedStates {
+		if slot > latestCommitedSlot {
+			latestCommitedSlot = slot
+		}
+	}
+	return latestCommitedSlot, true
+}
+
+func (or *Oracle) LatestCommitedState() *OnchainState {
+	or.mutex.RLock()
+	defer or.mutex.RUnlock()
+
+	latestCommitedSlot, atLeastOne := or.LatestCommitedSlot()
+
+	// If we havent commited any state yet
+	if !atLeastOne {
+		return nil
+	}
+
+	return or.State().CommitedStates[latestCommitedSlot]
+}
+
+func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64) (bool, error) {
+	latestCommitedSlot, atLeastOne := or.LatestCommitedSlot()
+
+	// If we havent commited any state yet
+	if !atLeastOne {
+		log.Info("Oracle has no commited states, no checkpoints have passed or there is not enough data to create a merkle tree")
+		// If the onchain state is the default, we can consider in sync as the contract has not root also
+		if Equals(onchainRoot, DefaultRoot) {
+			log.WithFields(log.Fields{
+				"OnchainRoot": onchainRoot,
+				"OnchainSlot": onchainSlot,
+			}).Info("Oracle IS in sync with the latest onchain root, nothing was commited onchain yet")
+			return true, nil
+		}
+		// If the onchain state is not the default, we are not in sync
+		log.WithFields(log.Fields{
+			"OnchainRoot": onchainRoot,
+			"OnchainSlot": onchainSlot,
+		}).Info("Oracle IS NOT in sync with the latest onchain root, oracle has no commited states yet")
+		return false, nil
+	}
+
+	latestOracleRoot := or.State().CommitedStates[latestCommitedSlot].MerkleRoot
+
+	if Equals(onchainRoot, latestOracleRoot) && onchainSlot == latestCommitedSlot {
+		log.WithFields(log.Fields{
+			"OnchainRoot": onchainRoot,
+			"OnchainSlot": onchainSlot,
+			"OracleRoot":  latestOracleRoot,
+			"OracleSlot":  latestCommitedSlot,
+		}).Info("Oracle IS in sync with the latest onchain root")
+		return true, nil
+	}
+
+	// If roots match but not slots or viceversa. Something is wrong
+	if (Equals(onchainRoot, latestOracleRoot) && onchainSlot != latestCommitedSlot) ||
+		(!Equals(onchainRoot, latestOracleRoot) && onchainSlot == latestCommitedSlot) {
+		return false, errors.New(fmt.Sprintf("Oracle root/slot does not match the onchain root/slot. "+
+			"OracleRoot: %s, OracleSlot: %d, OnchainRoot: %s, OnchainSlot: %d",
+			latestOracleRoot, latestCommitedSlot, onchainRoot, onchainSlot))
+	}
+
+	log.WithFields(log.Fields{
+		"OnchainRoot": onchainRoot,
+		"OracleRoot":  latestOracleRoot,
+		"OracleSlot":  latestCommitedSlot,
+	}).Info("Oracle IS NOT in sync with the latest onchain root")
+	return false, nil
 }
 
 func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
@@ -554,7 +623,7 @@ func (or *Oracle) handleDonations(donations []*contract.ContractEtherReceived) {
 	}
 }
 
-func (or *Oracle) handleCorrectBlockProposal(block Block) {
+func (or *Oracle) handleCorrectBlockProposal(block SummarizedBlock) {
 	or.addSubscriptionIfNotAlready(block.ValidatorIndex, block.WithdrawalAddress, block.ValidatorKey)
 	or.advanceStateMachine(block.ValidatorIndex, ProposalOk)
 	or.increaseAllPendingRewards(block.Reward)
@@ -565,14 +634,14 @@ func (or *Oracle) handleCorrectBlockProposal(block Block) {
 		"Slot":       block.Slot,
 		"Block":      block.Block,
 		"ValIndex":   block.ValidatorIndex,
-		"Reward":     block.Reward,
-		"RewardType": block.RewardType,
+		"RewardWei":  block.Reward,
+		"RewardType": block.RewardType.String(),
 		//"PoolAddress":  xxx.,
 		//"FeeRecipient": xxx,
 	}).Info("[Reward]")
 }
 
-func (or *Oracle) handleBlsCorrectBlockProposal(block Block) {
+func (or *Oracle) handleBlsCorrectBlockProposal(block SummarizedBlock) {
 	if block.BlockType != OkPoolProposalBlsKeys {
 		log.Fatal("Block type is not OkPoolProposalBlsKeys, BlockType: ", block.BlockType)
 	}
@@ -849,7 +918,7 @@ func (or *Oracle) handleManualUnsubscriptions(
 
 // Banning a validator implies sharing its pending rewards among the rest
 // of the validators and setting its pending to zero.
-func (or *Oracle) handleBanValidator(block Block) {
+func (or *Oracle) handleBanValidator(block SummarizedBlock) {
 	// First of all advance the state machine, so the banned validator is not
 	// considered for the pending reward share
 	or.advanceStateMachine(block.ValidatorIndex, ProposalWrongFee)
@@ -860,7 +929,7 @@ func (or *Oracle) handleBanValidator(block Block) {
 	or.state.WrongFeeBlocks = append(or.state.WrongFeeBlocks, block)
 }
 
-func (or *Oracle) handleMissedBlock(block Block) {
+func (or *Oracle) handleMissedBlock(block SummarizedBlock) {
 	or.advanceStateMachine(block.ValidatorIndex, ProposalMissed)
 	or.state.MissedBlocks = append(or.state.MissedBlocks, block)
 }

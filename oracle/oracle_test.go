@@ -136,22 +136,24 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 	// Function under test
 	oracle.StoreLatestOnchainState()
 
+	commitedSlot := oracle.state.LatestProcessedSlot
+
 	// Ensure all validators are present in the state
-	require.Equal(t, valInfo1, oracle.state.LatestCommitedState.Validators[1])
-	require.Equal(t, valInfo2, oracle.state.LatestCommitedState.Validators[2])
-	require.Equal(t, valInfo3, oracle.state.LatestCommitedState.Validators[3])
+	require.Equal(t, valInfo1, oracle.state.CommitedStates[commitedSlot].Validators[1])
+	require.Equal(t, valInfo2, oracle.state.CommitedStates[commitedSlot].Validators[2])
+	require.Equal(t, valInfo3, oracle.state.CommitedStates[commitedSlot].Validators[3])
 
 	// Ensure merkle root matches
-	require.Equal(t, "0xd9a1eee574026532cddccbcce6320c0600f370a7c64ce30c5eafc63357449940", oracle.state.LatestCommitedState.MerkleRoot)
+	require.Equal(t, "0xd9a1eee574026532cddccbcce6320c0600f370a7c64ce30c5eafc63357449940", oracle.state.CommitedStates[commitedSlot].MerkleRoot)
 
 	// Ensure proofs and leafs are correct
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0xfee0000000000000000000000000000000000000"], []string{"0x8bfb8acff6772a60d6641cb854587bb2b6f2100391fbadff2c34be0b8c20a0cc", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x1000000000000000000000000000000000000000"], []string{"0xaaf838df9c8d5cec6ed77fcbc2cace945e8f2078eede4a0bb7164818d425f24d", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
-	require.Equal(t, oracle.state.LatestCommitedState.Proofs["0x2000000000000000000000000000000000000000"], []string{"0xd643163144dcba353b4d27c50939b3d11133bd3c6916092de059d07353b4cb5f", "0xda53f5dd3e17f66f4a35c9c9d5fd27c094fa4249e2933fb819ac724476dc9ae1"})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Proofs["0xfee0000000000000000000000000000000000000"], []string{"0x8bfb8acff6772a60d6641cb854587bb2b6f2100391fbadff2c34be0b8c20a0cc", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Proofs["0x1000000000000000000000000000000000000000"], []string{"0xaaf838df9c8d5cec6ed77fcbc2cace945e8f2078eede4a0bb7164818d425f24d", "0x27205dd4c642acd1b1352617df2c4f410e20ff3fd6f3e3efddee9cea044921f8"})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Proofs["0x2000000000000000000000000000000000000000"], []string{"0xd643163144dcba353b4d27c50939b3d11133bd3c6916092de059d07353b4cb5f", "0xda53f5dd3e17f66f4a35c9c9d5fd27c094fa4249e2933fb819ac724476dc9ae1"})
 
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0xfee0000000000000000000000000000000000000"], RawLeaf{"0xfee0000000000000000000000000000000000000", big.NewInt(0)})
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x1000000000000000000000000000000000000000"], RawLeaf{"0x1000000000000000000000000000000000000000", big.NewInt(1000000000000000000)})
-	require.Equal(t, oracle.state.LatestCommitedState.Leafs["0x2000000000000000000000000000000000000000"], RawLeaf{"0x2000000000000000000000000000000000000000", big.NewInt(4000000000000000000)})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Leafs["0xfee0000000000000000000000000000000000000"], RawLeaf{"0xfee0000000000000000000000000000000000000", big.NewInt(0)})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Leafs["0x1000000000000000000000000000000000000000"], RawLeaf{"0x1000000000000000000000000000000000000000", big.NewInt(1000000000000000000)})
+	require.Equal(t, oracle.state.CommitedStates[commitedSlot].Leafs["0x2000000000000000000000000000000000000000"], RawLeaf{"0x2000000000000000000000000000000000000000", big.NewInt(4000000000000000000)})
 
 	// Ensure LatestCommitedState contains a deep copy of the validators and not just a reference
 	// This is very important since otherwise they will be modified when the state is modified
@@ -162,8 +164,8 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 	oracle.state.Validators[3].PendingRewardsWei = big.NewInt(22)
 
 	// And assert the frozen state is not changes
-	require.Equal(t, big.NewInt(2000000000000000000), oracle.state.LatestCommitedState.Validators[2].AccumulatedRewardsWei)
-	require.Equal(t, big.NewInt(500000), oracle.state.LatestCommitedState.Validators[3].PendingRewardsWei)
+	require.Equal(t, big.NewInt(2000000000000000000), oracle.state.CommitedStates[commitedSlot].Validators[2].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(500000), oracle.state.CommitedStates[commitedSlot].Validators[3].PendingRewardsWei)
 }
 
 // TODO:
@@ -407,7 +409,7 @@ func Test_Oracle_WrongInputData(t *testing.T) {
 }
 
 func Test_Oracle_Donation(t *testing.T) {
-	blockWrongFee := Block{
+	blockWrongFee := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: WrongFeeRecipient,
 		Reward: big.NewInt(0), RewardType: MevBlock,
@@ -416,7 +418,7 @@ func Test_Oracle_Donation(t *testing.T) {
 }
 
 func Test_Oracle_AutomaticSubscription(t *testing.T) {
-	blockWrongFee := Block{
+	blockWrongFee := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: WrongFeeRecipient,
 		Reward: big.NewInt(0), RewardType: MevBlock,
@@ -425,7 +427,7 @@ func Test_Oracle_AutomaticSubscription(t *testing.T) {
 }
 
 func Test_Oracle_WrongFee(t *testing.T) {
-	blockWrongFee := Block{
+	blockWrongFee := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: WrongFeeRecipient,
 		Reward: big.NewInt(0), RewardType: MevBlock,
@@ -434,7 +436,7 @@ func Test_Oracle_WrongFee(t *testing.T) {
 }
 
 func Test_Oracle_Missed_ToYellow(t *testing.T) {
-	blockMissed := Block{
+	blockMissed := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: MissedProposal,
 	}
@@ -444,7 +446,7 @@ func Test_Oracle_Missed_ToYellow(t *testing.T) {
 }
 
 func Test_Oracle_Missed_ToRed(t *testing.T) {
-	blockMissed := Block{
+	blockMissed := SummarizedBlock{
 		Slot: uint64(0), ValidatorIndex: uint64(1),
 		ValidatorKey: "0xxx", BlockType: MissedProposal,
 	}
@@ -1042,7 +1044,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].CollateralWei)
 
 	// Ban validator 34
-	oracle.handleBanValidator(Block{
+	oracle.handleBanValidator(SummarizedBlock{
 		Slot:           uint64(100),
 		ValidatorIndex: uint64(34),
 	})
@@ -1109,7 +1111,7 @@ func Test_SubThenUnsubThenAuto(t *testing.T) {
 	require.Equal(t, NotSubscribed, oracle.state.Validators[valIdx].ValidatorStatus)
 
 	// Force automatic subscription
-	block1 := Block{
+	block1 := SummarizedBlock{
 		Slot:              0,
 		ValidatorIndex:    valIdx,
 		ValidatorKey:      "0x",
@@ -1862,7 +1864,7 @@ func Test_BanValidator(t *testing.T) {
 	require.Equal(t, big.NewInt(33), oracle.state.Validators[3].PendingRewardsWei)
 
 	// Ban validator 3
-	oracle.handleBanValidator(Block{ValidatorIndex: 3})
+	oracle.handleBanValidator(SummarizedBlock{ValidatorIndex: 3})
 
 	// Its pending balance is shared equally among the rest
 	require.Equal(t, big.NewInt(49), oracle.state.Validators[1].PendingRewardsWei)
@@ -2027,7 +2029,7 @@ func Test_ValidatorInfoSize(t *testing.T) {
 
 		//make 2000 validators propose a block
 		for i := 0; i < numValidators; i++ {
-			oracle.handleCorrectBlockProposal(Block{
+			oracle.handleCorrectBlockProposal(SummarizedBlock{
 				Slot:              uint64(i),
 				ValidatorIndex:    uint64(valsID[0]),
 				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
@@ -2124,7 +2126,7 @@ func Test_SizeMultipleOnchainState(t *testing.T) {
 	//each time the state is commited, a rough estimate of 100 blocks will have been proposed by the validators.
 	for i := 0; i < 121; i++ {
 		for j := 0; j < 100; j++ {
-			oracle.handleCorrectBlockProposal(Block{
+			oracle.handleCorrectBlockProposal(SummarizedBlock{
 				Slot:              uint64(100),
 				ValidatorIndex:    uint64(valsID[j]),
 				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
@@ -2164,6 +2166,90 @@ func Test_SizeMultipleOnchainState(t *testing.T) {
 	log.Info("File size:", fileSizeMB, "MB")
 }
 
+func Test_LatestCommitedSlot_LatestCommitedState(t *testing.T) {
+	oracle := NewOracle(&Config{
+		CollateralInWei: big.NewInt(1000),
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
+	})
+
+	// No data, no state
+	oracle.StoreLatestOnchainState()
+	slot, stateExistst := oracle.LatestCommitedSlot()
+	state := oracle.LatestCommitedState()
+	require.Equal(t, uint64(0), slot)
+	require.Equal(t, false, stateExistst)
+	require.Nil(t, state)
+
+	// Add state slot = 100
+	oracle.state.LatestProcessedSlot = 100
+	oracle.addSubscriptionIfNotAlready(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.StoreLatestOnchainState()
+	slot, stateExistst = oracle.LatestCommitedSlot()
+	state = oracle.LatestCommitedState()
+	require.Equal(t, uint64(100), slot)
+	require.Equal(t, true, stateExistst)
+	require.Equal(t, uint64(100), state.Slot)
+	require.Equal(t, 3, len(state.Validators))
+
+	// Add state slot = 200
+	oracle.state.LatestProcessedSlot = 200
+	oracle.addSubscriptionIfNotAlready(uint64(13), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(14), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(15), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.StoreLatestOnchainState()
+	slot, stateExistst = oracle.LatestCommitedSlot()
+	state = oracle.LatestCommitedState()
+	require.Equal(t, uint64(200), slot)
+	require.Equal(t, true, stateExistst)
+	require.Equal(t, uint64(200), state.Slot)
+	require.Equal(t, 6, len(state.Validators))
+
+}
+
+func Test_IsOracleInSyncWithChain(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
+	})
+
+	// No states in oracle nor locally
+	onchainRoot := DefaultRoot
+	onchainSlot := uint64(0)
+	isInSync, err := oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, true, isInSync)
+	require.NoError(t, err)
+
+	// Add a state
+	oracle.state.LatestProcessedSlot = 100
+	oracle.addSubscriptionIfNotAlready(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscriptionIfNotAlready(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.StoreLatestOnchainState()
+
+	// In sync
+	onchainRoot = "0xbb82bf59b1b6f3b0964c08ffb9336365153b34e2b30fb1230146428d153693b0"
+	onchainSlot = uint64(100)
+	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, true, isInSync)
+	require.NoError(t, err)
+
+	// Not in sync
+	onchainRoot = "0x1000000000000000000000000000000000000000000000000000000000000000"
+	onchainSlot = uint64(200)
+	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, false, isInSync)
+	require.NoError(t, err)
+
+	// Roots match but not slots, expect error
+	onchainRoot = "0xbb82bf59b1b6f3b0964c08ffb9336365153b34e2b30fb1230146428d153693b0"
+	onchainSlot = uint64(200)
+	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, false, isInSync)
+	require.Error(t, err)
+}
+
 // returns len(valsID) new valid subscriptions
 func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int) []*contract.ContractSubscribeValidator {
 	subs := make([]*contract.ContractSubscribeValidator, len(valsID))
@@ -2178,8 +2264,8 @@ func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int
 	return subs
 }
 
-func MissedBlock(slot uint64, valIndex uint64, pubKey string) Block {
-	return Block{
+func MissedBlock(slot uint64, valIndex uint64, pubKey string) SummarizedBlock {
+	return SummarizedBlock{
 		Slot:           slot,
 		ValidatorIndex: valIndex,
 		ValidatorKey:   pubKey,
@@ -2187,8 +2273,8 @@ func MissedBlock(slot uint64, valIndex uint64, pubKey string) Block {
 	}
 }
 
-func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) Block {
-	return Block{
+func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) SummarizedBlock {
+	return SummarizedBlock{
 		Slot:           slot,
 		ValidatorIndex: valIndex,
 		ValidatorKey:   pubKey,
@@ -2196,8 +2282,8 @@ func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) Block {
 	}
 }
 
-func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, withAddress string) Block {
-	return Block{
+func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, withAddress string) SummarizedBlock {
+	return SummarizedBlock{
 		Slot:              slot,
 		ValidatorIndex:    valIndex,
 		ValidatorKey:      pubKey,
