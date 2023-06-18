@@ -70,20 +70,20 @@ const (
 )
 
 type Config struct {
-	ConsensusEndpoint     string   `json:"consensus_endpoint"`
-	ExecutionEndpoint     string   `json:"execution_endpoint"`
-	Network               string   `json:"network"`
-	PoolAddress           string   `json:"pool_address"`
-	DeployedSlot          uint64   `json:"deployed_slot"`
-	DeployedBlock         uint64   `json:"deployed_block"`
-	CheckPointSizeInSlots uint64   `json:"checkpoint_size"`
-	PoolFeesPercent       int      `json:"pool_fees_percent"` // With 2 decimals (eg 1.5% = 150)
-	PoolFeesAddress       string   `json:"pool_fees_address"`
-	DryRun                bool     `json:"dry_run"`
-	NumRetries            int      `json:"num_retries"`
-	CollateralInWei       *big.Int `json:"collateral_in_wei"`
-	UpdaterKeyPass        string   `json:"-"`
-	UpdaterKeyPath        string   `json:"-"`
+	ConsensusEndpoint        string   `json:"consensus_endpoint"`
+	ExecutionEndpoint        string   `json:"execution_endpoint"`
+	Network                  string   `json:"network"`
+	PoolAddress              string   `json:"pool_address"`
+	DeployedSlot             uint64   `json:"deployed_slot"`
+	DeployedBlock            uint64   `json:"deployed_block"`
+	CheckPointSizeInSlots    uint64   `json:"checkpoint_size"`
+	PoolFeesPercentOver10000 int      `json:"pool_fees_percent"` // With 2 decimals (eg 1.5% = 150)
+	PoolFeesAddress          string   `json:"pool_fees_address"`
+	DryRun                   bool     `json:"dry_run"`
+	NumRetries               int      `json:"num_retries"`
+	CollateralInWei          *big.Int `json:"collateral_in_wei"`
+	UpdaterKeyPass           string   `json:"-"`
+	UpdaterKeyPath           string   `json:"-"`
 }
 
 // All the events that the contract can emit
@@ -184,15 +184,9 @@ type OracleState struct {
 	LatestProcessedSlot  uint64                    `json:"latest_processed_slot"`
 	LatestProcessedBlock uint64                    `json:"latest_processed_block"`
 	NextSlotToProcess    uint64                    `json:"next_slot_to_process"`
-	Network              string                    `json:"network"`
-	PoolAddress          string                    `json:"pool_address"`
 	Validators           map[uint64]*ValidatorInfo `json:"validators"`
 	CommitedStates       map[uint64]*OnchainState  `json:"commited_states"`
-
-	// TODO: is this redundant? its in the config
-	PoolFeesPercent     int      `json:"pool_fees_percent"` // TODO: is this % or scaled by *100
-	PoolFeesAddress     string   `json:"pool_fees_address"`
-	PoolAccumulatedFees *big.Int `json:"pool_accumulated_fees"`
+	PoolAccumulatedFees  *big.Int                  `json:"pool_accumulated_fees"`
 
 	Subscriptions   []*contract.ContractSubscribeValidator   `json:"subscriptions"`
 	Unsubscriptions []*contract.ContractUnsubscribeValidator `json:"unsubscriptions"`
@@ -201,8 +195,15 @@ type OracleState struct {
 	MissedBlocks    []SummarizedBlock                        `json:"missed_blocks"`
 	WrongFeeBlocks  []SummarizedBlock                        `json:"wrong_fee_blocks"`
 
-	// unsure if config should be here. maybe not TODO:
-	Config *Config `json:"todo_unsure"`
+	// Config parameters
+	PoolFeesPercentOver10000 int      `json:"pool_fees_percent_over_10000"`
+	PoolAddress              string   `json:"pool_address"`
+	Network                  string   `json:"network"`
+	PoolFeesAddress          string   `json:"pool_fees_address"`
+	CheckPointSizeInSlots    uint64   `json:"check_point_size_in_slots"`
+	DeployedBlock            uint64   `json:"deployed_block"`
+	DeployedSlot             uint64   `json:"deployed_slot"`
+	CollateralInWei          *big.Int `json:"collateral_in_wei"`
 }
 
 type RawLeaf struct {

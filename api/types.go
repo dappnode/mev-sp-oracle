@@ -88,20 +88,20 @@ type httpOkProofs struct {
 }
 
 type httpOkConfig struct {
-	Network               string `json:"network"`
-	PoolAddress           string `json:"pool_address"`
-	DeployedSlot          uint64 `json:"deployed_slot"`
-	CheckPointSizeInSlots uint64 `json:"checkpoint_size"`
-	PoolFeesPercent       int    `json:"pool_fees_percent"`
-	PoolFeesAddress       string `json:"pool_fees_address"`
-	DryRun                bool   `json:"dry_run"`
-	CollateralInWei       string `json:"collateral_in_wei"`
+	Network                  string `json:"network"`
+	PoolAddress              string `json:"pool_address"`
+	DeployedSlot             uint64 `json:"deployed_slot"`
+	CheckPointSizeInSlots    uint64 `json:"checkpoint_size"`
+	PoolFeesPercentOver10000 int    `json:"pool_fees_percent"`
+	PoolFeesAddress          string `json:"pool_fees_address"`
+	DryRun                   bool   `json:"dry_run"`
+	CollateralInWei          string `json:"collateral_in_wei"`
 }
 
 type httpOkMemoryFeesInfo struct {
-	PoolFeesPercent     int    `json:"pool_fee_percent"`
-	PoolFeesAddress     string `json:"pool_fee_address"`
-	PoolAccumulatedFees string `json:"pool_accumulated_fees"`
+	PoolFeesPercentOver10000 int    `json:"pool_fee_percent"`
+	PoolFeesAddress          string `json:"pool_fee_address"`
+	PoolAccumulatedFees      string `json:"pool_accumulated_fees"`
 }
 
 type httpOkDonation struct {

@@ -2,7 +2,6 @@ package oracle
 
 import (
 	"crypto/sha256"
-	"encoding/gob"
 	"encoding/hex"
 	"encoding/json"
 
@@ -22,11 +21,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO: Remove when migrated to json
-var StateFileName = "state.gob"
-
+// Default path of persisted state
 var StateFolder = "oracle-data"
-
 var StateJsonName = "state.json"
 
 type Oracle struct {
@@ -39,18 +35,12 @@ type Oracle struct {
 func NewOracle(cfg *Config) *Oracle {
 	state := &OracleState{
 		StateHash:            "",
-		LatestProcessedSlot:  cfg.DeployedSlot - 1,
 		LatestProcessedBlock: 0,
-		NextSlotToProcess:    cfg.DeployedSlot, // TODO: remove this and rely just on config?
-		Network:              cfg.Network,
-		PoolAddress:          cfg.PoolAddress,
-
-		Validators:     make(map[uint64]*ValidatorInfo, 0),
-		CommitedStates: make(map[uint64]*OnchainState, 0),
-
-		PoolFeesPercent:     cfg.PoolFeesPercent,
-		PoolFeesAddress:     cfg.PoolFeesAddress,
-		PoolAccumulatedFees: big.NewInt(0),
+		LatestProcessedSlot:  cfg.DeployedSlot - 1,
+		NextSlotToProcess:    cfg.DeployedSlot,
+		PoolAccumulatedFees:  big.NewInt(0),
+		Validators:           make(map[uint64]*ValidatorInfo, 0),
+		CommitedStates:       make(map[uint64]*OnchainState, 0),
 
 		Subscriptions:   make([]*contract.ContractSubscribeValidator, 0),
 		Unsubscriptions: make([]*contract.ContractUnsubscribeValidator, 0),
@@ -58,7 +48,16 @@ func NewOracle(cfg *Config) *Oracle {
 		ProposedBlocks:  make([]SummarizedBlock, 0),
 		MissedBlocks:    make([]SummarizedBlock, 0),
 		WrongFeeBlocks:  make([]SummarizedBlock, 0),
-		Config:          cfg,
+
+		// Config
+		PoolFeesPercentOver10000: cfg.PoolFeesPercentOver10000,
+		PoolAddress:              cfg.PoolAddress,
+		Network:                  cfg.Network,
+		PoolFeesAddress:          cfg.PoolFeesAddress,
+		CheckPointSizeInSlots:    cfg.CheckPointSizeInSlots,
+		DeployedBlock:            cfg.DeployedBlock,
+		DeployedSlot:             cfg.DeployedSlot,
+		CollateralInWei:          cfg.CollateralInWei,
 	}
 
 	oracle := &Oracle{
@@ -159,12 +158,12 @@ func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) 
 		return errors.New("more than one event of the same type in the same block, weird")
 	}
 
-	if len(fullBlock.Events.UpdatePoolFee) != 0 && big.NewInt(int64(config.PoolFeesPercent)).Cmp(fullBlock.Events.UpdatePoolFee[0].NewPoolFee) != 0 {
+	if len(fullBlock.Events.UpdatePoolFee) != 0 && big.NewInt(int64(config.PoolFeesPercentOver10000)).Cmp(fullBlock.Events.UpdatePoolFee[0].NewPoolFee) != 0 {
 		return errors.New(fmt.Sprintf("pool fee has changed. config: %d, block: %d",
-			config.PoolFeesPercent, fullBlock.Events.UpdatePoolFee[0].NewPoolFee))
+			config.PoolFeesPercentOver10000, fullBlock.Events.UpdatePoolFee[0].NewPoolFee))
 	}
 
-	if len(fullBlock.Events.PoolFeeRecipient) != 0 && Equals(config.PoolFeesAddress, fullBlock.Events.PoolFeeRecipient[0].NewPoolFeeRecipient.String()) {
+	if len(fullBlock.Events.PoolFeeRecipient) != 0 && !Equals(config.PoolFeesAddress, fullBlock.Events.PoolFeeRecipient[0].NewPoolFeeRecipient.String()) {
 		return errors.New(fmt.Sprintf("pool fee recipient has changed. config: %s, block: %s",
 			config.PoolFeesAddress, fullBlock.Events.PoolFeeRecipient[0].NewPoolFeeRecipient.String()))
 	}
@@ -183,7 +182,8 @@ func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) 
 }
 
 func (or *Oracle) SaveToJson() error {
-	// Not just read lock since we change the hash
+	// Not just read lock since we change the hash, minor thing
+	// but it cant be just a read mutex
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
 
@@ -206,7 +206,7 @@ func (or *Oracle) SaveToJson() error {
 		return errors.Wrap(err, "could not create folder")
 	}
 
-	log.Trace(fmt.Sprintf("Saving oracle state: %s", jsonData))
+	log.Debug("Saving state from file: ", string(jsonData))
 
 	err = ioutil.WriteFile(path, jsonData, 0644)
 	if err != nil {
@@ -227,7 +227,7 @@ func (or *Oracle) SaveToJson() error {
 	return nil
 }
 
-func (or *Oracle) LoadFromJson() error {
+func (or *Oracle) LoadFromJson() (bool, error) {
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
 
@@ -236,20 +236,22 @@ func (or *Oracle) LoadFromJson() error {
 
 	jsonFile, err := os.Open(path)
 	defer jsonFile.Close()
+
+	// Dont error if the file wasnt found, just return not found
 	if err != nil {
-		return errors.Wrap(err, "could not open json file")
+		return false, nil
 	}
 
 	byteValue, err := ioutil.ReadAll(jsonFile)
 	if err != nil {
-		return errors.Wrap(err, "could not read json file")
+		return false, errors.Wrap(err, "could not read json file")
 	}
 
 	var state OracleState
 
 	err = json.Unmarshal(byteValue, &state)
 	if err != nil {
-		return errors.Wrap(err, "could not unmarshal json file")
+		return false, errors.Wrap(err, "could not unmarshal json file")
 	}
 
 	// Store the hash we recovered from the file
@@ -261,8 +263,10 @@ func (or *Oracle) LoadFromJson() error {
 	// Serialize the state without the hash
 	jsonNoHash, err := json.MarshalIndent(state, "", " ")
 	if err != nil {
-		return errors.Wrap(err, "could not marshal state without hash")
+		return false, errors.Wrap(err, "could not marshal state without hash")
 	}
+
+	log.Debug("Loaded state from file: ", string(jsonNoHash))
 
 	// We calculate the hash of the state we read
 	calculatedHashByte := sha256.Sum256(jsonNoHash[:])
@@ -270,160 +274,65 @@ func (or *Oracle) LoadFromJson() error {
 
 	// Hashes must match
 	if !Equals(recoveredHash, calculatedHashStrig) {
-		return errors.Wrap(err, fmt.Sprintf("hash mismatch, recovered: %s, calculated: %s",
+		return false, errors.New(fmt.Sprintf("hash mismatch, recovered: %s, calculated: %s",
 			recoveredHash, calculatedHashStrig))
 	}
 
-	if state.Config.Network != or.state.Config.Network {
-		return errors.Wrap(err, fmt.Sprintf("network mismatch, recovered: %s, expected: %s",
-			state.Config.Network, or.state.Config.Network))
+	// Sanity check to ensure the oracle config matches the loaded state
+	if state.Network != or.cfg.Network {
+		return false, errors.New(fmt.Sprintf("network mismatch, recovered: %s, expected: %s",
+			state.Network, or.cfg.Network))
 	}
 
-	if state.Config.PoolAddress != or.state.Config.PoolAddress {
-		return errors.Wrap(err, fmt.Sprintf("pool address mismatch, recovered: %s, expected: %s",
-			state.Config.PoolAddress, or.state.Config.PoolAddress))
+	if state.PoolAddress != or.cfg.PoolAddress {
+		return false, errors.New(fmt.Sprintf("pool address mismatch, recovered: %s, expected: %s",
+			state.PoolAddress, or.cfg.PoolAddress))
 	}
 
-	if state.Config.PoolFeesAddress != or.state.Config.PoolFeesAddress {
-		return errors.Wrap(err, fmt.Sprintf("pool fees address mismatch, recovered: %s, expected: %s",
-			state.Config.PoolFeesAddress, or.state.Config.PoolFeesAddress))
+	if state.PoolFeesAddress != or.cfg.PoolFeesAddress {
+		return false, errors.New(fmt.Sprintf("pool fees address mismatch, recovered: %s, expected: %s",
+			state.PoolFeesAddress, or.cfg.PoolFeesAddress))
 	}
 
-	if state.Config.PoolFeesPercent != or.state.Config.PoolFeesPercent {
-		return errors.Wrap(err, fmt.Sprintf("pool fees percent mismatch, recovered: %d, expected: %d",
-			state.Config.PoolFeesPercent, or.state.Config.PoolFeesPercent))
+	if state.PoolFeesPercentOver10000 != or.cfg.PoolFeesPercentOver10000 {
+		return false, errors.New(fmt.Sprintf("pool fees percent mismatch, recovered: %d, expected: %d",
+			state.PoolFeesPercentOver10000, or.cfg.PoolFeesPercentOver10000))
 	}
 
-	// TODO: Add more checks?
-	// TODO: Run reconcilization?
-
-	or.state = &state
-	return nil
-}
-
-// TODO: Remove when migrated to json
-func (or *Oracle) SaveStateToFile() {
-	or.mutex.RLock()
-	defer or.mutex.RUnlock()
-
-	path := filepath.Join(StateFolder, StateFileName)
-	err := os.MkdirAll(StateFolder, os.ModePerm)
-	if err != nil {
-		log.Fatal("could not create folder: ", err)
-	}
-	file, err := os.Create(path)
-	if err != nil {
-		log.Fatal("could not create file at path: ", path, ":", err)
+	if state.CollateralInWei.Cmp(or.cfg.CollateralInWei) != 0 {
+		return false, errors.New(fmt.Sprintf("collateral mismatch, recovered: %d, expected: %d",
+			state.CollateralInWei, or.cfg.CollateralInWei))
 	}
 
-	defer file.Close()
-
-	// Dont run this again, take the existing data
-	//mRoot, enoughData := p.getMerkleRootIfAny()
-
-	encoder := gob.NewEncoder(file)
-	log.WithFields(log.Fields{
-		"LatestProcessedSlot":  or.state.LatestProcessedSlot,
-		"LatestProcessedBlock": or.state.LatestProcessedBlock,
-		"NextSlotToProcess":    or.state.NextSlotToProcess,
-		"TotalValidators":      len(or.state.Validators),
-		"Network":              or.state.Network,
-		"PoolAddress":          or.state.PoolAddress,
-		"Path":                 path,
-		//"MerkleRoot":      mRoot,
-		//"EnoughData":      enoughData,
-	}).Info("Saving state to file")
-
-	err = encoder.Encode(or.state)
-	if err != nil {
-		log.Fatal("could not encode state into file: ", err)
-	}
-}
-
-// TODO: Remove when migrated to json
-func (or *Oracle) LoadStateFromFile() error {
-	or.mutex.Lock()
-	defer or.mutex.Unlock()
-	// Init all fields in case any was stored empty in the file
-	readState := OracleState{
-		Validators:          make(map[uint64]*ValidatorInfo, 0),
-		PoolAccumulatedFees: big.NewInt(0),
-		Subscriptions:       make([]*contract.ContractSubscribeValidator, 0),
-		Unsubscriptions:     make([]*contract.ContractUnsubscribeValidator, 0),
-		Donations:           make([]*contract.ContractEtherReceived, 0),
-		ProposedBlocks:      make([]SummarizedBlock, 0),
-		MissedBlocks:        make([]SummarizedBlock, 0),
-		WrongFeeBlocks:      make([]SummarizedBlock, 0),
-		Config:              &Config{},
+	if state.CheckPointSizeInSlots != or.cfg.CheckPointSizeInSlots {
+		return false, errors.New(fmt.Sprintf("check point size mismatch, recovered: %d, expected: %d",
+			state.CheckPointSizeInSlots, or.cfg.CheckPointSizeInSlots))
 	}
 
-	// TODO: Run reconciliation here to ensure the state is correct
-	// TODO: Run checks here on config. Same testnet, same fees, same addresses
-	path := filepath.Join(StateFolder, StateFileName)
-	file, err := os.Open(path)
-
-	if err != nil {
-		return err
+	if state.DeployedBlock != or.cfg.DeployedBlock {
+		return false, errors.New(fmt.Sprintf("deployed block mismatch, recovered: %d, expected: %d",
+			state.DeployedBlock, or.cfg.DeployedBlock))
 	}
 
-	decoder := gob.NewDecoder(file)
-	err = decoder.Decode(&readState)
-	if err != nil {
-		return err
-	}
-
-	if readState.Config.Network != or.state.Config.Network {
-		log.Fatal("Error loading state from file. Network mismatch. Expected: ",
-			or.state.Config.Network, " Got: ", readState.Config.Network)
-	}
-
-	if readState.Config.PoolAddress != or.state.Config.PoolAddress {
-		log.Fatal("Error loading state from file. PoolAddress mismatch. Expected: ",
-			or.state.Config.PoolAddress, " Got: ", readState.Config.PoolAddress)
-	}
-
-	if readState.Config.PoolFeesAddress != or.state.Config.PoolFeesAddress {
-		log.Fatal("Error loading state from file. PoolFeesAddress mismatch. Expected: ",
-			or.state.Config.PoolFeesAddress, " Got: ", readState.Config.PoolFeesAddress)
-	}
-
-	if readState.Config.PoolFeesPercent != or.state.Config.PoolFeesPercent {
-		log.Fatal("Error loading state from file. PoolFeesPercent mismatch. Expected: ",
-			or.state.Config.PoolFeesPercent, " Got: ", readState.Config.PoolFeesPercent)
+	if state.DeployedSlot != or.cfg.DeployedSlot {
+		return false, errors.New(fmt.Sprintf("deployed slot mismatch, recovered: %d, expected: %d",
+			state.DeployedSlot, or.cfg.DeployedSlot))
 	}
 
 	mRoot, enoughData := or.getMerkleRootIfAny()
-
 	log.WithFields(log.Fields{
 		"Path":                 path,
-		"LatestProcessedSlot":  readState.LatestProcessedSlot,
-		"LatestProcessedBlock": readState.LatestProcessedBlock,
-		"NextSlotToProcess":    readState.NextSlotToProcess,
-		"Network":              readState.Network,
-		"PoolAddress":          readState.PoolAddress,
+		"LatestProcessedSlot":  state.LatestProcessedSlot,
+		"LatestProcessedBlock": state.LatestProcessedBlock,
+		"NextSlotToProcess":    state.NextSlotToProcess,
+		"Network":              state.Network,
+		"PoolAddress":          state.PoolAddress,
 		"MerkleRoot":           mRoot,
 		"EnoughData":           enoughData,
 	}).Info("Loaded state from file")
 
-	// This could be nicer. Note that adding a new field to the state
-	// requires adding it here as well
-	or.state.LatestProcessedSlot = readState.LatestProcessedSlot
-	or.state.NextSlotToProcess = readState.NextSlotToProcess
-	or.state.LatestProcessedBlock = readState.LatestProcessedBlock
-	//state.Network = readState.Network
-	//state.PoolAddress = readState.PoolAddress
-	or.state.Validators = readState.Validators
-	or.state.PoolFeesPercent = readState.PoolFeesPercent
-	or.state.PoolFeesAddress = readState.PoolFeesAddress
-	or.state.PoolAccumulatedFees = readState.PoolAccumulatedFees
-	or.state.Subscriptions = readState.Subscriptions
-	or.state.Unsubscriptions = readState.Unsubscriptions
-	or.state.Donations = readState.Donations
-	or.state.ProposedBlocks = readState.ProposedBlocks
-	or.state.MissedBlocks = readState.MissedBlocks
-	or.state.WrongFeeBlocks = readState.WrongFeeBlocks
-
-	return nil
+	or.state = &state
+	return true, nil
 }
 
 // Returns false if there wasnt enough data to create a merkle tree
@@ -588,7 +497,7 @@ func (or *Oracle) hashStateLockFree() error {
 	or.state.StateHash = ""
 
 	// Serialize the state
-	jsonData, err := json.Marshal(or.state)
+	jsonData, err := json.MarshalIndent(or.state, "", " ")
 	if err != nil {
 		return errors.Wrap(err, "could not marshal state to json")
 	}
@@ -635,7 +544,7 @@ func (or *Oracle) isTracked(validatorIndex uint64) bool {
 }
 
 func (or *Oracle) isCollateralEnough(collateral *big.Int) bool {
-	return collateral.Cmp(or.state.Config.CollateralInWei) >= 0
+	return collateral.Cmp(or.state.CollateralInWei) >= 0
 }
 
 func (or *Oracle) handleDonations(donations []*contract.ContractEtherReceived) {
@@ -1033,8 +942,8 @@ func (or *Oracle) increaseAllPendingRewards(
 		return
 	}
 
-	if or.state.PoolFeesPercent > 100*100 {
-		log.Fatal("Pool fees percent cannot be greater than 100% (10000) value: ", or.state.PoolFeesPercent)
+	if or.state.PoolFeesPercentOver10000 > 100*100 {
+		log.Fatal("Pool fees percent cannot be greater than 100% (10000) value: ", or.state.PoolFeesPercentOver10000)
 	}
 
 	// 100 is the % and the other 100 is because we use two decimals
@@ -1042,8 +951,8 @@ func (or *Oracle) increaseAllPendingRewards(
 	// eg 50 is 0.5%
 	over := big.NewInt(100 * 100)
 
-	// The pool takes PoolFeesPercent cut of the rewards
-	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(or.state.PoolFeesPercent)))
+	// The pool takes PoolFeesPercentOver10000 cut of the rewards
+	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(or.state.PoolFeesPercentOver10000)))
 
 	// Calculate the pool cut
 	poolCut := big.NewInt(0).Div(aux, over)

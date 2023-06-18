@@ -352,14 +352,14 @@ func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	m.respondOK(w, httpOkConfig{
-		Network:               m.cfg.Network,
-		PoolAddress:           m.cfg.PoolAddress,
-		DeployedSlot:          m.cfg.DeployedSlot,
-		CheckPointSizeInSlots: m.cfg.CheckPointSizeInSlots,
-		PoolFeesPercent:       m.cfg.PoolFeesPercent,
-		PoolFeesAddress:       m.cfg.PoolFeesAddress,
-		DryRun:                m.cfg.DryRun,
-		CollateralInWei:       m.cfg.CollateralInWei.String(),
+		Network:                  m.cfg.Network,
+		PoolAddress:              m.cfg.PoolAddress,
+		DeployedSlot:             m.cfg.DeployedSlot,
+		CheckPointSizeInSlots:    m.cfg.CheckPointSizeInSlots,
+		PoolFeesPercentOver10000: m.cfg.PoolFeesPercentOver10000,
+		PoolFeesAddress:          m.cfg.PoolFeesAddress,
+		DryRun:                   m.cfg.DryRun,
+		CollateralInWei:          m.cfg.CollateralInWei.String(),
 	})
 }
 
@@ -549,9 +549,9 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 
 func (m *ApiService) handleMemoryFeesInfo(w http.ResponseWriter, req *http.Request) {
 	m.respondOK(w, httpOkMemoryFeesInfo{
-		PoolFeesPercent:     m.oracle.State().PoolFeesPercent,
-		PoolFeesAddress:     m.oracle.State().PoolFeesAddress,
-		PoolAccumulatedFees: m.oracle.State().PoolAccumulatedFees.String(),
+		PoolFeesPercentOver10000: m.oracle.State().PoolFeesPercentOver10000,
+		PoolFeesAddress:          m.oracle.State().PoolFeesAddress,
+		PoolAccumulatedFees:      m.oracle.State().PoolAccumulatedFees.String(),
 	})
 }
 
