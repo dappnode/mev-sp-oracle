@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	log "github.com/sirupsen/logrus"
 )
@@ -171,7 +173,7 @@ func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) 
 			config.PoolFeesPercentOver10000, fullBlock.Events.UpdatePoolFee[0].NewPoolFee))
 	}
 
-	if len(fullBlock.Events.PoolFeeRecipient) != 0 && !Equals(config.PoolFeesAddress, fullBlock.Events.PoolFeeRecipient[0].NewPoolFeeRecipient.String()) {
+	if len(fullBlock.Events.PoolFeeRecipient) != 0 && !utils.Equals(config.PoolFeesAddress, fullBlock.Events.PoolFeeRecipient[0].NewPoolFeeRecipient.String()) {
 		return errors.New(fmt.Sprintf("pool fee recipient has changed. config: %s, block: %s",
 			config.PoolFeesAddress, fullBlock.Events.PoolFeeRecipient[0].NewPoolFeeRecipient.String()))
 	}
@@ -285,7 +287,7 @@ func (or *Oracle) LoadFromJson() (bool, error) {
 	calculatedHashStrig := hexutil.Encode(calculatedHashByte[:])
 
 	// Hashes must match
-	if !Equals(recoveredHash, calculatedHashStrig) {
+	if !utils.Equals(recoveredHash, calculatedHashStrig) {
 		return false, errors.New(fmt.Sprintf("hash mismatch, recovered: %s, calculated: %s",
 			recoveredHash, calculatedHashStrig))
 	}
@@ -357,7 +359,7 @@ func (or *Oracle) FreezeCheckpoint() bool {
 	defer or.mutex.Unlock()
 
 	validatorsCopy := make(map[uint64]*ValidatorInfo)
-	DeepCopy(or.state.Validators, &validatorsCopy)
+	utils.DeepCopy(or.state.Validators, &validatorsCopy)
 
 	mk := NewMerklelizer()
 	withdrawalToLeaf, withdrawalToRawLeaf, tree, enoughData := mk.GenerateTreeFromState(or.state)
@@ -377,7 +379,7 @@ func (or *Oracle) FreezeCheckpoint() bool {
 	for WithdrawalAddress, rawLeaf := range withdrawalToRawLeaf {
 
 		// Extra sanity check to make sure the withdrawal address is the same as the key
-		if !Equals(WithdrawalAddress, rawLeaf.WithdrawalAddress) {
+		if !utils.Equals(WithdrawalAddress, rawLeaf.WithdrawalAddress) {
 			log.Fatal("withdrawal address in raw leaf doesnt match the key")
 		}
 
@@ -389,7 +391,7 @@ func (or *Oracle) FreezeCheckpoint() bool {
 		}
 
 		// Store the proofs of the withdrawal address (to be used onchain)
-		proofs[WithdrawalAddress] = ByteArrayToArray(proof.Siblings)
+		proofs[WithdrawalAddress] = utils.ByteArrayToArray(proof.Siblings)
 
 		// Store the leafs (to be used onchain)
 		leafs[WithdrawalAddress] = rawLeaf
@@ -451,7 +453,7 @@ func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64
 	if !atLeastOne {
 		log.Info("Oracle has no commited states, no checkpoints have passed or there is not enough data to create a merkle tree")
 		// If the onchain state is the default, we can consider in sync as the contract has not root also
-		if Equals(onchainRoot, DefaultRoot) {
+		if utils.Equals(onchainRoot, DefaultRoot) {
 			log.WithFields(log.Fields{
 				"OnchainRoot": onchainRoot,
 				"OnchainSlot": onchainSlot,
@@ -468,7 +470,7 @@ func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64
 
 	latestOracleRoot := or.State().CommitedStates[latestCommitedSlot].MerkleRoot
 
-	if Equals(onchainRoot, latestOracleRoot) && onchainSlot == latestCommitedSlot {
+	if utils.Equals(onchainRoot, latestOracleRoot) && onchainSlot == latestCommitedSlot {
 		log.WithFields(log.Fields{
 			"OnchainRoot": onchainRoot,
 			"OnchainSlot": onchainSlot,
@@ -479,8 +481,8 @@ func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64
 	}
 
 	// If roots match but not slots or viceversa. Something is wrong
-	if (Equals(onchainRoot, latestOracleRoot) && onchainSlot != latestCommitedSlot) ||
-		(!Equals(onchainRoot, latestOracleRoot) && onchainSlot == latestCommitedSlot) {
+	if (utils.Equals(onchainRoot, latestOracleRoot) && onchainSlot != latestCommitedSlot) ||
+		(!utils.Equals(onchainRoot, latestOracleRoot) && onchainSlot == latestCommitedSlot) {
 		return false, errors.New(fmt.Sprintf("Oracle root/slot does not match the onchain root/slot. "+
 			"OracleRoot: %s, OracleSlot: %d, OnchainRoot: %s, OnchainSlot: %d",
 			latestOracleRoot, latestCommitedSlot, onchainRoot, onchainSlot))
@@ -693,7 +695,7 @@ func (or *Oracle) handleManualSubscriptions(
 		}
 
 		// Subscription received for a validator that dont have eth1 withdrawal address (bls)
-		validatorWithdrawal, err := GetEth1AddressByte(validator.Validator.WithdrawalCredentials)
+		validatorWithdrawal, err := utils.GetEth1AddressByte(validator.Validator.WithdrawalCredentials)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Raw.BlockNumber,
@@ -708,7 +710,7 @@ func (or *Oracle) handleManualSubscriptions(
 		}
 
 		// Subscription received from an address that is not the validator withdrawal address
-		if !Equals(sender, validatorWithdrawal) {
+		if !utils.Equals(sender, validatorWithdrawal) {
 			log.WithFields(log.Fields{
 				"BlockNumber":         sub.Raw.BlockNumber,
 				"Collateral":          sub.SubscriptionCollateral,
@@ -855,7 +857,7 @@ func (or *Oracle) handleManualUnsubscriptions(
 		}
 
 		// Unsubscription but for a validator that does not have an eth1 address. Should never happen
-		withdrawalAddress, err := GetEth1AddressByte(validator.Validator.WithdrawalCredentials)
+		withdrawalAddress, err := utils.GetEth1AddressByte(validator.Validator.WithdrawalCredentials)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"BlockNumber":    unsub.Raw.BlockNumber,
@@ -868,7 +870,7 @@ func (or *Oracle) handleManualUnsubscriptions(
 
 		// Its very important to check that the unsubscription was made from the withdrawal address
 		// of the validator, otherwise anyone could call the unsubscription function.
-		if !Equals(sender, withdrawalAddress) {
+		if !utils.Equals(sender, withdrawalAddress) {
 			log.WithFields(log.Fields{
 				"BlockNumber":      unsub.Raw.BlockNumber,
 				"TxHash":           unsub.Raw.TxHash,
@@ -1119,6 +1121,22 @@ func (or *Oracle) getMerkleRootIfAny() (string, bool) {
 	merkleRootStr := hexutil.Encode(tree.Root[:])
 
 	return merkleRootStr, true
+}
+
+// Returns the 0x prefixed withdrawal credentials and its type: BlsWithdrawal or Eth1Withdrawal
+func GetWithdrawalAndType(validator *v1.Validator) (string, WithdrawalType) {
+	withdrawalCred := hex.EncodeToString(validator.Validator.WithdrawalCredentials)
+	if len(withdrawalCred) != 64 {
+		log.Fatal("withdrawal credentials are not a valid length: ", len(withdrawalCred))
+	}
+
+	if utils.IsBlsType(withdrawalCred) {
+		return "0x" + withdrawalCred[2:], BlsWithdrawal
+	} else if utils.IsEth1Type(withdrawalCred) {
+		return "0x" + withdrawalCred[24:], Eth1Withdrawal
+	}
+	log.Fatal("withdrawal credentials are not a valid type: ", withdrawalCred)
+	return "", 0
 }
 
 // See the spec for state diagram with states and transitions. This tracks all the different

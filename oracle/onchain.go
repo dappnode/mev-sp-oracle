@@ -14,6 +14,7 @@ import (
 
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/dappnode/mev-sp-oracle/utils"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -346,7 +347,7 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 	var receipts []*types.Receipt
 	for _, rawTx := range rawTxs {
 		// This should never happen
-		tx, err := DecodeTx(rawTx)
+		tx, err := utils.DecodeTx(rawTx)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -425,7 +426,7 @@ func (o *Onchain) IsAddressWhitelisted(
 
 			// If we found an event with the address we are looking for, return true
 			// as it means the address is whitelisted
-			if Equals(address, newOracleMember) {
+			if utils.Equals(address, newOracleMember) {
 				log.WithFields(log.Fields{
 					"TxHash":          itr.Event.Raw.TxHash.String(),
 					"NewOracleMember": itr.Event.NewOracleMember.String(),
@@ -837,7 +838,7 @@ func (onchain *Onchain) GetConfigFromContract(
 	if err != nil {
 		log.Fatal("Could not get pool address balance: " + err.Error())
 	}
-	log.Info("Pool address balance: ", WeiToEther(balance), " Eth")
+	log.Info("Pool address balance: ", utils.WeiToEther(balance), " Eth")
 
 	deployedBlock, err := onchain.GetContractDeploymentBlock()
 	if err != nil {
@@ -854,17 +855,17 @@ func (onchain *Onchain) GetConfigFromContract(
 	SecondsInSlot := uint64(12)
 	deployedSlot := (blockTime - genesisTime) / SecondsInSlot
 
-	/*
-		blockAtSlot, err := onchain.GetConsensusBlockAtSlot(deployedSlot)
-		if err != nil {
-			log.Fatal("Could not get block at slot: " + err.Error())
-		}
+	/* TODO:
+	blockAtSlot, err := onchain.GetConsensusBlockAtSlot(deployedSlot)
+	if err != nil {
+		log.Fatal("Could not get block at slot: " + err.Error())
+	}
 
-		customBlockAtSlot := oracle.VersionedSignedBeaconBlock{blockAtSlot}
-		if customBlockAtSlot.GetBlockNumber() != deployedBlock.Uint64() {
-			log.Fatal("Could not map the deployed block with a slot, missmatch: ",
-				customBlockAtSlot.GetBlockNumber(), " != ", deployedBlock)
-		}*/
+	customBlockAtSlot := oracle.VersionedSignedBeaconBlock{blockAtSlot}
+	if customBlockAtSlot.GetBlockNumber() != deployedBlock.Uint64() {
+		log.Fatal("Could not map the deployed block with a slot, missmatch: ",
+			customBlockAtSlot.GetBlockNumber(), " != ", deployedBlock)
+	}*/
 
 	log.Info("[Loaded from contract] Contract deployed in slot: ", deployedSlot)
 
@@ -872,7 +873,7 @@ func (onchain *Onchain) GetConfigFromContract(
 	if err != nil {
 		log.Fatal("Could not get slot checkpoint size: " + err.Error())
 	}
-	log.Info("[Loaded from contract] Checkpoints will be created every ", checkPointSizeInSlots, " slots (", SlotsToTime(checkPointSizeInSlots), ")")
+	log.Info("[Loaded from contract] Checkpoints will be created every ", checkPointSizeInSlots, " slots (", utils.SlotsToTime(checkPointSizeInSlots), ")")
 
 	poolFeesPercentTwoDecimals, err := onchain.GetPoolFee()
 	if err != nil {
@@ -891,7 +892,7 @@ func (onchain *Onchain) GetConfigFromContract(
 		log.Fatal("Could not get contract collateral: " + err.Error())
 	}
 	log.Info("[Loaded from contract] Required collateral to join the pool: ",
-		ethCollateralInWei, " wei (", WeiToEther(ethCollateralInWei), " Eth)")
+		ethCollateralInWei, " wei (", utils.WeiToEther(ethCollateralInWei), " Eth)")
 
 	if cliCfg.DryRun {
 		log.Warn("The pool contract WILL NOT be updated, running in dry-run mode")
@@ -1377,7 +1378,7 @@ func (o *Onchain) RefreshBeaconValidators() {
 		log.WithFields(log.Fields{
 			"TotalValidators":       len(vals),
 			"LastIndex":             vals[phase0.ValidatorIndex(len(vals)-1)].Index,
-			"ActivationSlotLastVal": GetActivationSlotOfLatestProcessedValidator(vals),
+			"ActivationSlotLastVal": utils.GetActivationSlotOfLatestProcessedValidator(vals),
 		}).Info("Done loading beacon chain validators")
 	} else {
 		log.Fatal("No validators were loaded from the beacon chain")
