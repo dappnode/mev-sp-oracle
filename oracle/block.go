@@ -520,27 +520,8 @@ func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Summariz
 		return poolBlock
 
 	} else {
-
-		// Check if the proposal is from a subscribed validator
-		// TODO: remove this and just get if from the available information
+		// Check if the proposer is subscribed to the pool
 		isFromSubscriber := oracle.isSubscribed(b.GetProposerIndexUint64())
-		isPoolRewarded := b.isAddressRewarded(poolAddress)
-
-		// This calculation is expensive, do it only if the reward went to the pool or
-		// if the block is from a subscribed validator (which includes also wrong fee blocks from subscribers)
-		if isFromSubscriber || isPoolRewarded {
-			/*
-				blockNumber := new(big.Int).SetUint64(b.GetBlockNumber())
-				header, receipts, err := o.GetExecHeaderAndReceipts(blockNumber, b.GetBlockTransactions())
-				if err != nil {
-					log.Fatal("failed getting header and receipts: ", err)
-				}
-				extendedBlock = NewFullBlock(proposedBlock, header, receipts, events)*/
-		}
-
-		// TODO:
-		//MEVFeeRecipient
-		//FeeRecipient
 
 		// Fetch block information
 		reward, correctFeeRec, rewardType := b.GetSentRewardAndType(poolAddress, isFromSubscriber)
