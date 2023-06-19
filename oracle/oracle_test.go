@@ -58,16 +58,16 @@ func Test_SaveReadToFromJson(t *testing.T) {
 	}
 	oracle := NewOracle(config)
 
-	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
 
-	oracle.StoreLatestOnchainState()
+	oracle.FreezeCheckpoint()
 
-	oracle.addSubscriptionIfNotAlready(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(643344), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(3), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(6434), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(643344), "0x2000000000000000000000000000000000000000", "0x2000000000000000000000000000000000000000")
 
-	oracle.StoreLatestOnchainState()
+	oracle.FreezeCheckpoint()
 
 	subs := []*contract.ContractSubscribeValidator{
 		{
@@ -122,7 +122,7 @@ func Test_SaveReadToFromJson(t *testing.T) {
 	require.Error(t, err)
 }
 
-func Test_StoreLatestOnchainState(t *testing.T) {
+func Test_FreezeCheckpoint(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		PoolFeesPercentOver10000: 0,
@@ -160,7 +160,7 @@ func Test_StoreLatestOnchainState(t *testing.T) {
 	oracle.state.Validators[3] = valInfo3
 
 	// Function under test
-	oracle.StoreLatestOnchainState()
+	oracle.FreezeCheckpoint()
 
 	commitedSlot := oracle.state.LatestProcessedSlot
 
@@ -241,7 +241,7 @@ func Test_Oracle_ManualSubscription(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, uint64(50012), processedSlot)
 
-		enough := oracle.State.StoreLatestOnchainState()
+		enough := oracle.State.FreezeCheckpoint()
 		require.True(t, enough)
 
 		require.Equal(t, "df67cc0d6a1d8b80f7d73b42813952c0e4d3936f597959fe87374eb89f100f5e", oracle.State.LatestCommitedState.MerkleRoot)
@@ -525,7 +525,7 @@ func GenerateUnsunscriptions(
 
 func Test_AddSubscription(t *testing.T) {
 	oracle := NewOracle(&Config{})
-	oracle.addSubscriptionIfNotAlready(10, "0x", "0x")
+	oracle.addSubscription(10, "0x", "0x")
 	oracle.increaseAllPendingRewards(big.NewInt(100))
 	oracle.consolidateBalance(10)
 	oracle.increaseAllPendingRewards(big.NewInt(200))
@@ -533,14 +533,14 @@ func Test_AddSubscription(t *testing.T) {
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
 
 	// check that adding again doesnt reset the subscription
-	oracle.addSubscriptionIfNotAlready(10, "0x", "0x")
+	oracle.addSubscription(10, "0x", "0x")
 	require.Equal(t, big.NewInt(200), oracle.state.Validators[10].PendingRewardsWei)
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
 }
 
-func Test_addSubscriptionIfNotAlready(t *testing.T) {
+func Test_addSubscription(t *testing.T) {
 	oracle := NewOracle(&Config{})
-	oracle.addSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
+	oracle.addSubscription(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
 	require.Equal(t, 1, len(oracle.state.Validators))
 	require.Equal(t, &ValidatorInfo{
 		ValidatorStatus:       Active,
@@ -557,7 +557,7 @@ func Test_addSubscriptionIfNotAlready(t *testing.T) {
 	oracle.state.Validators[100].PendingRewardsWei = big.NewInt(87653)
 
 	// If we call it again, it shouldnt be overwritten as its already there
-	oracle.addSubscriptionIfNotAlready(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
+	oracle.addSubscription(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
 
 	require.Equal(t, big.NewInt(334545546), oracle.state.Validators[100].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(87653), oracle.state.Validators[100].PendingRewardsWei)
@@ -1469,9 +1469,9 @@ func Test_increaseAllPendingRewards_1(t *testing.T) {
 	})
 
 	// Subscribe 3 validators with no balance
-	oracle.addSubscriptionIfNotAlready(1, "0x", "0x")
-	oracle.addSubscriptionIfNotAlready(2, "0x", "0x")
-	oracle.addSubscriptionIfNotAlready(3, "0x", "0x")
+	oracle.addSubscription(1, "0x", "0x")
+	oracle.addSubscription(2, "0x", "0x")
+	oracle.addSubscription(3, "0x", "0x")
 
 	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
@@ -1490,9 +1490,9 @@ func Test_increaseAllPendingRewards_2(t *testing.T) {
 	})
 
 	// Subscribe 3 validators with no balance
-	oracle.addSubscriptionIfNotAlready(1, "0x", "0x")
-	oracle.addSubscriptionIfNotAlready(2, "0x", "0x")
-	oracle.addSubscriptionIfNotAlready(3, "0x", "0x")
+	oracle.addSubscription(1, "0x", "0x")
+	oracle.addSubscription(2, "0x", "0x")
+	oracle.addSubscription(3, "0x", "0x")
 
 	oracle.increaseAllPendingRewards(big.NewInt(10000))
 
@@ -1534,7 +1534,7 @@ func Test_increaseAllPendingRewards_3(t *testing.T) {
 		})
 
 		for i := 0; i < test.AmountValidators; i++ {
-			oracle.addSubscriptionIfNotAlready(uint64(i), "0x", "0x")
+			oracle.addSubscription(uint64(i), "0x", "0x")
 		}
 
 		totalRewards := big.NewInt(0)
@@ -1601,7 +1601,7 @@ func Test_increaseAllPendingRewards_4(t *testing.T) {
 			PoolFeesAddress:          "0x",
 		})
 		for i := 0; i < test.AmountValidators; i++ {
-			oracle.addSubscriptionIfNotAlready(uint64(i), "0x", "0x")
+			oracle.addSubscription(uint64(i), "0x", "0x")
 		}
 		oracle.increaseAllPendingRewards(test.Reward)
 		for i := 0; i < test.AmountValidators; i++ {
@@ -1805,9 +1805,9 @@ func Test_IsValidatorSubscribed(t *testing.T) {
 
 func Test_BanValidator(t *testing.T) {
 	oracle := NewOracle(&Config{})
-	oracle.addSubscriptionIfNotAlready(1, "0xa", "0xb")
-	oracle.addSubscriptionIfNotAlready(2, "0xa", "0xb")
-	oracle.addSubscriptionIfNotAlready(3, "0xa", "0xb")
+	oracle.addSubscription(1, "0xa", "0xb")
+	oracle.addSubscription(2, "0xa", "0xb")
+	oracle.addSubscription(3, "0xa", "0xb")
 
 	// New reward arrives
 	oracle.increaseAllPendingRewards(big.NewInt(99))
@@ -2089,14 +2089,14 @@ func Test_SizeMultipleOnchainState(t *testing.T) {
 				WithdrawalAddress: "0x0100000000000000000000009b3b13d6b6f3f52154a8b00d818392b61e4b42b4",
 			})
 		}
-		// the "StoreLatestOnchainState" function is responsible of making a deep copy of all
+		// the "FreezeCheckpoint" function is responsible of making a deep copy of all
 		// current validator data and storing it in the new "state.CommitedStates" map, which
 		// contains all the past onchain states of the validators.
 		// each time we store a new latestOnchainState, the merkleroot has changed, so we
 		// store a new state of all the validators.
 		// in a year, will update the onchain state 121 times. each time we do this, we will
 		// store the last onchain state, which contains the information of all the validators
-		oracle.StoreLatestOnchainState()
+		oracle.FreezeCheckpoint()
 	}
 
 	//after 1 year, we will have 121 states in the "state.CommitedStates" map.
@@ -2127,7 +2127,7 @@ func Test_LatestCommitedSlot_LatestCommitedState(t *testing.T) {
 	})
 
 	// No data, no state
-	oracle.StoreLatestOnchainState()
+	oracle.FreezeCheckpoint()
 	slot, stateExistst := oracle.LatestCommitedSlot()
 	state := oracle.LatestCommitedState()
 	require.Equal(t, uint64(0), slot)
@@ -2136,10 +2136,10 @@ func Test_LatestCommitedSlot_LatestCommitedState(t *testing.T) {
 
 	// Add state slot = 100
 	oracle.state.LatestProcessedSlot = 100
-	oracle.addSubscriptionIfNotAlready(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.StoreLatestOnchainState()
+	oracle.addSubscription(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.FreezeCheckpoint()
 	slot, stateExistst = oracle.LatestCommitedSlot()
 	state = oracle.LatestCommitedState()
 	require.Equal(t, uint64(100), slot)
@@ -2149,10 +2149,10 @@ func Test_LatestCommitedSlot_LatestCommitedState(t *testing.T) {
 
 	// Add state slot = 200
 	oracle.state.LatestProcessedSlot = 200
-	oracle.addSubscriptionIfNotAlready(uint64(13), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(14), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(15), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.StoreLatestOnchainState()
+	oracle.addSubscription(uint64(13), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(14), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(15), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.FreezeCheckpoint()
 	slot, stateExistst = oracle.LatestCommitedSlot()
 	state = oracle.LatestCommitedState()
 	require.Equal(t, uint64(200), slot)
@@ -2177,10 +2177,10 @@ func Test_IsOracleInSyncWithChain(t *testing.T) {
 
 	// Add a state
 	oracle.state.LatestProcessedSlot = 100
-	oracle.addSubscriptionIfNotAlready(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscriptionIfNotAlready(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.StoreLatestOnchainState()
+	oracle.addSubscription(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.FreezeCheckpoint()
 
 	// In sync
 	onchainRoot = "0xbb82bf59b1b6f3b0964c08ffb9336365153b34e2b30fb1230146428d153693b0"
@@ -2246,4 +2246,18 @@ func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.In
 		RewardType:        MevBlock,
 		WithdrawalAddress: withAddress,
 	}
+}
+
+func Test_getMerkleRootIfAny(t *testing.T) {
+	oracle := NewOracle(&Config{
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
+	})
+	oracle.state.LatestProcessedSlot = 100
+	oracle.addSubscription(uint64(10), "0x1123456789abcdef0123456789abcdef01234568", "0x1123456789abcdef0123456789abcdef01234568")
+	oracle.addSubscription(uint64(11), "0x1123456789abcdef0123456789abcdef01234568", "0x1123456789abcdef0123456789abcdef01234568")
+	oracle.addSubscription(uint64(12), "0x1123456789abcdef0123456789abcdef01234568", "0x1123456789abcdef0123456789abcdef01234568")
+
+	root, enough := oracle.getMerkleRootIfAny()
+	require.Equal(t, "0x3ba6b7c80fed7f5f5f5796c610c7dc5bbabf408b8525cbcef67086766ab51863", root)
+	require.Equal(t, true, enough)
 }

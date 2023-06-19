@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/hex"
 	"math/big"
 	"testing"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 )
@@ -88,7 +88,7 @@ func Test_ApplyNonFinalizedState_Subscription(t *testing.T) {
 		validators := map[uint64]*oracle.ValidatorInfo{
 			1: {
 				ValidatorStatus:   test.OracleState,
-				WithdrawalAddress: "0x" + hex.EncodeToString(test.ValidatorWithdrawal),
+				WithdrawalAddress: hexutil.Encode(test.ValidatorWithdrawal[:]),
 				ValidatorIndex:    test.EvenValidatorIndex,
 				PendingRewardsWei: test.BeforePending,
 			},

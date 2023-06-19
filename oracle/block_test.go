@@ -266,7 +266,7 @@ func Test_SummarizedBlock(t *testing.T) {
 			oracle.state.PoolAddress = tt.PoolAddress
 
 			if tt.ProposerSubscribed {
-				oracle.addSubscriptionIfNotAlready(tt.ExpectedValidatorIndex, "0x", "0x")
+				oracle.addSubscription(tt.ExpectedValidatorIndex, "0x", "0x")
 			}
 
 			fullBlock, err := LoadFullBlock(tt.Slot, "5", tt.ProposerSubscribed)

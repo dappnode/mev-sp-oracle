@@ -169,7 +169,7 @@ func Test_EndToEnd(t *testing.T) {
 		log.Info("Processed slot: ", processedSlot)
 	}
 
-	oracleInstance.StoreLatestOnchainState()
+	oracleInstance.FreezeCheckpoint()
 
 	// TODO: Run asserts
 	//oracleInstance.SaveStateToFile()

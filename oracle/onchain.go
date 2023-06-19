@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -560,7 +561,7 @@ func (o *Onchain) GetRewardsRoot(opts ...retry.Option) (string, error) {
 				log.Warn("Failed attempt to get merkle root from contract: ", err.Error(), " Retrying...")
 				return errors.New("could not get rewards root from contract: " + err.Error())
 			}
-			rewardsRootStr = "0x" + hex.EncodeToString(rewardsRoot[:])
+			rewardsRootStr = hexutil.Encode(rewardsRoot[:])
 			return nil
 		}, o.GetRetryOpts(opts)...)
 

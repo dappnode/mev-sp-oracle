@@ -208,11 +208,11 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 		}
 
 		// Every CheckPointSizeInSlots we commit the state given some conditions
-		if oracleInstance.State().LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 { // TODO: extract to oracle method
+		if oracleInstance.State().LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached, latest processed slot: ", oracleInstance.State().LatestProcessedSlot)
 
 			// Freeze state
-			enoughData := oracleInstance.StoreLatestOnchainState() // TODO: perhaps not the best name
+			enoughData := oracleInstance.FreezeCheckpoint()
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 				continue

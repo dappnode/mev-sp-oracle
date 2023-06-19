@@ -2,7 +2,6 @@ package oracle
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 
 	"fmt"
@@ -41,13 +40,12 @@ func NewOracle(cfg *Config) *Oracle {
 		PoolAccumulatedFees:  big.NewInt(0),
 		Validators:           make(map[uint64]*ValidatorInfo, 0),
 		CommitedStates:       make(map[uint64]*OnchainState, 0),
-
-		Subscriptions:   make([]*contract.ContractSubscribeValidator, 0),
-		Unsubscriptions: make([]*contract.ContractUnsubscribeValidator, 0),
-		Donations:       make([]*contract.ContractEtherReceived, 0),
-		ProposedBlocks:  make([]SummarizedBlock, 0),
-		MissedBlocks:    make([]SummarizedBlock, 0),
-		WrongFeeBlocks:  make([]SummarizedBlock, 0),
+		Subscriptions:        make([]*contract.ContractSubscribeValidator, 0),
+		Unsubscriptions:      make([]*contract.ContractUnsubscribeValidator, 0),
+		Donations:            make([]*contract.ContractEtherReceived, 0),
+		ProposedBlocks:       make([]SummarizedBlock, 0),
+		MissedBlocks:         make([]SummarizedBlock, 0),
+		WrongFeeBlocks:       make([]SummarizedBlock, 0),
 
 		// Config
 		PoolFeesPercentOver10000: cfg.PoolFeesPercentOver10000,
@@ -68,22 +66,24 @@ func NewOracle(cfg *Config) *Oracle {
 	return oracle
 }
 
+// Returns the state of the oracle, containing all the information about the
+// validatores, with their state, balances, etc
 func (or *Oracle) State() *OracleState {
 	or.mutex.RLock()
 	defer or.mutex.RUnlock()
 	return or.state
 }
 
+// Sets the known validators from the beacon chain, must be updated regularly
 func (or *Oracle) SetBeaconValidators(
 	validators map[phase0.ValidatorIndex]*v1.Validator) {
 	or.beaconValidators = validators
 }
 
-// Advances the oracle to the next state, processing LatestSlot proposals/donations
-// calculating the new state of all validators. It returns the slot that was processed
-// and if there was an error.
-
-// TODO: Here provide the block class, that will contain all events etc.
+// Given a previous or.state, this function applies the new block to it, updating the or.state
+// with the new subscriptions, unsubscriptions, donations, and rewards to the pool, updating
+// the balance of all participating validators. Returns the slot that was processed and if there
+// was an error.
 func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 
 	or.mutex.Lock()
@@ -95,12 +95,22 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 			or.state.NextSlotToProcess, " ", or.state.LatestProcessedSlot))
 	}
 
+	// Ensure the block to process matches the expected one
+	if or.state.NextSlotToProcess != fullBlock.GetSlotUint64() {
+		return 0, errors.New(fmt.Sprint("Next slot to process is not the same as the block slot",
+			or.state.NextSlotToProcess, " ", fullBlock.GetSlotUint64()))
+	}
+
+	// Some misc validations
 	err := or.validateFullBlockConfig(fullBlock, or.cfg)
 	if err != nil {
 		return 0, errors.Wrap(err, "Error validating full block config")
 	}
 
+	// Full block is too heavy to be stored in the state, so we summarize it
 	summarizedBlock := fullBlock.SummarizedBlock(or, or.cfg.PoolAddress)
+
+	// Get donations to the pool in this block
 	blockDonations := fullBlock.GetDonations(or.cfg.PoolAddress)
 
 	// Handle subscriptions first thing
@@ -116,13 +126,11 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 		or.handleBlsCorrectBlockProposal(summarizedBlock)
 	}
 
-	// Manual subscription. If feeRec is ok, means the reward was sent to the pool
-	if summarizedBlock.BlockType == OkPoolProposal { /* and isSubscribed*/
+	// If fee recipient matches the pool, we distribute the rewards and upate
+	// the validator state. Automatic subscriptions are considered here
+	if summarizedBlock.BlockType == OkPoolProposal {
 		or.handleCorrectBlockProposal(summarizedBlock)
 	}
-
-	// TODO:
-	/* OkPoolProposal && !isSubscribed*/ // auto subs
 
 	// If the validator was subscribed but the fee recipient was wrong we ban the validator
 	if summarizedBlock.BlockType == WrongFeeRecipient && or.isSubscribed(summarizedBlock.ValidatorIndex) {
@@ -144,13 +152,13 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	return processedSlot, nil
 }
 
+// We use the following events to validate that the config has not changed. Dynamic
+// parameters are not supported.
+// UpdatePoolFee: Indicates the cut in %*100 the pool gets
+// PoolFeeRecipient: Indicates the address that receives the pool fees
+// CheckpointSlotSize: Indicates the size of the checkpoint in slots
+// UpdateSubscriptionCollateral: Indicates the amount of ETH required to subscribe
 func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) error {
-	// We use the following events to validate that the config has not changed. Dynamic
-	// parameters are not supported.
-	// UpdatePoolFee: Indicates the cut in %*100 the pool gets
-	// PoolFeeRecipient: Indicates the address that receives the pool fees
-	// CheckpointSlotSize: Indicates the size of the checkpoint in slots
-	// UpdateSubscriptionCollateral: Indicates the amount of ETH required to subscribe
 	if len(fullBlock.Events.UpdatePoolFee) > 1 ||
 		len(fullBlock.Events.PoolFeeRecipient) > 1 ||
 		len(fullBlock.Events.CheckpointSlotSize) > 1 ||
@@ -181,6 +189,7 @@ func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) 
 	return nil
 }
 
+// Serialized and saves the oracle state to a human readable json file
 func (or *Oracle) SaveToJson() error {
 	// Not just read lock since we change the hash, minor thing
 	// but it cant be just a read mutex
@@ -206,7 +215,7 @@ func (or *Oracle) SaveToJson() error {
 		return errors.Wrap(err, "could not create folder")
 	}
 
-	log.Debug("Saving state from file: ", string(jsonData))
+	log.Debug("Saving state from file: ", fmt.Sprintf("%s", jsonData))
 
 	err = ioutil.WriteFile(path, jsonData, 0644)
 	if err != nil {
@@ -227,6 +236,9 @@ func (or *Oracle) SaveToJson() error {
 	return nil
 }
 
+// Loads the oracle state from a human readable json file. Multiple
+// check are performed to ensure the state is valid such as checking
+// the hash of the state and ensuring the configuation has not changed
 func (or *Oracle) LoadFromJson() (bool, error) {
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
@@ -266,7 +278,7 @@ func (or *Oracle) LoadFromJson() (bool, error) {
 		return false, errors.Wrap(err, "could not marshal state without hash")
 	}
 
-	log.Debug("Loaded state from file: ", string(jsonNoHash))
+	log.Debug("Loaded state from file: ", fmt.Sprintf("%s", jsonNoHash))
 
 	// We calculate the hash of the state we read
 	calculatedHashByte := sha256.Sum256(jsonNoHash[:])
@@ -335,8 +347,12 @@ func (or *Oracle) LoadFromJson() (bool, error) {
 	return true, nil
 }
 
+// Takes the current state, creates a copy of it and freezes it, storing
+// it in a map slot->state. It also creates a set of merkle proof for each
+// withdrawal address of each validator. Each of these frozen states maps
+// to a commited onchain state, represented by a merkle root.
 // Returns false if there wasnt enough data to create a merkle tree
-func (or *Oracle) StoreLatestOnchainState() bool {
+func (or *Oracle) FreezeCheckpoint() bool {
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
 
@@ -348,7 +364,7 @@ func (or *Oracle) StoreLatestOnchainState() bool {
 	if !enoughData {
 		return false
 	}
-	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
+	merkleRootStr := hexutil.Encode(tree.Root[:])
 
 	log.WithFields(log.Fields{
 		"Slot":       or.state.LatestProcessedSlot,
@@ -392,7 +408,7 @@ func (or *Oracle) StoreLatestOnchainState() bool {
 }
 
 // Returns true and the latest commited slot if there is any commited state
-// false otherwise. Note that if there are checkpoint but without enough data
+// false otherwise. Note that if there are checkpoints but without enough data
 // to create a tree, it will still return false
 func (or *Oracle) LatestCommitedSlot() (uint64, bool) {
 	or.mutex.RLock()
@@ -411,6 +427,7 @@ func (or *Oracle) LatestCommitedSlot() (uint64, bool) {
 	return latestCommitedSlot, true
 }
 
+// Returns the last commited state
 func (or *Oracle) LatestCommitedState() *OnchainState {
 	or.mutex.RLock()
 	defer or.mutex.RUnlock()
@@ -425,6 +442,8 @@ func (or *Oracle) LatestCommitedState() *OnchainState {
 	return or.State().CommitedStates[latestCommitedSlot]
 }
 
+// Check if the oracle is in sync with a given root and slot. Its considered in sync
+// when the latest commited state has the same root and slot as the onchain state
 func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64) (bool, error) {
 	latestCommitedSlot, atLeastOne := or.LatestCommitedSlot()
 
@@ -475,6 +494,11 @@ func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64
 	return false, nil
 }
 
+// Returns true if a given validator can subscribe or not to the pool
+// Accepted states are:
+// -ValidatorStatePendingInitialized
+// -ValidatorStatePendingQueued
+// -ValidatorStateActiveOngoing
 func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
 	if validator.Status != v1.ValidatorStateActiveExiting &&
 		validator.Status != v1.ValidatorStateActiveSlashed &&
@@ -485,10 +509,6 @@ func CanValidatorSubscribeToPool(validator *v1.Validator) bool {
 		validator.Status != v1.ValidatorStateUnknown {
 		return true
 	}
-	// Accepted states are:
-	// -ValidatorStatePendingInitialized
-	// -ValidatorStatePendingQueued
-	// -ValidatorStateActiveOngoing
 	return false
 }
 
@@ -512,6 +532,8 @@ func (or *Oracle) hashStateLockFree() error {
 	return nil
 }
 
+// Returns if a validator is subscribed to the pool. A validator is subscribed if
+// its state is: active, yellowcard, redcard
 func (or *Oracle) isSubscribed(validatorIndex uint64) bool {
 	for valIndex, validator := range or.state.Validators {
 		if valIndex == validatorIndex &&
@@ -524,6 +546,7 @@ func (or *Oracle) isSubscribed(validatorIndex uint64) bool {
 	return false
 }
 
+// Returns true if a validator is banned
 func (or *Oracle) isBanned(validatorIndex uint64) bool {
 	validator, found := or.state.Validators[validatorIndex]
 	if !found {
@@ -535,6 +558,8 @@ func (or *Oracle) isBanned(validatorIndex uint64) bool {
 	return false
 }
 
+// Returns true if a validator is tracked by the oracle. Any state is considered
+// as tracked
 func (or *Oracle) isTracked(validatorIndex uint64) bool {
 	_, found := or.state.Validators[validatorIndex]
 	if found {
@@ -543,10 +568,12 @@ func (or *Oracle) isTracked(validatorIndex uint64) bool {
 	return false
 }
 
+// Returns true if the given collateral is greater or equal the inputed one
 func (or *Oracle) isCollateralEnough(collateral *big.Int) bool {
 	return collateral.Cmp(or.state.CollateralInWei) >= 0
 }
 
+// Handles the donations of a given block
 func (or *Oracle) handleDonations(donations []*contract.ContractEtherReceived) {
 	// Ensure the donations are from the same block
 	if len(donations) > 0 {
@@ -570,8 +597,9 @@ func (or *Oracle) handleDonations(donations []*contract.ContractEtherReceived) {
 	}
 }
 
+// Handles a correct block proposal into the pool
 func (or *Oracle) handleCorrectBlockProposal(block SummarizedBlock) {
-	or.addSubscriptionIfNotAlready(block.ValidatorIndex, block.WithdrawalAddress, block.ValidatorKey)
+	or.addSubscription(block.ValidatorIndex, block.WithdrawalAddress, block.ValidatorKey)
 	or.advanceStateMachine(block.ValidatorIndex, ProposalOk)
 	or.increaseAllPendingRewards(block.Reward)
 	or.consolidateBalance(block.ValidatorIndex)
@@ -583,11 +611,10 @@ func (or *Oracle) handleCorrectBlockProposal(block SummarizedBlock) {
 		"ValIndex":   block.ValidatorIndex,
 		"RewardWei":  block.Reward,
 		"RewardType": block.RewardType.String(),
-		//"PoolAddress":  xxx.,
-		//"FeeRecipient": xxx,
 	}).Info("[Reward]")
 }
 
+// Handles the proposal of a block but that has BLS withdrawal keys
 func (or *Oracle) handleBlsCorrectBlockProposal(block SummarizedBlock) {
 	if block.BlockType != OkPoolProposalBlsKeys {
 		log.Fatal("Block type is not OkPoolProposalBlsKeys, BlockType: ", block.BlockType)
@@ -600,8 +627,22 @@ func (or *Oracle) handleBlsCorrectBlockProposal(block SummarizedBlock) {
 	or.sendRewardToPool(block.Reward)
 }
 
+// Handles a manual subscription to the pool, meaning that an event from the smart contract
+// was triggered. This function asserts if the subscription was valid and updates the state
+// of the validator accordingly
 func (or *Oracle) handleManualSubscriptions(
 	subsEvents []*contract.ContractSubscribeValidator) {
+
+	// Ensure the subscriptions events are from the same block
+	if len(subsEvents) > 0 {
+		blockReference := subsEvents[0].Raw.BlockNumber
+		for _, donation := range subsEvents {
+			if donation.Raw.BlockNumber != blockReference {
+				log.Fatal("Handling manual subscriptions from different blocks is not possible: ",
+					donation.Raw.BlockNumber, " vs ", blockReference)
+			}
+		}
+	}
 
 	if or.beaconValidators == nil {
 		log.Fatal("Beacon validators cant be nil")
@@ -612,7 +653,6 @@ func (or *Oracle) handleManualSubscriptions(
 	}
 
 	for _, sub := range subsEvents {
-		// TODO: Ensure they are from the same block
 
 		valIdx := sub.ValidatorID
 		collateral := sub.SubscriptionCollateral
@@ -659,7 +699,7 @@ func (or *Oracle) handleManualSubscriptions(
 				"BlockNumber":    sub.Raw.BlockNumber,
 				"Collateral":     sub.SubscriptionCollateral,
 				"TxHash":         sub.Raw.TxHash,
-				"WithdrawalAddr": "0x" + hex.EncodeToString(validator.Validator.WithdrawalCredentials[:]),
+				"WithdrawalAddr": hexutil.Encode(validator.Validator.WithdrawalCredentials[:]),
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for validator with invalid withdrawal address (bls), skipping")
 			// Fees go to the pool. A validator with a bls address can not be tracked since it has not been able to subscribe.
@@ -737,7 +777,7 @@ func (or *Oracle) handleManualSubscriptions(
 					CollateralWei:         collateral,
 					WithdrawalAddress:     validatorWithdrawal,
 					ValidatorIndex:        valIdx,
-					ValidatorKey:          "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
+					ValidatorKey:          hexutil.Encode(validator.Validator.PublicKey[:]),
 				}
 			}
 			log.WithFields(log.Fields{
@@ -766,8 +806,22 @@ func (or *Oracle) handleManualSubscriptions(
 	}
 }
 
+// Handle the unsubscriptions detected as events triggered from the contract for a given block
+// If the unsubscription matches some criteria, we update the state of the validator. Main criteria
+// is that the sender matches the withdrawal address of the validator
 func (or *Oracle) handleManualUnsubscriptions(
 	unsubEvents []*contract.ContractUnsubscribeValidator) {
+
+	// Ensure the subscriptions events are from the same block
+	if len(unsubEvents) > 0 {
+		blockReference := unsubEvents[0].Raw.BlockNumber
+		for _, donation := range unsubEvents {
+			if donation.Raw.BlockNumber != blockReference {
+				log.Fatal("Handling manual unsubscriptions from different blocks is not possible: ",
+					donation.Raw.BlockNumber, " vs ", blockReference)
+			}
+		}
+	}
 
 	if or.beaconValidators == nil {
 		log.Fatal("Beacon validators cant be nil")
@@ -876,14 +930,15 @@ func (or *Oracle) handleBanValidator(block SummarizedBlock) {
 	or.state.WrongFeeBlocks = append(or.state.WrongFeeBlocks, block)
 }
 
+// Handles the case of a validator that has missed a block, only to be used
+// with subscribed validators into the pool
 func (or *Oracle) handleMissedBlock(block SummarizedBlock) {
 	or.advanceStateMachine(block.ValidatorIndex, ProposalMissed)
 	or.state.MissedBlocks = append(or.state.MissedBlocks, block)
 }
 
-// TODO: This is more related to automatic subscriptions. Rename and refactor accordingly
-// TODO: rename to handle autoSubscription. Passs v1.Validator Instead. Its not really autosubs
-func (or *Oracle) addSubscriptionIfNotAlready(valIndex uint64, withdrawalAddress string, validatorKey string) {
+// Subscribes a validator index with a given withdrawal address and validator key
+func (or *Oracle) addSubscription(valIndex uint64, withdrawalAddress string, validatorKey string) {
 	validator, found := or.state.Validators[valIndex]
 	if !found {
 		// If not found and not manually subscribed, we trigger the AutoSubscription event
@@ -910,6 +965,8 @@ func (or *Oracle) addSubscriptionIfNotAlready(valIndex uint64, withdrawalAddress
 	}
 }
 
+// Consolidate the balance of a given validator index. This means moving the pending to its accumulated
+// and setting the pending to zero.
 func (or *Oracle) consolidateBalance(valIndex uint64) {
 
 	beforePending := new(big.Int).Set(or.state.Validators[valIndex].PendingRewardsWei)
@@ -927,6 +984,7 @@ func (or *Oracle) consolidateBalance(valIndex uint64) {
 	}).Debug("Consolidating balance")
 }
 
+// Returns a list of all the eligible validators for rewards.
 func (or *Oracle) getEligibleValidators() []uint64 {
 	eligibleValidators := make([]uint64, 0)
 
@@ -1001,6 +1059,7 @@ func (or *Oracle) increaseAllPendingRewards(
 	}
 }
 
+// Increases the pending rewards of a given validator index.
 func (or *Oracle) increaseValidatorPendingRewards(valIndex uint64, reward *big.Int) {
 	beforePending := new(big.Int).Set(or.state.Validators[valIndex].PendingRewardsWei)
 	or.state.Validators[valIndex].PendingRewardsWei.Add(or.state.Validators[valIndex].PendingRewardsWei, reward)
@@ -1013,6 +1072,7 @@ func (or *Oracle) increaseValidatorPendingRewards(valIndex uint64, reward *big.I
 	}).Debug("Increasing validator pending rewards")
 }
 
+// Increases the accumulated rewards of a given validator index.
 func (or *Oracle) increaseValidatorAccumulatedRewards(valIndex uint64, reward *big.Int) {
 	accumulatedBefore := new(big.Int).Set(or.state.Validators[valIndex].AccumulatedRewardsWei)
 
@@ -1026,6 +1086,7 @@ func (or *Oracle) increaseValidatorAccumulatedRewards(valIndex uint64, reward *b
 	}).Debug("Increasing validator accumulated rewards")
 }
 
+// Sends the pool cut to the pool reward address.
 func (or *Oracle) sendRewardToPool(reward *big.Int) {
 
 	poolAccumulatedBefore := new(big.Int).Set(or.state.PoolAccumulatedFees)
@@ -1038,6 +1099,7 @@ func (or *Oracle) sendRewardToPool(reward *big.Int) {
 	}).Debug("Sending reward cut to pool reward address")
 }
 
+// Resets the pending rewards of a given validator index.
 func (or *Oracle) resetPendingRewards(valIndex uint64) {
 	log.WithFields(log.Fields{
 		"PendingRewardsBefore": or.state.Validators[valIndex].PendingRewardsWei,
@@ -1046,13 +1108,15 @@ func (or *Oracle) resetPendingRewards(valIndex uint64) {
 	or.state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
 }
 
+// Gets the merkle root of the state and returns if there was enough data
+// to generate it or not.
 func (or *Oracle) getMerkleRootIfAny() (string, bool) {
 	mk := NewMerklelizer()
 	_, _, tree, enoughData := mk.GenerateTreeFromState(or.state)
 	if !enoughData {
 		return "", enoughData
 	}
-	merkleRootStr := "0x" + hex.EncodeToString(tree.Root)
+	merkleRootStr := hexutil.Encode(tree.Root[:])
 
 	return merkleRootStr, true
 }

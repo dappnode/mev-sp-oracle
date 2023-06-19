@@ -20,6 +20,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/hako/durafmt"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
@@ -340,7 +341,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		PreviousCheckpointAgeUnix:   slotsFromLastCheckpoint * SecondsInSlot,
 		ExecutionChainId:            chainId.String(),
 		ConsensusChainId:            strconv.FormatUint(depositContract.ChainID, 10),
-		DepositContact:              "0x" + hex.EncodeToString(depositContract.Address[:]),
+		DepositContact:              hexutil.Encode(depositContract.Address[:]),
 	}
 
 	m.respondOK(w, status)
@@ -467,7 +468,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 			CollateralWei:         big.NewInt(0),
 			WithdrawalAddress:     eth1Add,
 			ValidatorIndex:        uint64(validator.Index),
-			ValidatorKey:          "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
+			ValidatorKey:          hexutil.Encode(validator.Validator.PublicKey[:]),
 		}
 	}
 
