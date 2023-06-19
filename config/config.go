@@ -45,10 +45,8 @@ var GoerliRelays = []string{
 	"goerli-relay.securerpc.com",
 }
 
-const MaxUint64 = ^uint64(0)
-
 func NewCliConfig() (*CliConfig, error) {
-	// Optional flags TODO: Test!
+	// Optional flags:
 	var version = flag.Bool("version", false, "Prints the release version and exits")
 	var dryRun = flag.Bool("dry-run", false, "If enabled, the pool contract will not be updated")
 	var updaterKeystorePath = flag.String("updater-keystore-path", "", "Path to the password-protected keystore file of the updater")
@@ -56,7 +54,7 @@ func NewCliConfig() (*CliConfig, error) {
 	var numRetries = flag.Int("num-retries", 0, "Number of retries for each interaction (consensus, execution): 0 infinite")
 	var logLevel = flag.String("log-level", "info", "Logging verbosity (trace, debug, info=default, warn, error, fatal, panic)")
 
-	// Mandatory flags TODO: Test!
+	// Mandatory flags:
 	var consensusEndpoint = flag.String("consensus-endpoint", "", "Ethereum consensus endpoint")
 	var executionEndpoint = flag.String("execution-endpoint", "", "Ethereum execution endpoint")
 	var poolAddress = flag.String("pool-address", "", "Address of the smoothing pool contract")
