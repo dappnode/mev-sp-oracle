@@ -417,3 +417,26 @@ func LoadFullBlock(slotNumber uint64, chainId string, hasHeaders bool) (*FullBlo
 
 	return &fullBlock, nil
 }
+
+func LoadValidators() (map[phase0.ValidatorIndex]*v1.Validator, error) {
+	path := filepath.Join("../mock", "validators.json")
+	jsonFile, err := os.Open(path)
+	defer jsonFile.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not open json file")
+	}
+
+	byteValue, err := ioutil.ReadAll(jsonFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read json file")
+	}
+
+	var validators map[phase0.ValidatorIndex]*v1.Validator
+
+	err = json.Unmarshal(byteValue, &validators)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal json file")
+	}
+
+	return validators, nil
+}

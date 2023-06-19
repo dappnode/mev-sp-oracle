@@ -16,35 +16,117 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// This file contains almost end to end tests, where the only mocked part is the
-// data that is fetched onchain: blocks, subscriptions, unsubscriptions and donations
-
-// TODO: Test merkle roots and proofs generation
-
-// TODO: Test this with some mocked blocks, doing them manually is too much
+// Tests AdvanceStateToNextSlot with real mocked data containing a variety of transactions
+// events, reward, etc
 func Test_AdvanceStateToNextSlot(t *testing.T) {
 
-	// Single blocks
-	type test struct {
-		// Input
-		name string
+	oracleInstance := NewOracle(&Config{
+		Network:                  "goerli",
+		ConsensusEndpoint:        "http://127.0.0.1:5051",
+		ExecutionEndpoint:        "http://127.0.0.1:8545",
+		PoolAddress:              "0xF21fbbA423f3a893A2402d68240B219308AbCA46",
+		CheckPointSizeInSlots:    7200,
+		PoolFeesPercentOver10000: 1000,
+		PoolFeesAddress:          "0xE46F9bE81f9a3ACA1808Bb8c36D353436bb96091",
+		CollateralInWei:          big.NewInt(80000000000000000),
+		DeployedSlot:             uint64(5840966), // same as first block
+	})
 
-		// Output
-		// TODO:
+	validators, err := LoadValidators()
+	require.NoError(t, err)
+	oracleInstance.SetBeaconValidators(validators)
+
+	slotsToProcess := []uint64{
+		5840966, // mev reward
+		5843638, // vanila reward (auto subs)
+		5844947, // vanila reward (auto subs)
+		5846531, // mev reward
+		5846747, // vanila reward (auto subs)
+		5850959, // vanila reward (auto subs)
+		5851651, // vanila reward (auto subs)
+		5852212, // vanila reward (auto subs)
+		5852262, // vanila reward (auto subs)
+		5852659, // vanila reward (auto subs)
+		5853824, // vanila reward (auto subs)
+		5855268, // vanila reward (auto subs)
+		5856619, // vanila reward (auto subs)
+		5858585, // vanila reward (auto subs)
+		5862054, // donation normal
+		5862104, // donation via smart contract
+
+		5863539, // reward
+		5864096, // reward
+		5870291, // reward
+		5871368, // reward
+		5871701, // reward
+		5874576, // reward
+		5880967, // reward
+		5882954, // reward
+		5883240, // reward
+		5885240, // reward
+		5885987, // reward
+		5887583, // reward
+
+		// subs
+		5888073, // sub
+		5888079, // sub
+		5888082, // sub
+		5888090, // already subscribed validator
+		5888096, // sub
+		5888099, // sub
+		5888101, // sub
+		5888104, // sub
+		5888105, // sub
+		5888106, // sub
+		5888108, // sub
+		5888109, // sub
+		5888112, // sub
+		5888114, // sub
+		5888116, // sub
+		5888118, // sub
+		5888121, // sub
+		5888123, // sub
+		5888126, // sub
+
+		// freeze state
+
+		// TODO: Add more with unsubscriptions
 	}
 
-	tests := []test{
-		//{},
+	for _, slot := range slotsToProcess {
+		var err1 error
+		var err2 error
+		var fullBlock *FullBlock
+
+		// we force to process the slots we want
+		oracleInstance.State().NextSlotToProcess = slot
+		oracleInstance.State().LatestProcessedSlot = slot - 1
+
+		// Quick way of loading the available block (with or without transactions)
+		// Try with all transactions
+		fullBlock, err1 = LoadFullBlock(slot, "5", true)
+
+		// If not found try without transactions
+		if err1 != nil {
+			fullBlock, err2 = LoadFullBlock(slot, "5", false)
+		}
+
+		if err1 != nil && err2 != nil {
+			require.Fail(t, "Failed to load block")
+		}
+
+		// Advance state to next slot based on the information we got from the block
+		processedSlot, err := oracleInstance.AdvanceStateToNextSlot(fullBlock)
+		require.NoError(t, err)
+
+		log.Info("Processed slot: ", processedSlot)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-		})
-	}
+	oracleInstance.FreezeCheckpoint()
+	require.Equal(t, "0xb0f08efb67c59a4b16b143cf3a4850e786c4295909bee85b41cdc7d78db5d329", oracleInstance.LatestCommitedState().MerkleRoot)
 
 }
 
-// TODO: Test that if the file changes it fails due to hash
 func Test_SaveReadToFromJson(t *testing.T) {
 	config := &Config{
 		PoolAddress:              "0x0000000000000000000000000000000000000000",
