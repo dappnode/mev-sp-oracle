@@ -883,7 +883,7 @@ func (or *Oracle) handleMissedBlock(block SummarizedBlock) {
 
 // TODO: This is more related to automatic subscriptions. Rename and refactor accordingly
 // TODO: rename to handle autoSubscription. Passs v1.Validator Instead. Its not really autosubs
-func (or *Oracle) addSubscriptionIfNotAlready(valIndex uint64, WithdrawalAddress string, validatorKey string) {
+func (or *Oracle) addSubscriptionIfNotAlready(valIndex uint64, withdrawalAddress string, validatorKey string) {
 	validator, found := or.state.Validators[valIndex]
 	if !found {
 		// If not found and not manually subscribed, we trigger the AutoSubscription event
@@ -893,7 +893,7 @@ func (or *Oracle) addSubscriptionIfNotAlready(valIndex uint64, WithdrawalAddress
 			AccumulatedRewardsWei: big.NewInt(0),
 			PendingRewardsWei:     big.NewInt(0),
 			CollateralWei:         big.NewInt(0),
-			WithdrawalAddress:     WithdrawalAddress,
+			WithdrawalAddress:     withdrawalAddress,
 			ValidatorIndex:        valIndex,
 			ValidatorKey:          validatorKey,
 		}
@@ -912,8 +912,8 @@ func (or *Oracle) addSubscriptionIfNotAlready(valIndex uint64, WithdrawalAddress
 
 func (or *Oracle) consolidateBalance(valIndex uint64) {
 
-	beforePending := or.state.Validators[valIndex].PendingRewardsWei
-	beforeAccumulated := or.state.Validators[valIndex].AccumulatedRewardsWei
+	beforePending := new(big.Int).Set(or.state.Validators[valIndex].PendingRewardsWei)
+	beforeAccumulated := new(big.Int).Set(or.state.Validators[valIndex].AccumulatedRewardsWei)
 
 	or.state.Validators[valIndex].AccumulatedRewardsWei.Add(or.state.Validators[valIndex].AccumulatedRewardsWei, or.state.Validators[valIndex].PendingRewardsWei)
 	or.state.Validators[valIndex].PendingRewardsWei = big.NewInt(0)
@@ -1002,7 +1002,7 @@ func (or *Oracle) increaseAllPendingRewards(
 }
 
 func (or *Oracle) increaseValidatorPendingRewards(valIndex uint64, reward *big.Int) {
-	beforePending := or.state.Validators[valIndex].PendingRewardsWei
+	beforePending := new(big.Int).Set(or.state.Validators[valIndex].PendingRewardsWei)
 	or.state.Validators[valIndex].PendingRewardsWei.Add(or.state.Validators[valIndex].PendingRewardsWei, reward)
 
 	log.WithFields(log.Fields{
@@ -1014,12 +1014,12 @@ func (or *Oracle) increaseValidatorPendingRewards(valIndex uint64, reward *big.I
 }
 
 func (or *Oracle) increaseValidatorAccumulatedRewards(valIndex uint64, reward *big.Int) {
-	accumulatedBefore := or.state.Validators[valIndex].AccumulatedRewardsWei
+	accumulatedBefore := new(big.Int).Set(or.state.Validators[valIndex].AccumulatedRewardsWei)
 
 	or.state.Validators[valIndex].AccumulatedRewardsWei.Add(or.state.Validators[valIndex].AccumulatedRewardsWei, reward)
 
 	log.WithFields(log.Fields{
-		"AccumulatedAfter":  or.state.Validators[valIndex].PendingRewardsWei,
+		"AccumulatedAfter":  or.state.Validators[valIndex].AccumulatedRewardsWei,
 		"AccumulatedBefore": accumulatedBefore,
 		"RewardShare":       reward,
 		"ValIndex":          valIndex,
@@ -1028,7 +1028,7 @@ func (or *Oracle) increaseValidatorAccumulatedRewards(valIndex uint64, reward *b
 
 func (or *Oracle) sendRewardToPool(reward *big.Int) {
 
-	poolAccumulatedBefore := or.state.PoolAccumulatedFees
+	poolAccumulatedBefore := new(big.Int).Set(or.state.PoolAccumulatedFees)
 	or.state.PoolAccumulatedFees.Add(or.state.PoolAccumulatedFees, reward)
 
 	log.WithFields(log.Fields{
