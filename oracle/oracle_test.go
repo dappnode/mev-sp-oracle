@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -67,7 +68,6 @@ func Test_AdvanceStateToNextSlot(t *testing.T) {
 		5885987, // reward
 		5887583, // reward
 
-		// subs
 		5888073, // sub
 		5888079, // sub
 		5888082, // sub
@@ -87,8 +87,6 @@ func Test_AdvanceStateToNextSlot(t *testing.T) {
 		5888121, // sub
 		5888123, // sub
 		5888126, // sub
-
-		// freeze state
 
 		// TODO: Add more with unsubscriptions
 	}
@@ -276,336 +274,107 @@ func Test_FreezeCheckpoint(t *testing.T) {
 	require.Equal(t, big.NewInt(500000), oracle.state.CommitedStates[commitedSlot].Validators[3].PendingRewardsWei)
 }
 
-// TODO:
-func Test_Oracle_ManualSubscription(t *testing.T) {
-	/*
-		oracle := NewOracle(&Config{
-			Network:               "",
-			PoolAddress:           "0xdead000000000000000000000000000000000000",
-			UpdaterAddress:        "",
-			DeployedSlot:          uint64(50000),
-			CheckPointSizeInSlots: uint64(100),
-			PoolFeesPercentOver10000:       5,
-			PoolFeesAddress:       "0xfee0000000000000000000000000000000000000",
-			CollateralInWei:       big.NewInt(1000000),
-		})
-
-		subs := []Subscription{} // TODO:
-
-		// Process block with 3 subscriptions (no reward sent to pool)
-		processedSlot, err := oracle.AdvanceStateToNextSlot(WrongFeeBlock(50000, 1, "0x"), subs, []Unsubscription{}, []Donation{})
-		require.NoError(t, err)
-
-		// Advance the state with 10 block without proposals to the smoothing pool
-		for i := 1; i <= 10; i++ {
-			oracle.AdvanceStateToNextSlot(WrongFeeBlock(50000+uint64(i), 1, "0x"), []Subscription{}, []Unsubscription{}, []Donation{})
-		}
-
-		// Validator 40000 proposes a block
-		block1 := Block{
-			Slot: uint64(50011), ValidatorIndex: uint64(400000),
-			ValidatorKey: "0xval_400000", BlockType: OkPoolProposal,
-			Reward: big.NewInt(245579896737171752), RewardType: MevBlock, WithdrawalAddress: "0xaaa0000000000000000000000000000000000000",
-		}
-
-		processedSlot, err = oracle.AdvanceStateToNextSlot(block1, []Subscription{}, []Unsubscription{}, []Donation{})
-		require.NoError(t, err)
-		require.Equal(t, uint64(50011), processedSlot)
-
-		// Validator 500000 proposes a block
-		block2 := Block{
-			Slot: uint64(50012), ValidatorIndex: uint64(500000),
-			ValidatorKey: "0xval_500000", BlockType: OkPoolProposal,
-			Reward: big.NewInt(945579196337171700), RewardType: MevBlock, WithdrawalAddress: "0xaaa0000000000000000000000000000000000000",
-		}
-
-		processedSlot, err = oracle.AdvanceStateToNextSlot(block2, []Subscription{}, []Unsubscription{}, []Donation{})
-		require.NoError(t, err)
-		require.Equal(t, uint64(50012), processedSlot)
-
-		enough := oracle.State.FreezeCheckpoint()
-		require.True(t, enough)
-
-		require.Equal(t, "df67cc0d6a1d8b80f7d73b42813952c0e4d3936f597959fe87374eb89f100f5e", oracle.State.LatestCommitedState.MerkleRoot)
-
-		// What we owe
-		totalLiabilities := big.NewInt(0)
-		for _, val := range oracle.state.Validators {
-			totalLiabilities.Add(totalLiabilities, val.AccumulatedRewardsWei)
-			totalLiabilities.Add(totalLiabilities, val.PendingRewardsWei)
-		}
-		totalLiabilities.Add(totalLiabilities, oracle.oracle.state.PoolAccumulatedFees) // TODO: rename wei
-
-		// What we have (block fees + collateral)
-		totalAssets := big.NewInt(0)
-		totalAssets.Add(totalAssets, big.NewInt(245579896737171752)) // reward first block
-		totalAssets.Add(totalAssets, big.NewInt(945579196337171700)) // reward second block
-		for _, val := range oracle.state.Validators {
-			totalAssets.Add(totalAssets, val.CollateralWei)
-		}
-
-		require.Equal(t, totalAssets, totalLiabilities)
-	*/
-}
-
-// TODO: Mix manual and automatic subscriptions
-
-// Simulates 100 slots with "AdvanceStateToNextSlot". Each slot is configured randomly with a
-// new sub, unsub or donation. The block proposed can be okproposal, missed or wrongfee.
-// these are all randomly set each block
-/*
-func Test_100_slots_test(t *testing.T) {
-	numBlocks := 100
-	log.Infof("Number of blocks to simulate: %d", numBlocks)
-	//set new oracle instance
+func Test_LatestCommitedSlot_LatestCommitedState(t *testing.T) {
 	oracle := NewOracle(&Config{
-		Network:               "mainnet",
-		PoolAddress:           "0xdead000000000000000000000000000000000000",
-		DeployedSlot:          uint64(50000),
-		CheckPointSizeInSlots: uint64(100),
-		PoolFeesPercentOver10000:       5,
-		PoolFeesAddress:       "0xfee0000000000000000000000000000000000000",
-		CollateralInWei:       big.NewInt(1000000),
+		CollateralInWei: big.NewInt(1000),
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
 	})
 
-	subsIndex := make([]uint64, 0)
-	totalAssets := big.NewInt(0)
-	const seed int64 = 50000
-	rand.Seed(seed)
-	log.WithFields(log.Fields{
-		"Execution seed": seed,
+	// No data, no state
+	oracle.FreezeCheckpoint()
+	slot, stateExistst := oracle.LatestCommitedSlot()
+	state := oracle.LatestCommitedState()
+	require.Equal(t, uint64(0), slot)
+	require.Equal(t, false, stateExistst)
+	require.Nil(t, state)
+
+	// Add state slot = 100
+	oracle.state.LatestProcessedSlot = 100
+	oracle.addSubscription(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.FreezeCheckpoint()
+	slot, stateExistst = oracle.LatestCommitedSlot()
+	state = oracle.LatestCommitedState()
+	require.Equal(t, uint64(100), slot)
+	require.Equal(t, true, stateExistst)
+	require.Equal(t, uint64(100), state.Slot)
+	require.Equal(t, 3, len(state.Validators))
+
+	// Add state slot = 200
+	oracle.state.LatestProcessedSlot = 200
+	oracle.addSubscription(uint64(13), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(14), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(15), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.FreezeCheckpoint()
+	slot, stateExistst = oracle.LatestCommitedSlot()
+	state = oracle.LatestCommitedState()
+	require.Equal(t, uint64(200), slot)
+	require.Equal(t, true, stateExistst)
+	require.Equal(t, uint64(200), state.Slot)
+	require.Equal(t, 6, len(state.Validators))
+
+}
+
+func Test_IsOracleInSyncWithChain(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
 	})
-	// main loop, iterates through 100 slots
-	for i := 0; i <= numBlocks; i++ {
-		newSubscription := make([]Subscription, 0)
-		newUnsubscription := make([]Unsubscription, 0)
-		don := make([]Donation, 0)
-		fmt.Println("")
-		log.Infoln("NEW BLOCK:")
-		//throw dice to determine if a new subscription is set in this slot. 1/2 chance
-		dice := rand.Intn(2)
-		if dice == 0 {
 
-			//newSubscription = GenerateSubsctiptions(
-			//	[]uint64{50000 + uint64(i)},
-			//	[]string{"val" + strconv.FormatUint(50000+uint64(i), 10)},
-			//	[]*big.Int{big.NewInt(1000000)},
-			//	[]uint64{50000 + uint64(i)},
-			//	[]string{"0x1"},
-			//	[]string{"0xaaa0000000000000000000000000000000000000"},
-			//)
-			//subsIndex = append(subsIndex, newSubscription[0].ValidatorIndex)
-			//totalAssets.Add(totalAssets, newSubscription[0].Collateral)
-		}
+	// No states in oracle nor locally
+	onchainRoot := DefaultRoot
+	onchainSlot := uint64(0)
+	isInSync, err := oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, true, isInSync)
+	require.NoError(t, err)
 
-		//throw dice to determine if a new unsubscription is set in this slot. 1/3 chance
-		//(can only unsubscribe already subbed validators)
-		dice = rand.Intn(3)
-		if dice == 0 && len(subsIndex) > 0 {
+	// Add a state
+	oracle.state.LatestProcessedSlot = 100
+	oracle.addSubscription(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.addSubscription(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
+	oracle.FreezeCheckpoint()
 
-			//indexRandom := rand.Intn(len(subsIndex))
-			//valtoUnsub := subsIndex[indexRandom]
-			//
-			//newUnsubscription = GenerateUnsunscriptions(
-			//	 []uint64{valtoUnsub},
-			//	 []string{"val" + strconv.FormatUint(valtoUnsub, 10)},
-			//	[]string{strconv.FormatUint(50000+uint64(i), 10)},
-			//	 []uint64{50000 + uint64(i)},
-			//	 []string{"0x1"},
-			//	 []string{strconv.FormatUint(50000+uint64(i), 10)},
-			//)
-			////unsubsIndex = append(unsubsIndex, newUnsubscription[0].ValidatorIndex)
-			//
-			////delete subbed validator from slice that keeps all subbed validators
-			//subsIndex = append(subsIndex[:indexRandom], subsIndex[indexRandom+1:]...)
+	// In sync
+	onchainRoot = "0xbb82bf59b1b6f3b0964c08ffb9336365153b34e2b30fb1230146428d153693b0"
+	onchainSlot = uint64(100)
+	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, true, isInSync)
+	require.NoError(t, err)
 
-		}
-		//throw dice to determine if a new donation is set in this slot. 1/5 chance
-		dice = rand.Intn(5)
-		if dice == 0 {
-			donationAmount := big.NewInt(int64(rand.Intn(1000) + 10000))
-			newDonation := Donation{
-				AmountWei: donationAmount,
-				Block:     50000,
-				TxHash:    "my_tx_hash",
-			}
-			don = append(don, newDonation)
-			totalAssets.Add(totalAssets, donationAmount)
-		}
+	// Not in sync
+	onchainRoot = "0x1000000000000000000000000000000000000000000000000000000000000000"
+	onchainSlot = uint64(200)
+	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, false, isInSync)
+	require.NoError(t, err)
 
-		//throw dice to determine block type (ok, missed, wrongfee)
-		dice = rand.Intn(3)
-		//valToPropose := subsIndex[rand.Intn(len(subsIndex))]
-
-		//choose randomly a validator to propopse the block (can be an unsubbed validator, so we check automatic subs)
-		valToPropose := uint64(rand.Intn(numBlocks) + 50000)
-
-		//for _, sub := range newSubscription {
-		//	log.WithFields(log.Fields{
-		//		"ValidatorIndex":  sub.ValidatorIndex,
-		//		"ValidatorKey":    sub.ValidatorKey,
-		//		"Collateral":      sub.Collateral,
-		//		"withdrawal address": sub.WithdrawalAddress,
-		//		"Tx Hash":         sub.TxHash,
-		//	}).Info("Mocked Event: Subscription")
-		//}
-		//
-		//for _, unsub := range newUnsubscription {
-		//	log.WithFields(log.Fields{
-		//		"ValidatorIndex":  unsub.ValidatorIndex,
-		//		"ValidatorKey":    unsub.ValidatorKey,
-		//		"Sender":          unsub.Sender,
-		//		"withdrawal address": unsub.WithdrawalAddress,
-		//		"Tx Hash":         unsub.TxHash,
-		//	}).Info("Mocked Event: Unsubscription")
-		//}
-		//for _, don := range don {
-		//	log.WithFields(log.Fields{
-		//		"Amount(wei)": don.AmountWei,
-		//		"Block":       don.Block,
-		//		"Tx Hash":     don.TxHash,
-		//	}).Info("Mocked Event: Donation")
-		//}
-
-		log.Infof("Validator Index to propose: %d\n", valToPropose)
-		if dice == 0 {
-			log.Info("Block type: BlockOkProposal")
-			mevReward := big.NewInt(int64(rand.Intn(1000) + 10000))
-			processedSlot, err := oracle.AdvanceStateToNextSlot(blockOkProposal(
-				50000+uint64(i),
-				valToPropose,
-				strconv.FormatUint(50000+uint64(i), 10),
-				mevReward,
-				"0xaaa0000000000000000000000000000000000000"), newSubscription, newUnsubscription, don)
-			require.NoError(t, err)
-			_ = processedSlot
-			totalAssets.Add(totalAssets, mevReward) // block reward
-
-		} else if dice == 1 {
-			log.Info("Block type: MissedBlock")
-			processedSlot, err := oracle.AdvanceStateToNextSlot(MissedBlock(
-				50000+uint64(i),
-				valToPropose,
-				"0x"), newSubscription, newUnsubscription, don)
-			require.NoError(t, err)
-			_ = processedSlot
-
-		} else {
-			log.Info("Block type: WrongFeeBlock")
-			processedSlot, err := oracle.AdvanceStateToNextSlot(WrongFeeBlock(
-				50000+uint64(i),
-				valToPropose,
-				"0x"), newSubscription, newUnsubscription, don)
-			require.NoError(t, err)
-			_ = processedSlot
-
-		}
-	}
-
-	// What we owe
-	totalLiabilities := big.NewInt(0)
-	for _, val := range oracle.State().Validators {
-		totalLiabilities.Add(totalLiabilities, val.AccumulatedRewardsWei)
-		totalLiabilities.Add(totalLiabilities, val.PendingRewardsWei)
-	}
-	totalLiabilities.Add(totalLiabilities, oracle.State().PoolAccumulatedFees) // TODO: rename wei
-
-	require.Equal(t, totalAssets, totalLiabilities)
-}*/
-
-func Test_Oracle_WrongInputData(t *testing.T) {
+	// Roots match but not slots, expect error
+	onchainRoot = "0xbb82bf59b1b6f3b0964c08ffb9336365153b34e2b30fb1230146428d153693b0"
+	onchainSlot = uint64(200)
+	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
+	require.Equal(t, false, isInSync)
+	require.Error(t, err)
 }
 
-func Test_Oracle_Donation(t *testing.T) {
-	blockWrongFee := SummarizedBlock{
-		Slot: uint64(0), ValidatorIndex: uint64(1),
-		ValidatorKey: "0xxx", BlockType: WrongFeeRecipient,
-		Reward: big.NewInt(0), RewardType: MevBlock,
+func Test_Oracle_CanValidatorSubscribeToPool(t *testing.T) {
+
+	val1 := &v1.Validator{
+		Validator: &phase0.Validator{},
+		Status:    v1.ValidatorStateActiveOngoing,
 	}
-	_ = blockWrongFee
+
+	val2 := &v1.Validator{
+		Validator: &phase0.Validator{},
+		Status:    v1.ValidatorStateActiveExiting,
+	}
+
+	require.Equal(t, true, CanValidatorSubscribeToPool(val1))
+	require.Equal(t, true, CanValidatorSubscribeToPool(val2))
 }
 
-func Test_Oracle_AutomaticSubscription(t *testing.T) {
-	blockWrongFee := SummarizedBlock{
-		Slot: uint64(0), ValidatorIndex: uint64(1),
-		ValidatorKey: "0xxx", BlockType: WrongFeeRecipient,
-		Reward: big.NewInt(0), RewardType: MevBlock,
-	}
-	_ = blockWrongFee
-}
-
-func Test_Oracle_WrongFee(t *testing.T) {
-	blockWrongFee := SummarizedBlock{
-		Slot: uint64(0), ValidatorIndex: uint64(1),
-		ValidatorKey: "0xxx", BlockType: WrongFeeRecipient,
-		Reward: big.NewInt(0), RewardType: MevBlock,
-	}
-	_ = blockWrongFee
-}
-
-func Test_Oracle_Missed_ToYellow(t *testing.T) {
-	blockMissed := SummarizedBlock{
-		Slot: uint64(0), ValidatorIndex: uint64(1),
-		ValidatorKey: "0xxx", BlockType: MissedProposal,
-	}
-
-	_ = blockMissed
-
-}
-
-func Test_Oracle_Missed_ToRed(t *testing.T) {
-	blockMissed := SummarizedBlock{
-		Slot: uint64(0), ValidatorIndex: uint64(1),
-		ValidatorKey: "0xxx", BlockType: MissedProposal,
-	}
-
-	_ = blockMissed
-
-}
-
-/*
-// Some util functions to faciliatet testing
-func GenerateSubsctiptions(
-	valIndex []uint64, valKey []string,
-	collateral []*big.Int, blockNum []uint64,
-	txHash []string, depAdd []string) []Subscription {
-
-	subs := make([]Subscription, 0)
-
-	for i := 0; i < len(valIndex); i++ {
-		subs = append(subs, Subscription{
-			ValidatorIndex: valIndex[i],
-			ValidatorKey:   valKey[i],
-			Collateral:     collateral[i],
-			BlockNumber:    blockNum[i],
-			TxHash:         txHash[i],
-			WithdrawalAddress: depAdd[i],
-		})
-	}
-	return subs
-}
-
-func GenerateUnsunscriptions(
-	valIndex []uint64, valKey []string,
-	sender []string, blockNum []uint64,
-	txHashes []string, depAdd []string) []Unsubscription {
-
-	unsubs := make([]Unsubscription, 0)
-
-	for i := 0; i < len(valIndex); i++ {
-		unsubs = append(unsubs, Unsubscription{
-			ValidatorIndex: valIndex[i],
-			ValidatorKey:   valKey[i],
-			Sender:         sender[i],
-			BlockNumber:    blockNum[i],
-			TxHash:         txHashes[i],
-			WithdrawalAddress: depAdd[i],
-		})
-	}
-	return unsubs
-}*/
-
-func Test_AddSubscription(t *testing.T) {
+func Test_addSubscription_1(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.addSubscription(10, "0x", "0x")
 	oracle.increaseAllPendingRewards(big.NewInt(100))
@@ -620,7 +389,7 @@ func Test_AddSubscription(t *testing.T) {
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
 }
 
-func Test_addSubscription(t *testing.T) {
+func Test_addSubscription_2(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.addSubscription(uint64(100), "0x3000000000000000000000000000000000000000", "0xkey")
 	require.Equal(t, 1, len(oracle.state.Validators))
@@ -645,7 +414,7 @@ func Test_addSubscription(t *testing.T) {
 	require.Equal(t, big.NewInt(87653), oracle.state.Validators[100].PendingRewardsWei)
 }
 
-func Test_AddDonation(t *testing.T) {
+func Test_handleDonations_PoolGetsAll(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	donations := []*contract.ContractEtherReceived{
 		&contract.ContractEtherReceived{
@@ -672,10 +441,101 @@ func Test_AddDonation(t *testing.T) {
 	require.Equal(t, big.NewInt(30023456), oracle.state.Donations[1].DonationAmount)
 	require.Equal(t, uint64(100), oracle.state.Donations[1].Raw.BlockNumber)
 	require.Equal(t, "0x0200000000000000000000000000000000000000000000000000000000000000", oracle.state.Donations[1].Raw.TxHash.String())
+
+	// No validators, pool gets it all
+	require.Equal(t, big.NewInt(765432+30023456), oracle.state.PoolAccumulatedFees)
 }
 
-// TODO: Merge all these tests into one
-// TODO: test 2 ssubscriptions same block
+func Test_handleDonations_SharedEqual(t *testing.T) {
+	oracle := NewOracle(&Config{
+		PoolFeesPercentOver10000: 10 * 10, // 10%
+	})
+	donations := []*contract.ContractEtherReceived{
+		&contract.ContractEtherReceived{
+			DonationAmount: big.NewInt(26543),
+			Raw: types.Log{
+				TxHash:      [32]byte{0x1},
+				BlockNumber: uint64(100),
+			},
+		},
+		&contract.ContractEtherReceived{
+			DonationAmount: big.NewInt(100000),
+			Raw: types.Log{
+				TxHash:      [32]byte{0x2},
+				BlockNumber: uint64(100),
+			},
+		},
+	}
+	oracle.addSubscription(10, "0x", "0x")
+	oracle.addSubscription(20, "0x", "0x")
+	oracle.handleDonations(donations)
+
+	// Pool gets a share
+	require.Equal(t, big.NewInt(5565), oracle.state.PoolAccumulatedFees)
+
+	// Validator balances are updated ok
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[10].AccumulatedRewardsWei)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[20].AccumulatedRewardsWei)
+
+	require.Equal(t, big.NewInt(60489), oracle.state.Validators[10].PendingRewardsWei)
+	require.Equal(t, big.NewInt(60489), oracle.state.Validators[20].PendingRewardsWei)
+}
+
+func Test_handleCorrectBlockProposal_AutoSubs(t *testing.T) {
+
+	cfg := &Config{
+		PoolFeesAddress:          "0xa",
+		PoolFeesPercentOver10000: 0,
+		CollateralInWei:          big.NewInt(1000000),
+	}
+
+	oracle := NewOracle(cfg)
+
+	// Block from a subscribed validator (manual)
+	block1 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    10,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(50000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0ac",
+	}
+	oracle.handleCorrectBlockProposal(block1)
+
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[10].PendingRewardsWei)
+	require.Equal(t, big.NewInt(50000000), oracle.state.Validators[10].AccumulatedRewardsWei)
+	require.Equal(t, Active, oracle.state.Validators[10].ValidatorStatus)
+}
+
+func Test_handleCorrectBlockProposal_AlreadySub(t *testing.T) {
+
+	cfg := &Config{
+		PoolFeesAddress:          "0xa",
+		PoolFeesPercentOver10000: 0,
+		CollateralInWei:          big.NewInt(1000000),
+	}
+
+	oracle := NewOracle(cfg)
+	oracle.addSubscription(10, "0x", "0x")
+	oracle.increaseValidatorPendingRewards(10, big.NewInt(1))
+	oracle.increaseValidatorAccumulatedRewards(10, big.NewInt(1))
+
+	// Block from a subscribed validator (manual)
+	block1 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    10,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(50000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0ac",
+	}
+	oracle.handleCorrectBlockProposal(block1)
+
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[10].PendingRewardsWei)
+	require.Equal(t, big.NewInt(50000000+1+1), oracle.state.Validators[10].AccumulatedRewardsWei)
+	require.Equal(t, Active, oracle.state.Validators[10].ValidatorStatus)
+}
+
 func Test_handleManualSubscriptions_Valid(t *testing.T) {
 	// Tests a valid subscription, with enough collateral to a not subscribed validator
 	// and sent from the validator's withdrawal address
@@ -1032,7 +892,7 @@ func Test_handleManualSubscriptions_BannedValidator(t *testing.T) {
 	}, oracle.state.Validators[bannedIndex])
 }
 
-func Test_Handle_Subscriptions_1(t *testing.T) {
+func Test_handleManualSubscriptions(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
@@ -1167,7 +1027,7 @@ func Test_Handle_Subscriptions_1(t *testing.T) {
 	require.Equal(t, big.NewInt(1000), oracle.state.Validators[34].AccumulatedRewardsWei)
 }
 
-func Test_SubThenUnsubThenAuto(t *testing.T) {
+func Test_handleManualUnsubscriptionsSubThenUnsubThenAuto(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei:          big.NewInt(500000),
@@ -1236,7 +1096,7 @@ func Test_SubThenUnsubThenAuto(t *testing.T) {
 	require.Equal(t, Active, oracle.state.Validators[valIdx].ValidatorStatus)
 }
 
-func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
+func Test_handleManualUnsubscriptions_ValidSubscription(t *testing.T) {
 	// Unsubscribe an existing subscribed validator correctly, checking that the event is
 	// sent from the withdrawal address of the validator. Check also that when unsubscribing
 	// the pending validator rewards are shared among the rest of the validators.
@@ -1341,7 +1201,7 @@ func Test_HandleUnsubscriptions_ValidSubscription(t *testing.T) {
 	require.Equal(t, oracle.state.Validators[15].PendingRewardsWei, big.NewInt(0))
 }
 
-func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
+func Test_handleManualUnsubscriptions_NonExistentValidator(t *testing.T) {
 	// We receive an unsubscription for a validator that does not exist in the beacon
 	// chain. Nothing happens to existing subscribed validators.
 
@@ -1388,7 +1248,7 @@ func Test_HandleUnsubscriptions_NonExistentValidator(t *testing.T) {
 	}, oracle.state.Validators[33])
 }
 
-func Test_HandleUnsubscriptions_NotSubscribedValidator(t *testing.T) {
+func Test_handleManualUnsubscriptions_NotSubscribedValidator(t *testing.T) {
 	// We receive an unsubscription for a validator that is not subscribed but exists in
 	// the beacon chain. Nothing happens, and no subscriptions are added.
 
@@ -1414,7 +1274,7 @@ func Test_HandleUnsubscriptions_NotSubscribedValidator(t *testing.T) {
 	require.Equal(t, 0, len(oracle.state.Validators))
 }
 
-func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
+func Test_handleManualUnsubscriptions_FromWrongAddress(t *testing.T) {
 	// An unsubscription for a subscribed validator is received, but the sender is not the
 	// withdrawal address of that validator. Nothing happens to this validator
 
@@ -1460,7 +1320,7 @@ func Test_HandleUnsubscriptions_FromWrongAddress(t *testing.T) {
 	}, oracle.state.Validators[valIndex])
 }
 
-func Test_Unsubscribe_AndRejoin(t *testing.T) {
+func Test_handleManualUnsubscriptions_AndRejoin(t *testing.T) {
 	// A validator subscribes, the unsubscribes and the rejoins. Check that its accumulated balances
 	// are kept, and that it can rejoin succesfully.
 
@@ -1541,6 +1401,112 @@ func Test_Unsubscribe_AndRejoin(t *testing.T) {
 		ValidatorIndex:        valIndex,
 		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}, oracle.state.Validators[valIndex])
+}
+
+func Test_handleBanValidator(t *testing.T) {
+	oracle := NewOracle(&Config{})
+	oracle.addSubscription(1, "0xa", "0xb")
+	oracle.addSubscription(2, "0xa", "0xb")
+	oracle.addSubscription(3, "0xa", "0xb")
+
+	// New reward arrives
+	oracle.increaseAllPendingRewards(big.NewInt(99))
+
+	// Shared equally among all validators
+	require.Equal(t, big.NewInt(33), oracle.state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(33), oracle.state.Validators[2].PendingRewardsWei)
+	require.Equal(t, big.NewInt(33), oracle.state.Validators[3].PendingRewardsWei)
+
+	// Ban validator 3
+	oracle.handleBanValidator(SummarizedBlock{ValidatorIndex: 3})
+
+	// Its pending balance is shared equally among the rest
+	require.Equal(t, big.NewInt(49), oracle.state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(49), oracle.state.Validators[2].PendingRewardsWei)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[3].PendingRewardsWei)
+
+	// The pool fee address gets the rounding errors (1 wei, neglectable)
+	require.Equal(t, big.NewInt(1), oracle.state.PoolAccumulatedFees)
+}
+
+func Test_handleMissedBlock(t *testing.T) {
+	oracle := NewOracle(&Config{})
+	oracle.addSubscription(1, "0xa", "0xb")
+	oracle.addSubscription(2, "0xa", "0xb")
+
+	oracle.increaseValidatorPendingRewards(1, big.NewInt(100))
+	oracle.increaseValidatorAccumulatedRewards(1, big.NewInt(200))
+
+	missed := SummarizedBlock{
+		Slot:              uint64(100),
+		ValidatorIndex:    uint64(1),
+		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+		BlockType:         MissedProposal,
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+	}
+
+	oracle.handleMissedBlock(missed)
+	// State is updated
+	require.Equal(t, YellowCard, oracle.state.Validators[1].ValidatorStatus)
+	// Rewards are not touched
+	require.Equal(t, big.NewInt(100), oracle.state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(200), oracle.state.Validators[1].AccumulatedRewardsWei)
+	require.Equal(t, missed, oracle.state.MissedBlocks[0])
+
+	// Missed again
+	oracle.handleMissedBlock(missed)
+	// State is updated
+	require.Equal(t, RedCard, oracle.state.Validators[1].ValidatorStatus)
+	// Rewards are not touched
+	require.Equal(t, big.NewInt(100), oracle.state.Validators[1].PendingRewardsWei)
+	require.Equal(t, big.NewInt(200), oracle.state.Validators[1].AccumulatedRewardsWei)
+}
+
+func Test_handleBlsCorrectBlockProposal_NotSubscribed(t *testing.T) {
+	oracle := NewOracle(&Config{})
+
+	missed := SummarizedBlock{
+		Slot:              uint64(100),
+		ValidatorIndex:    uint64(1),
+		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+		BlockType:         OkPoolProposalBlsKeys,
+		RewardType:        VanilaBlock,
+		Reward:            big.NewInt(100),
+		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+	}
+
+	oracle.handleBlsCorrectBlockProposal(missed)
+
+	// no automatic subscription is produced
+	require.Equal(t, 0, len(oracle.state.Validators))
+
+	// all rewards go to the pool
+	require.Equal(t, big.NewInt(100), oracle.state.PoolAccumulatedFees)
+}
+
+func Test_handleBlsCorrectBlockProposal_Subscribed(t *testing.T) {
+	// This should never happen
+	oracle := NewOracle(&Config{})
+	oracle.addSubscription(1, "0xa", "0xb")
+
+	missed := SummarizedBlock{
+		Slot:              uint64(100),
+		ValidatorIndex:    uint64(1),
+		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+		BlockType:         OkPoolProposalBlsKeys,
+		RewardType:        VanilaBlock,
+		Reward:            big.NewInt(100),
+		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+	}
+
+	oracle.handleBlsCorrectBlockProposal(missed)
+
+	// no automatic subscription is produced
+	require.Equal(t, 1, len(oracle.state.Validators))
+
+	// all rewards go to the pool
+	require.Equal(t, big.NewInt(100), oracle.state.PoolAccumulatedFees)
 }
 
 func Test_increaseAllPendingRewards_1(t *testing.T) {
@@ -1885,32 +1851,6 @@ func Test_IsValidatorSubscribed(t *testing.T) {
 	require.Equal(t, false, oracle.isSubscribed(50))
 }
 
-func Test_BanValidator(t *testing.T) {
-	oracle := NewOracle(&Config{})
-	oracle.addSubscription(1, "0xa", "0xb")
-	oracle.addSubscription(2, "0xa", "0xb")
-	oracle.addSubscription(3, "0xa", "0xb")
-
-	// New reward arrives
-	oracle.increaseAllPendingRewards(big.NewInt(99))
-
-	// Shared equally among all validators
-	require.Equal(t, big.NewInt(33), oracle.state.Validators[1].PendingRewardsWei)
-	require.Equal(t, big.NewInt(33), oracle.state.Validators[2].PendingRewardsWei)
-	require.Equal(t, big.NewInt(33), oracle.state.Validators[3].PendingRewardsWei)
-
-	// Ban validator 3
-	oracle.handleBanValidator(SummarizedBlock{ValidatorIndex: 3})
-
-	// Its pending balance is shared equally among the rest
-	require.Equal(t, big.NewInt(49), oracle.state.Validators[1].PendingRewardsWei)
-	require.Equal(t, big.NewInt(49), oracle.state.Validators[2].PendingRewardsWei)
-	require.Equal(t, big.NewInt(0), oracle.state.Validators[3].PendingRewardsWei)
-
-	// The pool fee address gets the rounding errors (1 wei, neglectable)
-	require.Equal(t, big.NewInt(1), oracle.state.PoolAccumulatedFees)
-}
-
 func Test_isBanned(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[1] = &ValidatorInfo{
@@ -1936,85 +1876,6 @@ func Test_isBanned(t *testing.T) {
 	require.Equal(t, true, oracle.isBanned(5))
 }
 
-// TODO: Add a Test_Handle_Subscriptions_1 happy path to cover the normal flow
-
-// Follows an non happy path with a lot of edge cases and possible misconfigurations
-func Test_Handle_TODO(t *testing.T) {
-	/*
-		cfg := &Config{
-			PoolFeesAddress: "0xa",
-			PoolFeesPercentOver10000: 0,
-			CollateralInWei: big.NewInt(1000000),
-		}
-
-			state := NewOracleState(cfg)
-
-			// Two subscriptions ok. Third not enough collateral
-			subs := []Subscription{
-				{
-					ValidatorIndex: 10,
-					ValidatorKey:   "0xaa",
-					Collateral:     big.NewInt(1000000), // Enough
-					BlockNumber:    0,
-					TxHash:         "0xab",
-					WithdrawalAddress: "0xac",
-				},
-				{
-					ValidatorIndex: 20,
-					ValidatorKey:   "0xba",
-					Collateral:     big.NewInt(1000000), // Enough
-					BlockNumber:    0,
-					TxHash:         "0xbb",
-					WithdrawalAddress: "0xbc",
-				},
-				{
-					ValidatorIndex: 30,
-					ValidatorKey:   "0xba",
-					Collateral:     big.NewInt(50), // Not enough
-					BlockNumber:    0,
-					TxHash:         "0xbb",
-					WithdrawalAddress: "0xbc",
-				},
-			}
-			oracle.handleManualSubscriptions(cfg.CollateralInWei, subs)
-
-			// Block from a subscribed validator (manual)
-			block1 := Block{
-				Slot:           0,
-				ValidatorIndex: 10,
-				ValidatorKey:   "0x",
-				Reward:         big.NewInt(50000000),
-				RewardType:     VanilaBlock,
-				WithdrawalAddress: "0ac",
-			}
-			state.handleCorrectBlockProposal(block1)
-
-			// Block from a non-subscribed validator (auto)
-			block2 := Block{
-				Slot:           0,
-				ValidatorIndex: 40,
-				ValidatorKey:   "0x",
-				Reward:         big.NewInt(3333333),
-				RewardType:     VanilaBlock,
-				WithdrawalAddress: "0ac",
-			}
-			state.handleCorrectBlockProposal(block2)
-
-			fmt.Println(oracle.state.Validators[10])
-			fmt.Println(oracle.state.Validators[20])
-			fmt.Println(oracle.state.Validators[30])
-
-			// Test also
-			//or.State.handleBanValidator(customBlock)
-			//or.oracle.handleManualUnsubscriptions(newBlockUnsub)
-			//or.oracle.handleDonations(blockDonations)
-			//or.State.handleMissedBlock(customBlock)
-	*/
-}
-
-// TODO: Add tests for add subscription and remove subscription
-// TODO: Add more tests when spec settled
-
 func Test_CanValidatorSubscribeToPool(t *testing.T) {
 
 	require.Equal(t, CanValidatorSubscribeToPool(&v1.Validator{
@@ -2028,306 +1889,6 @@ func Test_CanValidatorSubscribeToPool(t *testing.T) {
 	require.Equal(t, CanValidatorSubscribeToPool(&v1.Validator{
 		Status: v1.ValidatorStateActiveOngoing,
 	}), true)
-}
-
-// Test to estimate how much memory the validator state will take with 2000 validators,
-// each one proposing a block
-func Test_ValidatorInfoSize(t *testing.T) {
-	for i := 0; i < 3; i++ {
-		oracle := NewOracle(&Config{
-			CollateralInWei: big.NewInt(1000),
-		})
-
-		oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-			33: &v1.Validator{
-				Index:  33,
-				Status: v1.ValidatorStateActiveOngoing,
-				Validator: &phase0.Validator{
-					// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-					// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-					PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-				},
-			},
-		}
-
-		//save state of 2000 validators
-		numValidators := 2000
-
-		//create 2000 validators with index 0-1999
-		valsID := make([]uint64, numValidators)
-		for i := 0; i < numValidators; i++ {
-			valsID[i] = uint64(i)
-		}
-		//subscribe 2000 validators
-		subs := new_subs_slice(common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567"), valsID, big.NewInt(1000))
-		oracle.handleManualSubscriptions(subs)
-
-		//make 2000 validators propose a block
-		for i := 0; i < numValidators; i++ {
-			oracle.handleCorrectBlockProposal(SummarizedBlock{
-				Slot:              uint64(i),
-				ValidatorIndex:    uint64(valsID[0]),
-				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
-				Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
-				RewardType:        MevBlock,
-				WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
-			})
-		}
-
-		// //make 2000 validators miss a block
-		// for i := 0; i < numValidators; i++ {
-		// 	state.handleMissedBlock(Block{
-		// 		Slot:              uint64(100),
-		// 		ValidatorIndex:    uint64(valsID[i]),
-		// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
-		// 		Reward:            big.NewInt(5000000000000000000),
-		// 		RewardType:        VanilaBlock,
-		// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
-		// 	})
-		// }
-
-		// //make 2000 validators propose a block
-		// for i := 0; i < numValidators; i++ {
-		// 	state.handleCorrectBlockProposal(Block{
-		// 		Slot:              uint64(100),
-		// 		ValidatorIndex:    uint64(valsID[i]),
-		// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
-		// 		Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
-		// 		RewardType:        MevBlock,
-		// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
-		// 	})
-		// }
-		oracle.SaveToJson()
-		filePath := "oracle-data/state.json"
-
-		// Get file information
-		fileInfo, err := os.Stat(filePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Get file size in bytes
-		fileSize := fileInfo.Size()
-		fileSizeMB := float64(fileSize) / (1024 * 1024)
-
-		// Print the file size
-		log.Info("File size:", fileSizeMB, "MB")
-	}
-}
-
-// This test tries to mock a real time scenario where 2000 validators are tracked by the pool,
-// and tries check how much memory the oracleState takes.
-// In this scenario, the oracle uploads a new state to the chain once every 3 days.
-// Since we have 2000 validators, each time the state is uploaded to the chain,
-// a rough estimate of 100 blocks will have been proposed by the validators.
-func Test_SizeMultipleOnchainState(t *testing.T) {
-
-	oracle := NewOracle(&Config{
-		CollateralInWei: big.NewInt(1000),
-		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
-	})
-
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{}
-
-	//prepare 2000 validators
-	numValidators := 2000
-
-	//create 2000 validators with index 0-1999
-	valsID := make([]uint64, numValidators)
-	for i := 0; i < numValidators; i++ {
-		valsID[i] = uint64(i)
-	}
-
-	for i := 0; i < len(valsID); i++ {
-		address := common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567")
-		oracle.beaconValidators[phase0.ValidatorIndex(i)] = &v1.Validator{
-			Index:  phase0.ValidatorIndex(valsID[i]),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// withdrawal credentials = 0x(valID)0000..000
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, address[0], address[1], address[2], address[3], address[4], address[5], address[6], address[7], address[8], address[9], address[10], address[11], address[12], address[13], address[14], address[15], address[16], address[17], address[18], address[19]},
-				// Valdator pubkey: 0x(valID)0000...000
-				PublicKey: phase0.BLSPubKey{byte(valsID[i]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			},
-		}
-	}
-	//subscribe 2000 validators. All validators will have the same withdrawal address.
-	subs := new_subs_slice(common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567"), valsID, big.NewInt(1000))
-
-	//oracle handles the subscriptions.
-	oracle.handleManualSubscriptions(subs)
-
-	//simulate the scenario. In one year, we will commit 121 states to the chain.
-	//each time the state is commited, a rough estimate of 100 blocks will have been proposed by the validators.
-	for i := 0; i < 121; i++ {
-		for j := 0; j < 100; j++ {
-			oracle.handleCorrectBlockProposal(SummarizedBlock{
-				Slot:              uint64(100),
-				ValidatorIndex:    uint64(valsID[j]),
-				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
-				Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
-				RewardType:        MevBlock,
-				WithdrawalAddress: "0x0100000000000000000000009b3b13d6b6f3f52154a8b00d818392b61e4b42b4",
-			})
-		}
-		// the "FreezeCheckpoint" function is responsible of making a deep copy of all
-		// current validator data and storing it in the new "state.CommitedStates" map, which
-		// contains all the past onchain states of the validators.
-		// each time we store a new latestOnchainState, the merkleroot has changed, so we
-		// store a new state of all the validators.
-		// in a year, will update the onchain state 121 times. each time we do this, we will
-		// store the last onchain state, which contains the information of all the validators
-		oracle.FreezeCheckpoint()
-	}
-
-	//after 1 year, we will have 121 states in the "state.CommitedStates" map.
-	//each state contains the information of 2000 validators.
-
-	//save the state to a file
-	oracle.SaveToJson()
-	filePath := "oracle-data/state.json"
-
-	// Get file information
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Get file size in bytes
-	fileSize := fileInfo.Size()
-	fileSizeMB := float64(fileSize) / (1024 * 1024)
-
-	// Print the file size
-	log.Info("File size:", fileSizeMB, "MB")
-}
-
-func Test_LatestCommitedSlot_LatestCommitedState(t *testing.T) {
-	oracle := NewOracle(&Config{
-		CollateralInWei: big.NewInt(1000),
-		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
-	})
-
-	// No data, no state
-	oracle.FreezeCheckpoint()
-	slot, stateExistst := oracle.LatestCommitedSlot()
-	state := oracle.LatestCommitedState()
-	require.Equal(t, uint64(0), slot)
-	require.Equal(t, false, stateExistst)
-	require.Nil(t, state)
-
-	// Add state slot = 100
-	oracle.state.LatestProcessedSlot = 100
-	oracle.addSubscription(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscription(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscription(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.FreezeCheckpoint()
-	slot, stateExistst = oracle.LatestCommitedSlot()
-	state = oracle.LatestCommitedState()
-	require.Equal(t, uint64(100), slot)
-	require.Equal(t, true, stateExistst)
-	require.Equal(t, uint64(100), state.Slot)
-	require.Equal(t, 3, len(state.Validators))
-
-	// Add state slot = 200
-	oracle.state.LatestProcessedSlot = 200
-	oracle.addSubscription(uint64(13), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscription(uint64(14), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscription(uint64(15), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.FreezeCheckpoint()
-	slot, stateExistst = oracle.LatestCommitedSlot()
-	state = oracle.LatestCommitedState()
-	require.Equal(t, uint64(200), slot)
-	require.Equal(t, true, stateExistst)
-	require.Equal(t, uint64(200), state.Slot)
-	require.Equal(t, 6, len(state.Validators))
-
-}
-
-func Test_IsOracleInSyncWithChain(t *testing.T) {
-
-	oracle := NewOracle(&Config{
-		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
-	})
-
-	// No states in oracle nor locally
-	onchainRoot := DefaultRoot
-	onchainSlot := uint64(0)
-	isInSync, err := oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
-	require.Equal(t, true, isInSync)
-	require.NoError(t, err)
-
-	// Add a state
-	oracle.state.LatestProcessedSlot = 100
-	oracle.addSubscription(uint64(10), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscription(uint64(11), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.addSubscription(uint64(12), "0x1000000000000000000000000000000000000000", "0x1000000000000000000000000000000000000000")
-	oracle.FreezeCheckpoint()
-
-	// In sync
-	onchainRoot = "0xbb82bf59b1b6f3b0964c08ffb9336365153b34e2b30fb1230146428d153693b0"
-	onchainSlot = uint64(100)
-	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
-	require.Equal(t, true, isInSync)
-	require.NoError(t, err)
-
-	// Not in sync
-	onchainRoot = "0x1000000000000000000000000000000000000000000000000000000000000000"
-	onchainSlot = uint64(200)
-	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
-	require.Equal(t, false, isInSync)
-	require.NoError(t, err)
-
-	// Roots match but not slots, expect error
-	onchainRoot = "0xbb82bf59b1b6f3b0964c08ffb9336365153b34e2b30fb1230146428d153693b0"
-	onchainSlot = uint64(200)
-	isInSync, err = oracle.IsOracleInSyncWithChain(onchainRoot, onchainSlot)
-	require.Equal(t, false, isInSync)
-	require.Error(t, err)
-}
-
-// returns len(valsID) new valid subscriptions
-func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int) []*contract.ContractSubscribeValidator {
-	subs := make([]*contract.ContractSubscribeValidator, len(valsID))
-	for i := 0; i < len(valsID); i++ {
-		subs[i] = &contract.ContractSubscribeValidator{
-			ValidatorID:            valsID[i],
-			SubscriptionCollateral: collateral,
-			Raw:                    types.Log{TxHash: [32]byte{0x1}},
-			Sender:                 address,
-		}
-	}
-	return subs
-}
-
-func MissedBlock(slot uint64, valIndex uint64, pubKey string) SummarizedBlock {
-	return SummarizedBlock{
-		Slot:           slot,
-		ValidatorIndex: valIndex,
-		ValidatorKey:   pubKey,
-		BlockType:      MissedProposal,
-	}
-}
-
-func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) SummarizedBlock {
-	return SummarizedBlock{
-		Slot:           slot,
-		ValidatorIndex: valIndex,
-		ValidatorKey:   pubKey,
-		BlockType:      WrongFeeRecipient,
-	}
-}
-
-func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, withAddress string) SummarizedBlock {
-	return SummarizedBlock{
-		Slot:              slot,
-		ValidatorIndex:    valIndex,
-		ValidatorKey:      pubKey,
-		BlockType:         OkPoolProposal,
-		Reward:            reward,
-		RewardType:        MevBlock,
-		WithdrawalAddress: withAddress,
-	}
 }
 
 func Test_getMerkleRootIfAny(t *testing.T) {
@@ -2365,4 +1926,78 @@ func Test_GetWithdrawalAndType(t *testing.T) {
 
 	require.Equal(t, with2, "0xed750cbdedaa39da69532eee649a5d3a202b310de2a6645af1dd7daca0fd22")
 	require.Equal(t, type2, BlsWithdrawal)
+}
+
+// Not a test per se but a util to estimate how much memory the oracle will use
+// depending on the number of validators and checkpoints
+func Test_StateSize(t *testing.T) {
+	for i := 0; i < 3; i++ {
+		oracle := NewOracle(&Config{
+			CollateralInWei: big.NewInt(1000),
+			//PoolAddress:     "0x0123456789abcdef0123456789abcdef01234569",
+			PoolFeesAddress: "0x0123456789abcdef0123456789abcdef01234568",
+		})
+
+		numValidators := 2000
+		blockEachType := 5000
+
+		// One year of checkpoints (1 every 3 days)
+		numCheckpoints := 130
+
+		// Add validators
+		for i := 0; i < numValidators; i++ {
+			oracle.addSubscription(uint64(i), fmt.Sprintf("0x%d123456789abcdef0123456789abcdef01234567", i%9), "0x0123456789abcdef0123456789abcdef01234567")
+		}
+
+		// Add blocks
+		for i := 0; i < blockEachType; i++ {
+			oracle.state.ProposedBlocks = append(oracle.state.ProposedBlocks, SummarizedBlock{
+				Slot:              uint64(100),
+				ValidatorIndex:    uint64(i),
+				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+				Reward:            big.NewInt(5000000000000000000),
+				RewardType:        VanilaBlock,
+				WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+				BlockType:         OkPoolProposal,
+			})
+			oracle.state.MissedBlocks = append(oracle.state.MissedBlocks, SummarizedBlock{
+				Slot:              uint64(100),
+				ValidatorIndex:    uint64(i),
+				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+				Reward:            big.NewInt(5000000000000000000),
+				RewardType:        VanilaBlock,
+				WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+				BlockType:         MissedProposal,
+			})
+			oracle.state.WrongFeeBlocks = append(oracle.state.WrongFeeBlocks, SummarizedBlock{
+				Slot:              uint64(100),
+				ValidatorIndex:    uint64(i),
+				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+				Reward:            big.NewInt(5000000000000000000),
+				RewardType:        VanilaBlock,
+				WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+				BlockType:         WrongFeeRecipient,
+			})
+		}
+
+		for i := 0; i < numCheckpoints; i++ {
+			require.Equal(t, true, oracle.FreezeCheckpoint())
+		}
+
+		path := filepath.Join(StateFolder, StateJsonName)
+		defer os.Remove(path)
+		defer os.RemoveAll(StateFolder)
+		require.NoError(t, oracle.SaveToJson())
+
+		// Get file information
+		fileInfo, err := os.Stat(path)
+		require.NoError(t, err)
+
+		// Get file size in bytes
+		fileSize := fileInfo.Size()
+		fileSizeMB := float64(fileSize) / (1024 * 1024)
+
+		// Print the file size
+		log.Info("File size:", fileSizeMB, "MB")
+	}
 }
