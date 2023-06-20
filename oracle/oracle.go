@@ -97,10 +97,10 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 			or.state.NextSlotToProcess, " ", or.state.LatestProcessedSlot))
 	}
 
-	// Ensure the block to process matches the expected one
-	if or.state.NextSlotToProcess != fullBlock.GetSlotUint64() {
+	// Ensure the block to process matches the expected duty
+	if or.state.NextSlotToProcess != uint64(fullBlock.ConsensusDuty.Slot) {
 		return 0, errors.New(fmt.Sprint("Next slot to process is not the same as the block slot",
-			or.state.NextSlotToProcess, " ", fullBlock.GetSlotUint64()))
+			or.state.NextSlotToProcess, " ", fullBlock.ConsensusDuty.Slot))
 	}
 
 	// Some misc validations
@@ -111,6 +111,12 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 
 	// Full block is too heavy to be stored in the state, so we summarize it
 	summarizedBlock := fullBlock.SummarizedBlock(or, or.cfg.PoolAddress)
+
+	// Ensure the block we process is the expected one
+	if or.state.NextSlotToProcess != summarizedBlock.Slot {
+		return 0, errors.New(fmt.Sprint("Next slot to process is not the same as the block slot",
+			or.state.NextSlotToProcess, " ", summarizedBlock.Slot))
+	}
 
 	// Get donations to the pool in this block
 	blockDonations := fullBlock.GetDonations(or.cfg.PoolAddress)

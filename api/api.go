@@ -49,6 +49,7 @@ const (
 	pathStatus            = "/status"
 	pathConfig            = "/config"
 	pathValidatorRelayers = "/registeredrelays/{valpubkey}"
+	pathState             = "/state"
 
 	// Memory endpoints: what the oracle knows
 	pathMemoryValidators             = "/memory/validators"
@@ -125,6 +126,7 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc(pathStatus, m.handleStatus).Methods(http.MethodGet)
 	r.HandleFunc(pathConfig, m.handleConfig).Methods(http.MethodGet)
 	r.HandleFunc(pathValidatorRelayers, m.handleValidatorRelayers).Methods(http.MethodGet)
+	r.HandleFunc(pathState, m.handleState).Methods(http.MethodGet)
 
 	// Memory endpoints
 	r.HandleFunc(pathMemoryValidators, m.handleMemoryValidators).Methods(http.MethodGet)
@@ -830,6 +832,13 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 		WrongFeeRelays:       wrongFeeRelays,
 		UnregisteredRelays:   unregisteredRelays,
 	})
+}
+
+func (m *ApiService) handleState(w http.ResponseWriter, req *http.Request) {
+	// Just dump the whole known state of the oracle. This is useful for debugging. Note that
+	// if the state becomes too big, we may need to page it here. This use the same type
+	// as the oracle state type.
+	m.respondOK(w, m.oracle.State())
 }
 
 func IsValidIndex(v string) (uint64, bool) {

@@ -5,7 +5,7 @@ The dappnode **mev smoothing pool** is made of three repositories:
 * [mev-sp-oracle](https://github.com/dappnode/mev-sp-oracle): contains the rewards calculation algorithm and utilities to both update the merkle root of the tree and create proofs to be used in the smart contract for claiming rewards.
 * [mev-sp-trees](https://github.com/dappnode/mev-sp-trees): contains all rewards calculations for all subscribed validators organised per checkpoint, with all the merkle proofs and each checkpoint's merkle root.
 
-## Build from source
+## Build from source
 
 ```
 go build
@@ -17,6 +17,14 @@ go build
 Latest master is available and identified by its first 7 commit digits. Example:
 ```
 dappnode/mev-sp-oracle:583e6e1
+```
+
+## Tests
+
+Note that some files used for testing are bigger than what Github allows, so you may have to fetch it with `git lfs`.
+```
+git lfs checkout
+go test ./... -v
 ```
 
 ## Roles
@@ -33,7 +41,7 @@ Running in `updater` mode:
 ./mev-sp-oracle \
 --consensus-endpoint="http://127.0.0.1:5051" \
 --execution-endpoint="http://127.0.0.1:8545" \
---pool-address=0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243 \
+--pool-address=0xF21fbbA423f3a893A2402d68240B219308AbCA46 \
 --updater-keystore-path=xxx \
 --updater-keystore-pass=yyy
 ```
@@ -67,7 +75,7 @@ Store in `.env` so that it's picked up by `docker-compose`
 
 ```
 export NETWORK=goerli
-export POOL_ADDRESS=0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243
+export POOL_ADDRESS=0xF21fbbA423f3a893A2402d68240B219308AbCA46
 export UPDATER_KEYSTORE_PASS=xxx
 ```
 
