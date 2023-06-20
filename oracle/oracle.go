@@ -434,8 +434,8 @@ func (or *Oracle) FreezeCheckpoint() bool {
 // false otherwise. Note that if there are checkpoints but without enough data
 // to create a tree, it will still return false
 func (or *Oracle) LatestCommitedSlot() (uint64, bool) {
-	// or.mutex.RLock()
-	// defer or.mutex.RUnlock()
+	or.mutex.RLock()
+	defer or.mutex.RUnlock()
 
 	if len(or.State().CommitedStates) == 0 {
 		return 0, false
