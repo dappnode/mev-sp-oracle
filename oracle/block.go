@@ -11,6 +11,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -277,7 +278,7 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 	// Get the last tx which is the one that contains the mev reward
 	lastTx := txs[len(txs)-1]
 
-	tx, err := DecodeTx(lastTx)
+	tx, err := utils.DecodeTx(lastTx)
 	if err != nil {
 		log.Fatal("could not decode tx: ", err)
 	}
@@ -287,14 +288,14 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 		return big.NewInt(0), false, ""
 	}
 
-	sender, err := GetTxSender(tx)
+	sender, err := utils.GetTxSender(tx)
 	if err != nil {
 		log.Fatal("could not get tx sender: ", err)
 	}
 
 	// Mev rewards are sent in the last tx. This tx sender
 	// matches the fee recipient of the protocol
-	if Equals(b.GetFeeRecipient(), sender.String()) {
+	if utils.Equals(b.GetFeeRecipient(), sender.String()) {
 		return tx.Value(), true, strings.ToLower(tx.To().String())
 	}
 
@@ -323,7 +324,7 @@ func (b *FullBlock) GetSentRewardAndType(
 		wasRewardSent = false
 
 		// if the mev reward was sent to the pool address
-		if Equals(mevRecipient, poolAddress) {
+		if utils.Equals(mevRecipient, poolAddress) {
 			wasRewardSent = true
 		}
 
@@ -333,13 +334,13 @@ func (b *FullBlock) GetSentRewardAndType(
 	// ii) check if vanila reward (calculating this is expensive as requires headers)
 	// so its done only if needed. Note that this reward does not trigger EtherReceived
 	// events, as its built in the protocol
-	if Equals(b.GetFeeRecipient(), poolAddress) || isSubscriber {
+	if utils.Equals(b.GetFeeRecipient(), poolAddress) || isSubscriber {
 		vanilaReward, err := b.GetProposerTip()
 		if err != nil {
 			log.Fatal("could not get proposer tip: ", err)
 		}
 
-		if Equals(b.GetFeeRecipient(), poolAddress) {
+		if utils.Equals(b.GetFeeRecipient(), poolAddress) {
 			wasRewardSent = true
 		}
 		txType = VanilaBlock
@@ -353,12 +354,12 @@ func (b *FullBlock) GetSentRewardAndType(
 }
 
 func (b *FullBlock) isAddressRewarded(address string) bool {
-	if Equals(b.GetFeeRecipient(), address) {
+	if utils.Equals(b.GetFeeRecipient(), address) {
 		return true
 	}
 
 	_, isMev, mevRec := b.MevRewardInWei()
-	if isMev && Equals(mevRec, address) {
+	if isMev && utils.Equals(mevRec, address) {
 		return true
 	}
 	return false
@@ -394,7 +395,7 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 	tips := big.NewInt(0)
 
 	for i, rawTx := range b.GetBlockTransactions() {
-		tx, err := DecodeTx(rawTx)
+		tx, err := utils.DecodeTx(rawTx)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not decode tx")
 		}
@@ -413,7 +414,7 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 			tipFee.Mul(gasPrice, gasUsed)
 		case 2:
 			// Sum gastipcap and basefee or saturate to gasfeecap
-			usedGasPrice := SumAndSaturate(tx.GasTipCap(), b.ExecutionHeader.BaseFee, tx.GasFeeCap())
+			usedGasPrice := utils.SumAndSaturate(tx.GasTipCap(), b.ExecutionHeader.BaseFee, tx.GasFeeCap())
 			tipFee = new(big.Int).Mul(usedGasPrice, gasUsed)
 		default:
 			return nil, errors.New(fmt.Sprintf("unknown tx type: %d", tx.Type()))
@@ -471,7 +472,7 @@ func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherRe
 	mevReward, isMev, mevRec := b.MevRewardInWei()
 
 	// If no mev reward or mev reward but not to the pool
-	if !isMev || !Equals(mevRec, poolAddress) {
+	if !isMev || !utils.Equals(mevRec, poolAddress) {
 		// In this case we dont expect any etherReceived event due to MEV
 		// All events are donations
 		return b.Events.EtherReceived
@@ -519,27 +520,8 @@ func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Summariz
 		return poolBlock
 
 	} else {
-
-		// Check if the proposal is from a subscribed validator
-		// TODO: remove this and just get if from the available information
+		// Check if the proposer is subscribed to the pool
 		isFromSubscriber := oracle.isSubscribed(b.GetProposerIndexUint64())
-		isPoolRewarded := b.isAddressRewarded(poolAddress)
-
-		// This calculation is expensive, do it only if the reward went to the pool or
-		// if the block is from a subscribed validator (which includes also wrong fee blocks from subscribers)
-		if isFromSubscriber || isPoolRewarded {
-			/*
-				blockNumber := new(big.Int).SetUint64(b.GetBlockNumber())
-				header, receipts, err := o.GetExecHeaderAndReceipts(blockNumber, b.GetBlockTransactions())
-				if err != nil {
-					log.Fatal("failed getting header and receipts: ", err)
-				}
-				extendedBlock = NewFullBlock(proposedBlock, header, receipts, events)*/
-		}
-
-		// TODO:
-		//MEVFeeRecipient
-		//FeeRecipient
 
 		// Fetch block information
 		reward, correctFeeRec, rewardType := b.GetSentRewardAndType(poolAddress, isFromSubscriber)

@@ -140,8 +140,6 @@ type SummarizedBlock struct {
 	Reward            *big.Int   `json:"reward_wei"`
 	RewardType        RewardType `json:"reward_type"`
 	WithdrawalAddress string     `json:"withdrawal_address"`
-	MEVFeeRecipient   string     `json:"mev_fee_recipient"` // TODO: populate
-	FeeRecipient      string     `json:"fee_recipient"`     // TODO: populate
 }
 
 // Subscription event and the associated validator (if any)

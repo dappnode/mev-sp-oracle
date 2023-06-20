@@ -19,7 +19,9 @@ import (
 	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/oracle"
+	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/hako/durafmt"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
@@ -340,7 +342,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		PreviousCheckpointAgeUnix:   slotsFromLastCheckpoint * SecondsInSlot,
 		ExecutionChainId:            chainId.String(),
 		ConsensusChainId:            strconv.FormatUint(depositContract.ChainID, 10),
-		DepositContact:              "0x" + hex.EncodeToString(depositContract.Address[:]),
+		DepositContact:              hexutil.Encode(depositContract.Address[:]),
 	}
 
 	m.respondOK(w, status)
@@ -443,7 +445,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 
 		// Check if the withdrawal address matches the requested one
 		credStr := hex.EncodeToString(validator.Validator.WithdrawalCredentials)
-		eth1Add, err := oracle.GetEth1Address(credStr) // TODO: Use the new function
+		eth1Add, err := utils.GetEth1Address(credStr) // TODO: Use the new function
 
 		// Skip validators without non eth withdrawal address (bls address)
 		if err != nil {
@@ -467,7 +469,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 			CollateralWei:         big.NewInt(0),
 			WithdrawalAddress:     eth1Add,
 			ValidatorIndex:        uint64(validator.Index),
-			ValidatorKey:          "0x" + hex.EncodeToString(validator.Validator.PublicKey[:]),
+			ValidatorKey:          hexutil.Encode(validator.Validator.PublicKey[:]),
 		}
 	}
 
@@ -475,7 +477,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 	validatorsCopy := make(map[uint64]*oracle.ValidatorInfo)
 
 	// Imporant! This is a deep copy, otherwise we will modify the state
-	oracle.DeepCopy(m.oracle.State().Validators, &validatorsCopy)
+	utils.DeepCopy(m.oracle.State().Validators, &validatorsCopy)
 	for valIndex, validator := range validatorsCopy {
 		// Just overwrite the untracked validators with oracle state
 		if AreAddressEqual(validator.WithdrawalAddress, withdrawalAddress) {

@@ -14,6 +14,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/metrics"
 	"github.com/dappnode/mev-sp-oracle/oracle"
+	"github.com/dappnode/mev-sp-oracle/utils"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -48,7 +49,7 @@ func main() {
 	var updaterKey *ecdsa.PrivateKey
 	var updaterAddress string
 	if !cliCfg.DryRun {
-		keystore, err := oracle.DecryptKey(cliCfg)
+		keystore, err := utils.DecryptKey(cliCfg)
 		if err != nil {
 			log.Fatal("Could not decrypt updater key: ", err)
 		}
@@ -188,7 +189,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			metrics.LatestProcessedBlock.Set(float64(oracleInstance.State().LatestProcessedBlock))
 
 			log.Debug("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
-				slotToLatestFinalized, " (", oracle.SlotsToTime(slotToLatestFinalized), " ago)")
+				slotToLatestFinalized, " (", utils.SlotsToTime(slotToLatestFinalized), " ago)")
 
 		} else {
 			log.WithFields(log.Fields{
@@ -208,11 +209,11 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 		}
 
 		// Every CheckPointSizeInSlots we commit the state given some conditions
-		if oracleInstance.State().LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 { // TODO: extract to oracle method
+		if oracleInstance.State().LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached, latest processed slot: ", oracleInstance.State().LatestProcessedSlot)
 
 			// Freeze state
-			enoughData := oracleInstance.StoreLatestOnchainState() // TODO: perhaps not the best name
+			enoughData := oracleInstance.FreezeCheckpoint()
 			if !enoughData {
 				log.Warn("Not enough data to create a merkle tree and hence update the contract. Skipping till next checkpoint")
 				continue

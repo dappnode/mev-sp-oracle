@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
 
@@ -54,7 +55,7 @@ func (merklelizer *Merklelizer) AggregateValidatorsIndexes(state *OracleState) [
 
 		// If the leaf already exists, add the balance to the existing leaf (by withdrawal address)
 		for _, leaf := range allLeafs {
-			if Equals(leaf.WithdrawalAddress, validator.WithdrawalAddress) {
+			if utils.Equals(leaf.WithdrawalAddress, validator.WithdrawalAddress) {
 				leaf.AccumulatedBalanceWei.Add(leaf.AccumulatedBalanceWei, validator.AccumulatedRewardsWei)
 				found = true
 				continue

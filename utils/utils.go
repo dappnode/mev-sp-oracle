@@ -1,4 +1,4 @@
-package oracle
+package utils
 
 import (
 	"bytes"
@@ -20,8 +20,6 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
-
-// TODO: Move to utils module
 
 func ToBytes20(x []byte) [20]byte {
 	var y [20]byte
@@ -173,22 +171,6 @@ func GetEth1AddressByte(withdrawalCredByte []byte) (string, error) {
 		return "", errors.New("Withdrawal credentials prefix does not match the spec")
 	}
 	return "0x" + withdrawalCred[24:], nil
-}
-
-// Returns the 0x prefixed withdrawal credentials and its type: BlsWithdrawal or Eth1Withdrawal
-func GetWithdrawalAndType(validator *v1.Validator) (string, WithdrawalType) {
-	withdrawalCred := hex.EncodeToString(validator.Validator.WithdrawalCredentials)
-	if len(withdrawalCred) != 64 {
-		log.Fatal("withdrawal credentials are not a valid length: ", len(withdrawalCred))
-	}
-
-	if IsBlsType(withdrawalCred) {
-		return "0x" + withdrawalCred[2:], BlsWithdrawal
-	} else if IsEth1Type(withdrawalCred) {
-		return "0x" + withdrawalCred[24:], Eth1Withdrawal
-	}
-	log.Fatal("withdrawal credentials are not a valid type: ", withdrawalCred)
-	return "", 0
 }
 
 func Equals(a string, b string) bool {

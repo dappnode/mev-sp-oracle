@@ -125,6 +125,14 @@ func Test_EndToEnd(t *testing.T) {
 	onchain.RefreshBeaconValidators()
 	oracleInstance.SetBeaconValidators(onchain.Validators())
 
+	// Uncomment to save validators
+	//path := filepath.Join("../mock", "validators.json")
+	//jsonData, err := json.MarshalIndent(onchain.Validators(), "", " ")
+	//require.NoError(t, err)
+	//err = ioutil.WriteFile(path, jsonData, 0644)
+	//require.NoError(t, err)
+	//log.Fatal("done")
+
 	slotsToProcess := []uint64{
 		5840966, //mev reward
 		5843638, //vanila reward (auto subs)
@@ -140,8 +148,45 @@ func Test_EndToEnd(t *testing.T) {
 		5855268, //vanila reward (auto subs)
 		5856619, //vanila reward (auto subs)
 		5858585, //vanila reward (auto subs)
-		//5862054, //donation normal TODO
-		//5862104, //donation via smart contract TODO:
+		5862054, //donation normal TODO
+		5862104, //donation via smart contract TODO:
+
+		5863539,
+		5864096,
+		5870291,
+		5871368,
+		5871701,
+		5874576,
+		5880967,
+		5882954,
+		5883240,
+		5885240,
+		5885987,
+		5887583,
+
+		// subs
+		5888073,
+		5888079,
+		5888082,
+		5888090,
+		5888096,
+		5888099,
+		5888101,
+		5888104,
+		5888105,
+		5888106,
+		5888108,
+		5888109,
+		5888112,
+		5888114,
+		5888116,
+		5888118,
+		5888121,
+		5888123,
+		5888126,
+		// freeze state
+
+		// 0xb0f08efb67c59a4b16b143cf3a4850e786c4295909bee85b41cdc7d78db5d329
 		// TODO: Add more blocks with subs unsubs etc
 		// TODO: Randomly add blocks without anything interesting
 		// TODO: Randmly add missed blocks
@@ -162,6 +207,16 @@ func Test_EndToEnd(t *testing.T) {
 		// Fetch block information
 		fullBlock := onchain.FetchFullBlock(oracleInstance.State().NextSlotToProcess, oracleInstance)
 
+		// Store the block for mocking later
+		//isPoolRewarded := fullBlock.isAddressRewarded(oracleInstance.cfg.PoolAddress)
+		//isFromSubscriber := oracleInstance.isSubscribed(fullBlock.GetProposerIndexUint64())
+		//fileName := fmt.Sprintf("fullblock_slot_%d_chainid_%s%s.json", oracleInstance.State().NextSlotToProcess, "5", HasHeader(isFromSubscriber || isPoolRewarded))
+		//path := filepath.Join("../mock", fileName)
+		//jsonData, err := json.MarshalIndent(fullBlock, "", " ")
+		//require.NoError(t, err)
+		//err = ioutil.WriteFile(path, jsonData, 0644)
+		//require.NoError(t, err)
+
 		// Advance state to next slot based on the information we got from the block
 		processedSlot, err := oracleInstance.AdvanceStateToNextSlot(fullBlock)
 		require.NoError(t, err)
@@ -169,7 +224,7 @@ func Test_EndToEnd(t *testing.T) {
 		log.Info("Processed slot: ", processedSlot)
 	}
 
-	oracleInstance.StoreLatestOnchainState()
+	oracleInstance.FreezeCheckpoint()
 
 	// TODO: Run asserts
 	//oracleInstance.SaveStateToFile()
