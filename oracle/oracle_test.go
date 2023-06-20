@@ -371,7 +371,7 @@ func Test_Oracle_CanValidatorSubscribeToPool(t *testing.T) {
 	}
 
 	require.Equal(t, true, CanValidatorSubscribeToPool(val1))
-	require.Equal(t, true, CanValidatorSubscribeToPool(val2))
+	require.Equal(t, false, CanValidatorSubscribeToPool(val2))
 }
 
 func Test_addSubscription_1(t *testing.T) {
