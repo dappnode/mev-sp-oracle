@@ -79,3 +79,5 @@ Use to check that all env variables were correctly replaced
 ```console
 docker compose convert
 ```
+
+remove
