@@ -200,8 +200,8 @@ func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) 
 func (or *Oracle) SaveToJson(saveslot bool) error {
 	// Not just read lock since we change the hash, minor thing
 	// but it cant be just a read mutex
+
 	or.mutex.Lock()
-	defer or.mutex.Unlock()
 
 	log.Info("Saving oracle state to JSON file")
 
@@ -214,6 +214,7 @@ func (or *Oracle) SaveToJson(saveslot bool) error {
 	if err != nil {
 		return errors.Wrap(err, "could not marshal state to JSON")
 	}
+	or.mutex.Unlock()
 
 	var filename string
 	var path string
