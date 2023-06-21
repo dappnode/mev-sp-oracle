@@ -47,6 +47,36 @@ var (
 			"merkle_root",
 		},
 	)
+
+	Version = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "oracle",
+			Name:      "version",
+			Help:      "Oracle version",
+		},
+		[]string{
+			"version",
+		},
+	)
+
+	HttpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "oracle",
+			Name:      "http_requests_total",
+			Help:      "How many HTTP requests processed, partitioned by status code, method and HTTP path.",
+		},
+		[]string{"code", "method", "path"},
+	)
+
+	HttpRequestsLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "oracle",
+			Name:      "http_request_duration_seconds",
+			Help:      "How long it took to process the request, partitioned by status code, method and HTTP path.",
+			Buckets:   []float64{0.3, 1.0, 2.5, 5.0, 10.0},
+		},
+		[]string{"code", "method", "path"},
+	)
 )
 
 func RunMetrics(port int) {

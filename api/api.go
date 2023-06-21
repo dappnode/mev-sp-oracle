@@ -18,6 +18,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/metrics"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -116,6 +117,67 @@ func (m *ApiService) respondOK(w http.ResponseWriter, response any) {
 	}
 }
 
+type responseWriterDelegator struct {
+	http.ResponseWriter
+	status      int
+	written     int64
+	wroteHeader bool
+}
+
+func (r *responseWriterDelegator) WriteHeader(code int) {
+	r.status = code
+	r.wroteHeader = true
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *responseWriterDelegator) Write(b []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
+	n, err := r.ResponseWriter.Write(b)
+	r.written += int64(n)
+	return n, err
+}
+
+func sanitizeMethod(m string) string {
+	return strings.ToLower(m)
+}
+
+func sanitizeCode(s int) string {
+	return strconv.Itoa(s)
+}
+
+// Prometheus middleware to track http requests count and latency. Inspired by
+// https://github.com/albertogviana/prometheus-middleware
+func prometheusMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		begin := time.Now()
+
+		delegate := &responseWriterDelegator{ResponseWriter: w}
+		rw := delegate
+
+		next.ServeHTTP(rw, r)
+
+		route := mux.CurrentRoute(r)
+		path, _ := route.GetPathTemplate()
+
+		code := sanitizeCode(delegate.status)
+		method := sanitizeMethod(r.Method)
+
+		go metrics.HttpRequestsTotal.WithLabelValues(
+			code,
+			method,
+			path,
+		).Inc()
+
+		go metrics.HttpRequestsLatency.WithLabelValues(
+			code,
+			method,
+			path,
+		).Observe(float64(time.Since(begin)) / float64(time.Second))
+	})
+}
+
 func (m *ApiService) getRouter() http.Handler {
 	r := mux.NewRouter()
 
@@ -147,6 +209,7 @@ func (m *ApiService) getRouter() http.Handler {
 
 	//not strictly necessary but good to have
 	r.Use(mux.CORSMethodMiddleware(r))
+	r.Use(prometheusMiddleware)
 
 	return r
 }

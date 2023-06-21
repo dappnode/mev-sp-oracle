@@ -37,6 +37,7 @@ func main() {
 
 	log.Info("Starting smoothing pool oracle")
 	log.Info("Version: ", config.ReleaseVersion)
+	metrics.Version.WithLabelValues(config.ReleaseVersion).Set(1)
 
 	// Set log-level
 	logLevel, err := log.ParseLevel(cliCfg.LogLevel)
