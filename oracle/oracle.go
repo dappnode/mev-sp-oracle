@@ -197,7 +197,11 @@ func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) 
 	return nil
 }
 
-func (or *Oracle) SaveToJson(saveslot bool) error {
+// Persist the state of the oracle to a JSON file. By default its stored
+// as state.json but if saveSlot is true, it will store two copies,
+// one updating the existing state.json and other as state_<slot>.json.
+// The later is to be used mainly for debugging and recovery purposes.
+func (or *Oracle) SaveToJson(saveSlot bool) error {
 	// Not just read lock since we change the hash, minor thing
 	// but it cant be just a read mutex
 
@@ -216,30 +220,13 @@ func (or *Oracle) SaveToJson(saveslot bool) error {
 	}
 	or.mutex.Unlock()
 
-	var filename string
-	var path string
-
-	if saveslot {
-		// If we are saving the state of a specific slot, we need to get the latest committed slot
-		// and save the state to a file with that slot number
-		slot, atLeastOne := or.LatestCommitedSlot()
-		if !atLeastOne {
-			return errors.New("could not get latest committed slot")
-		}
-		filename = fmt.Sprintf("state_%d.json", slot)
-		path = filepath.Join(StateFolder, filename)
-
-	} else {
-		// if we are not saving a specific slot, we save the state to the default file name (state.json)
-		path = filepath.Join(StateFolder, StateJsonName)
-	}
-
+	path := filepath.Join(StateFolder, StateJsonName)
 	err = os.MkdirAll(StateFolder, os.ModePerm)
 	if err != nil {
 		return errors.Wrap(err, "could not create folder")
 	}
 
-	log.Debug("Saving state to file:", path)
+	log.Debug("Saving state to file:", fmt.Sprintf("%s", jsonData))
 
 	err = ioutil.WriteFile(path, jsonData, 0644)
 	if err != nil {
@@ -256,6 +243,22 @@ func (or *Oracle) SaveToJson(saveslot bool) error {
 		"Path":                 path,
 		"Hash":                 or.state.StateHash,
 	}).Info("Saved state to file")
+
+	// If saveSlot is true, save a copy of the state with the slot number in the file
+	if saveSlot {
+		filename := fmt.Sprintf("state_%d.json", or.State().LatestProcessedSlot)
+		path = filepath.Join(StateFolder, filename)
+
+		log.WithFields(log.Fields{
+			"LatestProcessedSlot": or.state.LatestProcessedSlot,
+			"FileName":            filename,
+		}).Info("Storing also a copy of the state")
+
+		err = ioutil.WriteFile(path, jsonData, 0644)
+		if err != nil {
+			return errors.Wrap(err, "could not write file")
+		}
+	}
 
 	return nil
 }

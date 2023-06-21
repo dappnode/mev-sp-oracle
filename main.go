@@ -256,13 +256,10 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				log.Info("Oracle is not yet in sync with the chain")
 			}
 
-			// If the new state is not the one onchain + checkpoint size, do nothing
-			if newState.Slot != onchainSlot+cfg.CheckPointSizeInSlots {
-				continue
-			}
-
-			// Otherwise, we are in the next state, so we can update the contract
-			if !cfg.DryRun && enoughData {
+			// If the oracle has permission to update the contract root (!dryRun), we have enough data
+			// to construct a merkle tree and also the new state slot is the one onchain + checkpoint size
+			// Then we can update the new merkle root
+			if !cfg.DryRun && enoughData && newState.Slot == onchainSlot+cfg.CheckPointSizeInSlots {
 				err := onchain.UpdateContractMerkleRoot(newState.Slot, newState.MerkleRoot)
 				if err != nil {
 					// There is a very improbable case that this tx is expected to fail. If quorum is n for
@@ -288,8 +285,8 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 						}).Info("The submitted state is now consolidated in the contract")
 						break
 					} else {
-						log.Info("Contract not yet updated, waiting")
-						time.Sleep(30 * time.Second)
+						log.Info("Submitted merkle root is not consolidated, waiting for other oracles to update it")
+						time.Sleep(1 * time.Minute)
 					}
 				}
 			}
