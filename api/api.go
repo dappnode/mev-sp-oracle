@@ -64,6 +64,7 @@ const (
 	pathMemoryWrongFeeBlocks         = "/memory/wrongfeeblocks"
 	pathMemoryDonations              = "/memory/donations"
 	pathMemoryPoolStatistics         = "/memory/statistics"
+	pathMemoryValidatorBlocks        = "/memory/validatorblocks"
 
 	// Onchain endpoints: what is submitted to the contract
 	pathOnchainValidators             = "/onchain/validators"                     // TODO
@@ -139,6 +140,7 @@ func (m *ApiService) getRouter() http.Handler {
 	r.HandleFunc(pathMemoryMissedBlocks, m.handleMemoryMissedBlocks).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryWrongFeeBlocks, m.handleMemoryWrongFeeBlocks).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryDonations, m.handleMemoryDonations).Methods(http.MethodGet)
+	r.HandleFunc(pathMemoryValidatorBlocks, m.handleMemoryValidatorBlocks).Methods(http.MethodGet)
 
 	// Onchain endpoints
 	r.HandleFunc(pathOnchainMerkleProof, m.handleOnchainMerkleProof).Methods(http.MethodGet)
@@ -199,6 +201,70 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func (m *ApiService) handleRoot(w http.ResponseWriter, req *http.Request) {
 	m.respondOK(w, "see api doc for available endpoints")
+}
+
+func (m *ApiService) handleMemoryValidatorBlocks(w http.ResponseWriter, r *http.Request) {
+	// Access the existing OracleState instance from the ApiService
+	oracleState := m.oracle.State()
+
+	// Retrieve the ProposedBlocks, MissedBlocks, and WrongFeeBlocks from the OracleState
+	proposedBlocks := oracleState.ProposedBlocks
+	missedBlocks := oracleState.MissedBlocks
+	wrongFeeBlocks := oracleState.WrongFeeBlocks
+
+	// Create a map to hold the ordered blocks, with the ValidatorIndex as the key
+	orderedBlocks := make(map[uint64]*httpOkValBlocks)
+
+	// Iterate over the ProposedBlocks and add them to the orderedBlocks map
+	for _, block := range proposedBlocks {
+		validatorIndex := block.ValidatorIndex
+		if valBlocks, ok := orderedBlocks[validatorIndex]; ok {
+			valBlocks.ProposedBlocks = append(valBlocks.ProposedBlocks, block)
+		} else {
+			orderedBlocks[validatorIndex] = &httpOkValBlocks{
+				ValidatorIndex: validatorIndex,
+				ProposedBlocks: []oracle.SummarizedBlock{block},
+			}
+		}
+	}
+
+	// Iterate over the MissedBlocks and add them to the orderedBlocks map
+	for _, block := range missedBlocks {
+		validatorIndex := block.ValidatorIndex
+		if valBlocks, ok := orderedBlocks[validatorIndex]; ok {
+			valBlocks.MissedBlocks = append(valBlocks.MissedBlocks, block)
+		} else {
+			orderedBlocks[validatorIndex] = &httpOkValBlocks{
+				ValidatorIndex: validatorIndex,
+				MissedBlocks:   []oracle.SummarizedBlock{block},
+			}
+		}
+	}
+
+	// Iterate over the WrongFeeBlocks and add them to the orderedBlocks map
+	for _, block := range wrongFeeBlocks {
+		validatorIndex := block.ValidatorIndex
+		if valBlocks, ok := orderedBlocks[validatorIndex]; ok {
+			valBlocks.WrongFeeBlocks = append(valBlocks.WrongFeeBlocks, block)
+		} else {
+			orderedBlocks[validatorIndex] = &httpOkValBlocks{
+				ValidatorIndex: validatorIndex,
+				WrongFeeBlocks: []oracle.SummarizedBlock{block},
+			}
+		}
+	}
+
+	// Create a slice to hold the final JSON output
+	finalOutput := make([]*httpOkValBlocks, 0, len(orderedBlocks))
+
+	// Iterate over the orderedBlocks map using the validator indices in ascending order
+	for index := uint64(0); index < uint64(len(orderedBlocks)); index++ {
+		if valBlocks, ok := orderedBlocks[index]; ok {
+			finalOutput = append(finalOutput, valBlocks)
+		}
+	}
+
+	m.respondOK(w, finalOutput)
 }
 
 func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Request) {
