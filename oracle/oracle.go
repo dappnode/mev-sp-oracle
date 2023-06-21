@@ -197,33 +197,49 @@ func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) 
 	return nil
 }
 
-// Serialized and saves the oracle state to a human readable json file
-func (or *Oracle) SaveToJson() error {
+func (or *Oracle) SaveToJson(saveslot bool) error {
 	// Not just read lock since we change the hash, minor thing
 	// but it cant be just a read mutex
-	or.mutex.Lock()
-	defer or.mutex.Unlock()
 
-	log.Info("Saving oracle state to json file")
+	or.mutex.Lock()
+
+	log.Info("Saving oracle state to JSON file")
 
 	err := or.hashStateLockFree()
 	if err != nil {
 		return errors.Wrap(err, "error hashing the oracle state")
 	}
 
-	// Marshal again with the hash
 	jsonData, err := json.MarshalIndent(or.state, "", " ")
 	if err != nil {
-		return errors.Wrap(err, "could not marshal state to json")
+		return errors.Wrap(err, "could not marshal state to JSON")
+	}
+	or.mutex.Unlock()
+
+	var filename string
+	var path string
+
+	if saveslot {
+		// If we are saving the state of a specific slot, we need to get the latest committed slot
+		// and save the state to a file with that slot number
+		slot, atLeastOne := or.LatestCommitedSlot()
+		if !atLeastOne {
+			return errors.New("could not get latest committed slot")
+		}
+		filename = fmt.Sprintf("state_%d.json", slot)
+		path = filepath.Join(StateFolder, filename)
+
+	} else {
+		// if we are not saving a specific slot, we save the state to the default file name (state.json)
+		path = filepath.Join(StateFolder, StateJsonName)
 	}
 
-	path := filepath.Join(StateFolder, StateJsonName)
 	err = os.MkdirAll(StateFolder, os.ModePerm)
 	if err != nil {
 		return errors.Wrap(err, "could not create folder")
 	}
 
-	log.Debug("Saving state from file: ", fmt.Sprintf("%s", jsonData))
+	log.Debug("Saving state to file:", path)
 
 	err = ioutil.WriteFile(path, jsonData, 0644)
 	if err != nil {
@@ -425,7 +441,6 @@ func (or *Oracle) LatestCommitedSlot() (uint64, bool) {
 	if len(or.State().CommitedStates) == 0 {
 		return 0, false
 	}
-
 	latestCommitedSlot := uint64(0)
 	for slot, _ := range or.State().CommitedStates {
 		if slot > latestCommitedSlot {

@@ -169,7 +169,7 @@ func Test_SaveReadToFromJson(t *testing.T) {
 
 	defer os.Remove(filepath.Join(StateFolder, StateJsonName))
 	defer os.RemoveAll(StateFolder)
-	oracle.SaveToJson()
+	oracle.SaveToJson(false)
 
 	// Oracle with same config
 	newOracle := NewOracle(config)
@@ -1987,7 +1987,18 @@ func Test_StateSize(t *testing.T) {
 		path := filepath.Join(StateFolder, StateJsonName)
 		defer os.Remove(path)
 		defer os.RemoveAll(StateFolder)
-		require.NoError(t, oracle.SaveToJson())
+		require.NoError(t, oracle.SaveToJson(false))
+		// //make 2000 validators propose a block
+		// for i := 0; i < numValidators; i++ {
+		// 	state.handleCorrectBlockProposal(Block{
+		// 		Slot:              uint64(100),
+		// 		ValidatorIndex:    uint64(valsID[i]),
+		// 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+		// 		Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+		// 		RewardType:        MevBlock,
+		// 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
+		// 	})
+		// }
 
 		// Get file information
 		fileInfo, err := os.Stat(path)
@@ -1999,5 +2010,203 @@ func Test_StateSize(t *testing.T) {
 
 		// Print the file size
 		log.Info("File size:", fileSizeMB, "MB")
+	}
+}
+
+// This test tries to mock a real time scenario where 2000 validators are tracked by the pool,
+// and tries check how much memory the oracleState takes.
+// In this scenario, the oracle uploads a new state to the chain once every 3 days.
+// Since we have 2000 validators, each time the state is uploaded to the chain,
+// a rough estimate of 100 blocks will have been proposed by the validators.
+func Test_SizeMultipleOnchainState(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		CollateralInWei: big.NewInt(1000),
+		PoolFeesAddress: "0x1123456789abcdef0123456789abcdef01234568",
+	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{}
+
+	//prepare 2000 validators
+	numValidators := 2000
+
+	//create 2000 validators with index 0-1999
+	valsID := make([]uint64, numValidators)
+	for i := 0; i < numValidators; i++ {
+		valsID[i] = uint64(i)
+	}
+
+	for i := 0; i < len(valsID); i++ {
+		address := common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567")
+		oracle.beaconValidators[phase0.ValidatorIndex(i)] = &v1.Validator{
+			Index:  phase0.ValidatorIndex(valsID[i]),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// withdrawal credentials = 0x(valID)0000..000
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, address[0], address[1], address[2], address[3], address[4], address[5], address[6], address[7], address[8], address[9], address[10], address[11], address[12], address[13], address[14], address[15], address[16], address[17], address[18], address[19]},
+				// Valdator pubkey: 0x(valID)0000...000
+				PublicKey: phase0.BLSPubKey{byte(valsID[i]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			},
+		}
+	}
+	//subscribe 2000 validators. All validators will have the same withdrawal address.
+	subs := new_subs_slice(common.HexToAddress("0x0123456789abcdef0123456789abcdef01234567"), valsID, big.NewInt(1000))
+
+	//oracle handles the subscriptions.
+	oracle.handleManualSubscriptions(subs)
+
+	//simulate the scenario. In one year, we will commit 121 states to the chain.
+	//each time the state is commited, a rough estimate of 100 blocks will have been proposed by the validators.
+	for i := 0; i < 121; i++ {
+		for j := 0; j < 100; j++ {
+			oracle.handleCorrectBlockProposal(SummarizedBlock{
+				Slot:              uint64(100),
+				ValidatorIndex:    uint64(valsID[j]),
+				ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
+				Reward:            big.NewInt(5000000000000000000), // 0.5 eth of reward
+				RewardType:        MevBlock,
+				WithdrawalAddress: "0x0100000000000000000000009b3b13d6b6f3f52154a8b00d818392b61e4b42b4",
+			})
+		}
+		// the "StoreLatestOnchainState" function is responsible of making a deep copy of all
+		// current validator data and storing it in the new "state.CommitedStates" map, which
+		// contains all the past onchain states of the validators.
+		// each time we store a new latestOnchainState, the merkleroot has changed, so we
+		// store a new state of all the validators.
+		// in a year, will update the onchain state 121 times. each time we do this, we will
+		// store the last onchain state, which contains the information of all the validators
+		//oracle.StoreLatestOnchainState()
+		oracle.FreezeCheckpoint()
+	}
+
+	//after 1 year, we will have 121 states in the "state.CommitedStates" map.
+	//each state contains the information of 2000 validators.
+
+	//save the state to a file
+	oracle.SaveToJson(false)
+	filePath := "oracle-data/state.json"
+
+	// Get file information
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Get file size in bytes
+	fileSize := fileInfo.Size()
+	fileSizeMB := float64(fileSize) / (1024 * 1024)
+
+	// Print the file size
+	log.Info("File size:", fileSizeMB, "MB")
+}
+
+func TestSaveToJson(t *testing.T) {
+	or := &Oracle{
+		state: &OracleState{
+			// Initialize the state with sample values for testing
+			CommitedStates: map[uint64]*OnchainState{
+				100: {
+					Slot: 100,
+				},
+				200: {
+					Slot: 200,
+				},
+			},
+			LatestProcessedSlot:  200,
+			LatestProcessedBlock: 100,
+			NextSlotToProcess:    11,
+			Validators: map[uint64]*ValidatorInfo{
+				1: {
+					ValidatorStatus:       1,
+					AccumulatedRewardsWei: big.NewInt(100),
+					PendingRewardsWei:     big.NewInt(50),
+					CollateralWei:         big.NewInt(500),
+					WithdrawalAddress:     "withdrawal_address_1",
+					ValidatorIndex:        1,
+					ValidatorKey:          "validator_key_1",
+				},
+				2: {
+					ValidatorStatus:       1,
+					AccumulatedRewardsWei: big.NewInt(200),
+					PendingRewardsWei:     big.NewInt(100),
+					CollateralWei:         big.NewInt(1000),
+					WithdrawalAddress:     "withdrawal_address_2",
+					ValidatorIndex:        2,
+					ValidatorKey:          "validator_key_2",
+				},
+			},
+			Network:     "testnet",
+			PoolAddress: "pool_address",
+			StateHash:   "state_hash",
+		},
+	}
+	tempDir := t.TempDir()
+	StateFolder = tempDir
+
+	err := or.SaveToJson(false)
+	if err != nil {
+		t.Errorf("SaveToJson returned an error: %v", err)
+	}
+
+	expectedPath := filepath.Join(tempDir, StateJsonName)
+	checkFileExists(t, expectedPath)
+
+	err = or.SaveToJson(true)
+	if err != nil {
+		t.Errorf("SaveToJson(true) returned an error: %v", err)
+	}
+
+	expectedPath = filepath.Join(tempDir, "state_200.json")
+	checkFileExists(t, expectedPath)
+}
+
+func checkFileExists(t *testing.T, path string) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		t.Errorf("Expected file does not exist: %s", path)
+	}
+}
+
+// returns len(valsID) new valid subscriptions
+func new_subs_slice(address common.Address, valsID []uint64, collateral *big.Int) []*contract.ContractSubscribeValidator {
+	subs := make([]*contract.ContractSubscribeValidator, len(valsID))
+	for i := 0; i < len(valsID); i++ {
+		subs[i] = &contract.ContractSubscribeValidator{
+			ValidatorID:            valsID[i],
+			SubscriptionCollateral: collateral,
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 address,
+		}
+	}
+	return subs
+}
+
+func MissedBlock(slot uint64, valIndex uint64, pubKey string) SummarizedBlock {
+	return SummarizedBlock{
+		Slot:           slot,
+		ValidatorIndex: valIndex,
+		ValidatorKey:   pubKey,
+		BlockType:      MissedProposal,
+	}
+}
+
+func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) SummarizedBlock {
+	return SummarizedBlock{
+		Slot:           slot,
+		ValidatorIndex: valIndex,
+		ValidatorKey:   pubKey,
+		BlockType:      WrongFeeRecipient,
+	}
+}
+
+func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, withAddress string) SummarizedBlock {
+	return SummarizedBlock{
+		Slot:              slot,
+		ValidatorIndex:    valIndex,
+		ValidatorKey:      pubKey,
+		BlockType:         OkPoolProposal,
+		Reward:            reward,
+		RewardType:        MevBlock,
+		WithdrawalAddress: withAddress,
 	}
 }

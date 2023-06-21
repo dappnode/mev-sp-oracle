@@ -107,7 +107,7 @@ func main() {
 
 		// Save state in SIGINT or SIGTERM
 		if sig == syscall.SIGINT || sig == syscall.SIGTERM {
-			err := oracleInstance.SaveToJson()
+			err := oracleInstance.SaveToJson(false)
 			if err != nil {
 				log.Error("Could not save state to json: ", err)
 			} else {
@@ -295,7 +295,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			}
 
 			// Persist new state in file only if everything went fine
-			err = oracleInstance.SaveToJson()
+			err = oracleInstance.SaveToJson(true)
 			if err != nil {
 				log.Error("Could not save state to json: ", err)
 			} else {
