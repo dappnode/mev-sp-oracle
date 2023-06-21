@@ -813,6 +813,7 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorIndex":   valIdx,
 				"WithdrawaAddress": validatorWithdrawal,
 			}).Info("[Subscription]: Validator subscribed ok")
+			or.state.Validators[valIdx].SubscriptionType = Manual
 			or.increaseValidatorPendingRewards(valIdx, collateral)
 			or.advanceStateMachine(valIdx, ManualSubscription)
 			or.state.Subscriptions = append(or.state.Subscriptions, sub)
@@ -989,6 +990,8 @@ func (or *Oracle) addSubscription(valIndex uint64, withdrawalAddress string, val
 			or.advanceStateMachine(valIndex, AutoSubscription)
 		}
 	}
+	// In any case, the subs type is auto
+	or.state.Validators[valIndex].SubscriptionType = Auto
 }
 
 // Consolidate the balance of a given validator index. This means moving the pending to its accumulated

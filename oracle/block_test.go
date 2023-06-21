@@ -200,6 +200,9 @@ func Test_FullBlock_All(t *testing.T) {
 
 func Test_SummarizedBlock(t *testing.T) {
 
+	// Run locally. Disabled since in CI we have some issues with git lfs bandwidth free limits
+	t.Skip("Skipping test")
+
 	type test struct {
 		// Input
 		Name               string

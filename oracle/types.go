@@ -69,6 +69,14 @@ const (
 	Eth1Withdrawal WithdrawalType = 1
 )
 
+// Type of validator subscription
+type SubscriptionType uint8
+
+const (
+	Manual SubscriptionType = 0
+	Auto   SubscriptionType = 1
+)
+
 type Config struct {
 	ConsensusEndpoint        string   `json:"consensus_endpoint"`
 	ExecutionEndpoint        string   `json:"execution_endpoint"`
@@ -158,13 +166,14 @@ type Unsubscription struct { //TODO: remove
 
 // Represents all the information that is stored of a validator
 type ValidatorInfo struct {
-	ValidatorStatus       ValidatorStatus `json:"status"`
-	AccumulatedRewardsWei *big.Int        `json:"accumulated_rewards_wei"`
-	PendingRewardsWei     *big.Int        `json:"pending_rewards_wei"`
-	CollateralWei         *big.Int        `json:"collateral_wei"`
-	WithdrawalAddress     string          `json:"withdrawal_address"`
-	ValidatorIndex        uint64          `json:"validator_index"`
-	ValidatorKey          string          `json:"validator_key"`
+	ValidatorStatus       ValidatorStatus  `json:"status"`
+	AccumulatedRewardsWei *big.Int         `json:"accumulated_rewards_wei"`
+	PendingRewardsWei     *big.Int         `json:"pending_rewards_wei"`
+	CollateralWei         *big.Int         `json:"collateral_wei"`
+	WithdrawalAddress     string           `json:"withdrawal_address"`
+	ValidatorIndex        uint64           `json:"validator_index"`
+	ValidatorKey          string           `json:"validator_key"`
+	SubscriptionType      SubscriptionType `json:"subscription_type"`
 }
 
 // Represents the latest commited state onchain
@@ -328,6 +337,35 @@ func (s *BlockType) UnmarshalJSON(b []byte) error {
 		*s = UnknownBlockType
 	} else {
 		return errors.New("unknown block type")
+	}
+	return nil
+}
+
+func (b *SubscriptionType) String() string {
+	if *b == Auto {
+		return "auto"
+	} else if *b == Manual {
+		return "manual"
+	}
+	return ""
+}
+
+func (s *SubscriptionType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+func (s *SubscriptionType) UnmarshalJSON(b []byte) error {
+	var subType string
+	if err := json.Unmarshal(b, &subType); err != nil {
+		return errors.Wrap(err, "unmarshaling subscription type")
+	}
+
+	if subType == "auto" {
+		*s = Auto
+	} else if subType == "manual" {
+		*s = Manual
+	} else {
+		return errors.New("unknown subscription type")
 	}
 	return nil
 }
