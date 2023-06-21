@@ -218,7 +218,6 @@ type RawLeaf struct {
 	AccumulatedBalanceWei *big.Int `json:"accumulated_balance_wei"`
 }
 
-// TODO: Test all this
 func (r *RewardType) String() string {
 	if *r == VanilaBlock {
 		return "vanila"

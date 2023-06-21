@@ -744,7 +744,6 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorWithdrawal": validatorWithdrawal,
 			}).Warn("[Subscription]: but tx sender is not the validator withdrawal address, skipping")
 			// Fees go to the pool.
-			// TODO: maybe we could check if sender has a validator registered with withdrawal address = sender, and if so, give the collateral back to the sender
 			or.sendRewardToPool(collateral)
 			continue
 		}

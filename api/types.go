@@ -1,5 +1,10 @@
 package api
 
+import (
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/dappnode/mev-sp-oracle/contract"
+)
+
 type httpErrorResp struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -130,4 +135,18 @@ type httpOkValidatorInfo struct {
 	ValidatorIndex        uint64 `json:"validator_index"`
 	ValidatorKey          string `json:"validator_key"`
 	SubscriptionType      string `json:"subscription_type"`
+}
+
+// Subscription event and the associated validator (if any)
+// TODO: Perhaps remove, no longer need if refactored a bit
+type Subscription struct { //TODO: remove
+	Event     *contract.ContractSubscribeValidator `json:"event"`
+	Validator *v1.Validator                        `json:"validator"`
+}
+
+// Unsubscription event and the associated validator (if any)
+// TODO: Perhaps remove, no longer need if refactored a bit
+type Unsubscription struct { //TODO: remove
+	Event     *contract.ContractUnsubscribeValidator `json:"event"`
+	Validator *v1.Validator                          `json:"validator"`
 }

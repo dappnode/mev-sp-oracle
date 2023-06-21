@@ -18,6 +18,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/metrics"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -116,6 +117,67 @@ func (m *ApiService) respondOK(w http.ResponseWriter, response any) {
 	}
 }
 
+type responseWriterDelegator struct {
+	http.ResponseWriter
+	status      int
+	written     int64
+	wroteHeader bool
+}
+
+func (r *responseWriterDelegator) WriteHeader(code int) {
+	r.status = code
+	r.wroteHeader = true
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *responseWriterDelegator) Write(b []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
+	n, err := r.ResponseWriter.Write(b)
+	r.written += int64(n)
+	return n, err
+}
+
+func sanitizeMethod(m string) string {
+	return strings.ToLower(m)
+}
+
+func sanitizeCode(s int) string {
+	return strconv.Itoa(s)
+}
+
+// Prometheus middleware to track http requests count and latency. Inspired by
+// https://github.com/albertogviana/prometheus-middleware
+func prometheusMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		begin := time.Now()
+
+		delegate := &responseWriterDelegator{ResponseWriter: w}
+		rw := delegate
+
+		next.ServeHTTP(rw, r)
+
+		route := mux.CurrentRoute(r)
+		path, _ := route.GetPathTemplate()
+
+		code := sanitizeCode(delegate.status)
+		method := sanitizeMethod(r.Method)
+
+		go metrics.HttpRequestsTotal.WithLabelValues(
+			code,
+			method,
+			path,
+		).Inc()
+
+		go metrics.HttpRequestsLatency.WithLabelValues(
+			code,
+			method,
+			path,
+		).Observe(float64(time.Since(begin)) / float64(time.Second))
+	})
+}
+
 func (m *ApiService) getRouter() http.Handler {
 	r := mux.NewRouter()
 
@@ -147,6 +209,7 @@ func (m *ApiService) getRouter() http.Handler {
 
 	//not strictly necessary but good to have
 	r.Use(mux.CORSMethodMiddleware(r))
+	r.Use(prometheusMiddleware)
 
 	return r
 }
@@ -212,10 +275,6 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	totalAccumulatedRewards := big.NewInt(0)
 	totalPendingRewards := big.NewInt(0)
 
-	// TODO: Would be nice to divice en MEV and non-MEV blocks
-	//totalVanilaBlocks := 0
-	//totalMevBlocks := 0
-
 	for _, validator := range m.oracle.State().Validators {
 		if validator.ValidatorStatus == oracle.Active {
 			totalActive++
@@ -258,8 +317,8 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		TotalRedCard:               totalRedCard,
 		TotalBanned:                totalBanned,
 		TotalNotSubscribed:         totalNotSubscribed,
-		LatestCheckpointSlot:       m.oracle.State().LatestProcessedSlot,                               // This is wrong. TODO: convert date
-		NextCheckpointSlot:         m.oracle.State().LatestProcessedSlot + m.cfg.CheckPointSizeInSlots, // TODO: Also wrong. convert to date
+		LatestCheckpointSlot:       m.oracle.State().LatestProcessedSlot,
+		NextCheckpointSlot:         m.oracle.State().LatestProcessedSlot + m.cfg.CheckPointSizeInSlots,
 		TotalAccumulatedRewardsWei: totalAccumulatedRewards.String(),
 		TotalPendingRewaradsWei:    totalPendingRewards.String(),
 		TotalRewardsSentWei:        totalRewardsSentWei.String(),
@@ -876,7 +935,7 @@ func AreAddressEqual(address1 string, address2 string) bool {
 }
 
 // TODO: unsure if move this somewhere else
-func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]oracle.Subscription, error) {
+func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]Subscription, error) {
 	// TODO: add check here to ensure its a reasonable amount of blocks. should be around 15-20 minutes in blocks
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: latestProcessedBlock, End: nil}
 
@@ -887,9 +946,9 @@ func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]or
 	}
 
 	// Loop over all found events. Super inneficient. just Proof of concept
-	blockSubscriptions := make([]oracle.Subscription, 0)
+	blockSubscriptions := make([]Subscription, 0)
 	for itrSubs.Next() {
-		sub := oracle.Subscription{
+		sub := Subscription{
 			Event:     itrSubs.Event,
 			Validator: m.Onchain.Validators()[phase0.ValidatorIndex(itrSubs.Event.ValidatorID)],
 		}
@@ -902,7 +961,7 @@ func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]or
 	return blockSubscriptions, nil
 }
 
-func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]oracle.Unsubscription, error) {
+func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]Unsubscription, error) {
 	// TODO: add check here to ensure its a reasonable amount of blocks. should be around 15-20 minutes in blocks
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: latestProcessedBlock, End: nil}
 	// Note that this event can be both donations and mev rewards
@@ -912,9 +971,9 @@ func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]
 	}
 
 	// Loop over all found events, TODO: inneficient. only finter events of this validator.
-	blockUnsubscriptions := make([]oracle.Unsubscription, 0)
+	blockUnsubscriptions := make([]Unsubscription, 0)
 	for itrUnsubs.Next() {
-		unsub := oracle.Unsubscription{
+		unsub := Unsubscription{
 			Event:     itrUnsubs.Event,
 			Validator: m.Onchain.Validators()[phase0.ValidatorIndex(itrUnsubs.Event.ValidatorID)],
 		}
@@ -928,8 +987,8 @@ func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]
 }
 
 func (m *ApiService) ApplyNonFinalizedState(
-	subs []oracle.Subscription,
-	unsubs []oracle.Unsubscription,
+	subs []Subscription,
+	unsubs []Unsubscription,
 	validators map[uint64]*oracle.ValidatorInfo) {
 
 	eventsBlocksList := make([]uint64, 0)
@@ -1033,8 +1092,8 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) error {
 	return nil
 }
 
-func GetSubInBlock(subs []oracle.Subscription, block uint64) []oracle.Subscription {
-	filteredSubs := make([]oracle.Subscription, 0)
+func GetSubInBlock(subs []Subscription, block uint64) []Subscription {
+	filteredSubs := make([]Subscription, 0)
 	for _, sub := range subs {
 		if sub.Event.Raw.BlockNumber == block {
 			filteredSubs = append(filteredSubs, sub)
@@ -1043,8 +1102,8 @@ func GetSubInBlock(subs []oracle.Subscription, block uint64) []oracle.Subscripti
 	return filteredSubs
 }
 
-func GetUnsubInBlock(subs []oracle.Unsubscription, block uint64) []oracle.Unsubscription {
-	filteredUnsubs := make([]oracle.Unsubscription, 0)
+func GetUnsubInBlock(subs []Unsubscription, block uint64) []Unsubscription {
+	filteredUnsubs := make([]Unsubscription, 0)
 	for _, unsub := range subs {
 		if unsub.Event.Raw.BlockNumber == block {
 			filteredUnsubs = append(filteredUnsubs, unsub)
