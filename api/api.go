@@ -275,10 +275,6 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	totalAccumulatedRewards := big.NewInt(0)
 	totalPendingRewards := big.NewInt(0)
 
-	// TODO: Would be nice to divice en MEV and non-MEV blocks
-	//totalVanilaBlocks := 0
-	//totalMevBlocks := 0
-
 	for _, validator := range m.oracle.State().Validators {
 		if validator.ValidatorStatus == oracle.Active {
 			totalActive++
@@ -321,8 +317,8 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		TotalRedCard:               totalRedCard,
 		TotalBanned:                totalBanned,
 		TotalNotSubscribed:         totalNotSubscribed,
-		LatestCheckpointSlot:       m.oracle.State().LatestProcessedSlot,                               // This is wrong. TODO: convert date
-		NextCheckpointSlot:         m.oracle.State().LatestProcessedSlot + m.cfg.CheckPointSizeInSlots, // TODO: Also wrong. convert to date
+		LatestCheckpointSlot:       m.oracle.State().LatestProcessedSlot,
+		NextCheckpointSlot:         m.oracle.State().LatestProcessedSlot + m.cfg.CheckPointSizeInSlots,
 		TotalAccumulatedRewardsWei: totalAccumulatedRewards.String(),
 		TotalPendingRewaradsWei:    totalPendingRewards.String(),
 		TotalRewardsSentWei:        totalRewardsSentWei.String(),
