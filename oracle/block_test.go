@@ -107,6 +107,9 @@ func Test_Getters_Capella(t *testing.T) {
 // Test_GetFullBlockAtSlot (see onchain_test.go)
 func Test_FullBlock_All(t *testing.T) {
 
+	// Run locally. Disabled since in CI we have some issues with git lfs bandwidth free limits
+	t.Skip("Skipping test")
+
 	type donation struct {
 		Hash   string
 		Amount *big.Int
