@@ -546,6 +546,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 			WithdrawalAddress:     v.WithdrawalAddress,
 			ValidatorIndex:        v.ValidatorIndex,
 			ValidatorKey:          v.ValidatorKey,
+			SubscriptionType:      v.SubscriptionType.String(),
 		})
 	}
 	m.respondOK(w, validatorsResp)

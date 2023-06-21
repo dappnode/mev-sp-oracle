@@ -21,6 +21,9 @@ import (
 // events, reward, etc
 func Test_AdvanceStateToNextSlot(t *testing.T) {
 
+	// Run locally. Disabled since in CI we have some issues with git lfs bandwidth free limits
+	t.Skip("Skipping test")
+
 	oracleInstance := NewOracle(&Config{
 		Network:                  "goerli",
 		ConsensusEndpoint:        "http://127.0.0.1:5051",
@@ -445,6 +448,7 @@ func Test_addSubscription_1(t *testing.T) {
 	oracle.increaseAllPendingRewards(big.NewInt(200))
 	require.Equal(t, big.NewInt(200), oracle.state.Validators[10].PendingRewardsWei)
 	require.Equal(t, big.NewInt(100), oracle.state.Validators[10].AccumulatedRewardsWei)
+	require.Equal(t, Auto, oracle.state.Validators[10].SubscriptionType)
 
 	// check that adding again doesnt reset the subscription
 	oracle.addSubscription(10, "0x", "0x")
@@ -464,6 +468,7 @@ func Test_addSubscription_2(t *testing.T) {
 		WithdrawalAddress:     "0x3000000000000000000000000000000000000000",
 		ValidatorIndex:        100,
 		ValidatorKey:          "0xkey",
+		SubscriptionType:      Auto,
 	}, oracle.state.Validators[100])
 
 	// Modify the validator
@@ -597,6 +602,7 @@ func Test_handleCorrectBlockProposal_AlreadySub(t *testing.T) {
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[10].PendingRewardsWei)
 	require.Equal(t, big.NewInt(50000000+1+1), oracle.state.Validators[10].AccumulatedRewardsWei)
 	require.Equal(t, Active, oracle.state.Validators[10].ValidatorStatus)
+	require.Equal(t, Auto, oracle.state.Validators[10].SubscriptionType)
 }
 
 func Test_handleManualSubscriptions_Valid(t *testing.T) {
@@ -642,6 +648,7 @@ func Test_handleManualSubscriptions_Valid(t *testing.T) {
 	require.Equal(t, 1, len(oracle.state.Validators))
 	require.Equal(t, 1, len(oracle.state.Subscriptions))
 	require.Equal(t, subs[0], oracle.state.Subscriptions[0])
+	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
 }
 
 func Test_handleManualSubscriptions_FromWrongAddress(t *testing.T) {
@@ -1121,6 +1128,8 @@ func Test_handleManualUnsubscriptionsSubThenUnsubThenAuto(t *testing.T) {
 	}
 	oracle.handleManualSubscriptions(subs)
 
+	require.Equal(t, Manual, oracle.state.Validators[valIdx].SubscriptionType)
+
 	// Share some rewards with it
 	oracle.state.Validators[valIdx].PendingRewardsWei = big.NewInt(10000)
 	oracle.state.Validators[valIdx].AccumulatedRewardsWei = big.NewInt(20000)
@@ -1157,6 +1166,7 @@ func Test_handleManualUnsubscriptionsSubThenUnsubThenAuto(t *testing.T) {
 	// We have the new plus old ones
 	require.Equal(t, big.NewInt(20000+90000000), oracle.state.Validators[valIdx].AccumulatedRewardsWei)
 	require.Equal(t, Active, oracle.state.Validators[valIdx].ValidatorStatus)
+	require.Equal(t, Auto, oracle.state.Validators[valIdx].SubscriptionType)
 }
 
 func Test_handleManualUnsubscriptions_ValidSubscription(t *testing.T) {

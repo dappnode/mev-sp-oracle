@@ -129,4 +129,5 @@ type httpOkValidatorInfo struct {
 	WithdrawalAddress     string `json:"withdrawal_address"`
 	ValidatorIndex        uint64 `json:"validator_index"`
 	ValidatorKey          string `json:"validator_key"`
+	SubscriptionType      string `json:"subscription_type"`
 }
