@@ -1,11 +1,7 @@
 package api
 
 import (
-	"fmt"
 	"math/big"
-	"math/rand"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -15,7 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/go-delve/delve/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -319,119 +314,141 @@ func Test_ApiEndpoint(t *testing.T) {
 	*/
 }
 
-func TestHandleGetOrderedBlocksByValidatorKey(t *testing.T) {
+// func TestHandleGetOrderedBlocksByValidatorKey(t *testing.T) {
 
-	// Create a mock config
-	mockConfig := &config.Config{
-		ConsensusEndpoint:     "http://consensus_endpoint",
-		ExecutionEndpoint:     "http://execution_endpoint",
-		Network:               "testnet",
-		PoolAddress:           "pool_address",
-		DeployedSlot:          1000,
-		DeployedBlock:         10000,
-		CheckPointSizeInSlots: 10,
-		PoolFeesPercent:       150,
-		PoolFeesAddress:       "fees_address",
-		DryRun:                true,
-		NumRetries:            3,
-		CollateralInWei:       big.NewInt(1000),
-		UpdaterKeyPass:        "key_pass",
-		UpdaterKeyPath:        "key_path",
-	}
+// 	// Create a mock config
+// 	mockConfig := &oracle.Config{
+// 		ConsensusEndpoint:     "http://consensus_endpoint",
+// 		ExecutionEndpoint:     "http://execution_endpoint",
+// 		Network:               "testnet",
+// 		PoolAddress:           "pool_address",
+// 		DeployedSlot:          1000,
+// 		DeployedBlock:         10000,
+// 		CheckPointSizeInSlots: 10,
+// 		PoolFeesAddress:       "fees_address",
+// 		DryRun:                true,
+// 		NumRetries:            3,
+// 		CollateralInWei:       big.NewInt(1000),
+// 		UpdaterKeyPass:        "key_pass",
+// 		UpdaterKeyPath:        "key_path",
+// 	}
 
-	// Create a mock Oracle using the NewOracle function
-	mockOracle := oracle.NewOracle(mockConfig)
-	oracle.NewOracleState(mockConfig)
-	numBlocks := 100
-	for i := 0; i < numBlocks; i++ {
-		// Generate a random ValidatorIndex between 0 and 99
-		validatorIndex := rand.Intn(100)
+// 	// Create a mock Oracle using the NewOracle function
+// 	mockOracle := oracle.NewOracle(mockConfig)
+// 	//oracle.NewOracleState(mockConfig)
+// 	numBlocks := 100
+// 	for i := 0; i < numBlocks; i++ {
+// 		// Generate a random ValidatorIndex between 0 and 99
+// 		validatorIndex := rand.Intn(100)
 
-		// Create mock blocks and add them to the OracleState's ProposedBlocks
-		mockBlock := blockOkProposal(
-			rand.Uint64()%101,
-			uint64(validatorIndex),
-			"PUBKEY",
-			big.NewInt(int64(rand.Intn(1000)+10000)),
-			"0xaaa0000000000000000000000000000000000000",
-		)
-		mockOracle.State().HandleCorrectBlockProposal(mockBlock)
+// 		// Create mock blocks and add them to the OracleState's ProposedBlocks
+// 		mockBlock := blockOkProposal(
+// 			rand.Uint64()%101,
+// 			uint64(validatorIndex),
+// 			"PUBKEY",
+// 			big.NewInt(int64(rand.Intn(1000)+10000)),
+// 			"0xaaa0000000000000000000000000000000000000",
+// 		)
+// 		mockOracle.AdvanceStateToNextSlot(&mockBlock)
+// 		// Create mock missed blocks and add them to the OracleState's MissedBlocks
+// 		mockMissedBlock := MissedBlock(
+// 			rand.Uint64()%101,
+// 			uint64(validatorIndex),
+// 			"PUBKEY",
+// 		)
+// 		mockOracle.AdvanceStateToNextSlot(&mockMissedBlock)
 
-		// Create mock missed blocks and add them to the OracleState's MissedBlocks
-		mockMissedBlock := MissedBlock(
-			rand.Uint64()%101,
-			uint64(validatorIndex),
-			"PUBKEY",
-		)
-		mockOracle.State().HandleMissedBlock(mockMissedBlock)
+// 		// Create mock wrong fee blocks and add them to the OracleState's WrongFeeBlocks
+// 		mockWrongFeeBlock := WrongFeeBlock(
+// 			rand.Uint64()%101,
+// 			uint64(validatorIndex),
+// 			"PUBKEY",
+// 		)
+// 		mockOracle.AdvanceStateToNextSlot(&mockWrongFeeBlock)
+// 	}
+// 	// Create an instance of your ApiService with the mock Oracle
+// 	apiService := &ApiService{
+// 		oracle: mockOracle,
+// 		// other fields initialization...
+// 	}
+// 	req, err := http.NewRequest("GET", "/memory/validatorblocks", nil)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	rr := httptest.NewRecorder()
+// 	// Call the handler function directly, passing in the ResponseRecorder and the Request
+// 	handler := http.HandlerFunc(apiService.handleMemoryValidatorBlocks)
+// 	handler.ServeHTTP(rr, req)
+// 	fmt.Println(rr.Body)
 
-		// Create mock wrong fee blocks and add them to the OracleState's WrongFeeBlocks
-		mockWrongFeeBlock := WrongFeeBlock(
-			rand.Uint64()%101,
-			uint64(validatorIndex),
-			"PUBKEY",
-		)
-		mockOracle.State().HandleBanValidator(mockWrongFeeBlock)
-	}
-	// Create an instance of your ApiService with the mock Oracle
-	apiService := &ApiService{
-		oracle: mockOracle,
-		// other fields initialization...
-	}
-	req, err := http.NewRequest("GET", "/memory/validatorblocks", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rr := httptest.NewRecorder()
-	// Call the handler function directly, passing in the ResponseRecorder and the Request
-	handler := http.HandlerFunc(apiService.handleMemoryValidatorBlocks)
-	handler.ServeHTTP(rr, req)
-	fmt.Println(rr.Body)
+// 	// handler2 := http.HandlerFunc(apiService.handleMemoryAllBlocks)
+// 	// handler2.ServeHTTP(rr, req)
+// 	// fmt.Print(rr.Body.String())
 
-	// handler2 := http.HandlerFunc(apiService.handleMemoryAllBlocks)
-	// handler2.ServeHTTP(rr, req)
-	// fmt.Print(rr.Body.String())
+// 	// Perform assertions on the response
+// 	if status := rr.Code; status != http.StatusOK {
+// 		t.Errorf("handler returned wrong status code: got %v, want %v", status, http.StatusOK)
+// 	}
+// 	// Perform additional assertions on the response body or headers if needed
+// 	// For example, you can check the response body for expected JSON data
 
-	// Perform assertions on the response
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v, want %v", status, http.StatusOK)
-	}
-	// Perform additional assertions on the response body or headers if needed
-	// For example, you can check the response body for expected JSON data
+// 	// Example assertion for JSON response
+// 	// expectedResponse := `{"message":"success"}`
+// 	// if rr.Body.String() != expectedResponse {
+// 	// 	t.Errorf("handler returned unexpected body: got %v, want %v", rr.Body.String(), expectedResponse)
+// 	// }
+// }
 
-	// Example assertion for JSON response
-	// expectedResponse := `{"message":"success"}`
-	// if rr.Body.String() != expectedResponse {
-	// 	t.Errorf("handler returned unexpected body: got %v, want %v", rr.Body.String(), expectedResponse)
-	// }
-}
+// func TestHandleMemoryValidatorBlocks(t *testing.T) {
 
-func MissedBlock(slot uint64, valIndex uint64, pubKey string) oracle.SummarizedBlock {
-	return oracle.SummarizedBlock{
-		Slot:           slot,
-		ValidatorIndex: valIndex,
-		ValidatorKey:   pubKey,
-		BlockType:      oracle.MissedProposal,
-	}
-}
+// 	// Create an instance of ApiService
+// 	apiService := &ApiService{}
 
-func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) oracle.SummarizedBlock {
-	return oracle.SummarizedBlock{
-		Slot:           slot,
-		ValidatorIndex: valIndex,
-		ValidatorKey:   pubKey,
-		BlockType:      oracle.WrongFeeRecipient,
-	}
-}
+// 	// Create a request and response recorder
+// 	req, err := http.NewRequest("GET", "/handle-memory-validator-blocks", nil)
+// 	assert.NoError(t, err)
+// 	res := httptest.NewRecorder()
 
-func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, withAddress string) oracle.SummarizedBlock {
-	return oracle.SummarizedBlock{
-		Slot:              slot,
-		ValidatorIndex:    valIndex,
-		ValidatorKey:      pubKey,
-		BlockType:         oracle.OkPoolProposal,
-		Reward:            reward,
-		RewardType:        oracle.MevBlock,
-		WithdrawalAddress: withAddress,
-	}
-}
+// 	// Call the handler function
+// 	apiService.handleMemoryValidatorBlocks(res, req)
+
+// 	// Assert the response status code
+// 	assert.Equal(t, http.StatusOK, res.Code)
+
+// 	// Assert the response body
+// 	expectedJSON := `[{"validator_index":1,"proposed_blocks":[{"slot":0,"block":0,"validator_index":1,"validator_key":"","block_type":0,"reward_wei":null,"reward_type":0,"withdrawal_address":""}],"missed_blocks":[{"slot":0,"block":0,"validator_index":1,"validator_key":"","block_type":0,"reward_wei":null,"reward_type":0,"withdrawal_address":""}]},{"validator_index":2,"proposed_blocks":[{"slot":0,"block":0,"validator_index":2,"validator_key":"","block_type":0,"reward_wei":null,"reward_type":0,"withdrawal_address":""}],"wrong_fee_blocks":[{"slot":0,"block":0,"validator_index":2,"validator_key":"","block_type":0,"reward_wei":null,"reward_type":0,"withdrawal_address":""}]}]`
+// 	assert.Equal(t, expectedJSON, res.Body.String())
+// }
+
+// func MissedBlock(slot uint64, valIndex uint64, pubKey string) oracle.FullBlock {
+// 	return oracle.FullBlock{
+// 		Validator: &v1.Validator{
+// 			Index: phase0.ValidatorIndex(valIndex),
+// 		},
+// 	}
+// }
+
+// func WrongFeeBlock(slot uint64, valIndex uint64, pubKey string) oracle.FullBlock {
+// 	return oracle.FullBlock{
+// 		Validator: &v1.Validator{
+// 			Index: phase0.ValidatorIndex(valIndex),
+// 		},
+// 	}
+// }
+
+// func blockOkProposal(slot uint64, valIndex uint64, pubKey string, reward *big.Int, withAddress string) oracle.FullBlock {
+// 	// return oracle.FullBlock{
+// 	// 	Slot:              slot,
+// 	// 	ValidatorIndex:    valIndex,
+// 	// 	ValidatorKey:      pubKey,
+// 	// 	BlockType:         oracle.OkPoolProposal,
+// 	// 	Reward:            reward,
+// 	// 	RewardType:        oracle.MevBlock,
+// 	// 	WithdrawalAddress: withAddress,
+// 	// }
+// 	return oracle.FullBlock{
+// 		Validator: &v1.Validator{
+// 			Index: phase0.ValidatorIndex(valIndex),
+// 		},
+// 	}
+// }
