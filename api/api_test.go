@@ -68,7 +68,7 @@ func Test_ApplyNonFinalizedState_Subscription(t *testing.T) {
 	}
 
 	for _, test := range testVector {
-		subs := []oracle.Subscription{
+		subs := []Subscription{
 			{
 				Event: &contract.ContractSubscribeValidator{
 					ValidatorID:            test.EvenValidatorIndex,
@@ -93,7 +93,7 @@ func Test_ApplyNonFinalizedState_Subscription(t *testing.T) {
 				PendingRewardsWei: test.BeforePending,
 			},
 		}
-		api.ApplyNonFinalizedState(subs, []oracle.Unsubscription{}, validators)
+		api.ApplyNonFinalizedState(subs, []Unsubscription{}, validators)
 		require.Equal(t, test.UpdatedState, validators[1].ValidatorStatus)
 		require.Equal(t, test.AfterPending, validators[1].PendingRewardsWei)
 		require.Equal(t, "0x9427a30991170f917d7b83def6e44d26577871ed", validators[1].WithdrawalAddress)
@@ -135,7 +135,7 @@ func Test_ApplyNonFinalizedState_Unsubscribe(t *testing.T) {
 			},
 		}
 
-		unsubs := []oracle.Unsubscription{
+		unsubs := []Unsubscription{
 			{
 				Event: &contract.ContractUnsubscribeValidator{
 					ValidatorID: test.EventValidatorIndex,
@@ -150,7 +150,7 @@ func Test_ApplyNonFinalizedState_Unsubscribe(t *testing.T) {
 				},
 			},
 		}
-		api.ApplyNonFinalizedState([]oracle.Subscription{}, unsubs, validators)
+		api.ApplyNonFinalizedState([]Subscription{}, unsubs, validators)
 		require.Equal(t, test.UpdatedState, validators[500].ValidatorStatus)
 		require.Equal(t, test.AfterPending, validators[500].PendingRewardsWei)
 	}
@@ -186,7 +186,7 @@ func Test_ApplyNonFinalizedState_MultipleEvents(t *testing.T) {
 	// Apply multiple events to the validator in blocks
 
 	// Subscriptions in block 1000, 2000 and 3000. Unordered
-	subs := []oracle.Subscription{
+	subs := []Subscription{
 		{
 			// Subscribe validator 3
 			Event: &contract.ContractSubscribeValidator{
@@ -238,7 +238,7 @@ func Test_ApplyNonFinalizedState_MultipleEvents(t *testing.T) {
 			},
 		},
 	}
-	unsubs := []oracle.Unsubscription{
+	unsubs := []Unsubscription{
 		{
 			// Unsubscribe validator 2
 			Event: &contract.ContractUnsubscribeValidator{
@@ -262,7 +262,7 @@ func Test_ApplyNonFinalizedState_MultipleEvents(t *testing.T) {
 	require.Equal(t, oracle.Active, validators[3].ValidatorStatus)
 
 	// Unsubscribe val 1 and 3, same block
-	unsubs = []oracle.Unsubscription{
+	unsubs = []Unsubscription{
 		{
 			Event: &contract.ContractUnsubscribeValidator{
 				ValidatorID: 1,
@@ -293,7 +293,7 @@ func Test_ApplyNonFinalizedState_MultipleEvents(t *testing.T) {
 		},
 	}
 
-	api.ApplyNonFinalizedState([]oracle.Subscription{}, unsubs, validators)
+	api.ApplyNonFinalizedState([]Subscription{}, unsubs, validators)
 	require.Equal(t, oracle.NotSubscribed, validators[1].ValidatorStatus)
 	require.Equal(t, oracle.NotSubscribed, validators[2].ValidatorStatus)
 	require.Equal(t, oracle.NotSubscribed, validators[3].ValidatorStatus)

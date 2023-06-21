@@ -500,7 +500,7 @@ func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherRe
 }
 
 // Since storing the full block is expensive, we store a summarized version of it
-func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) SummarizedBlock { // TODO these inputs are temporal
+func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) SummarizedBlock {
 
 	// Get the withdrawal credentials and type of the validator that should propose the block
 	withdrawalAddress, withdrawalType := GetWithdrawalAndType(b.Validator)

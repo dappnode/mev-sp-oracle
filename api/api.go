@@ -935,7 +935,7 @@ func AreAddressEqual(address1 string, address2 string) bool {
 }
 
 // TODO: unsure if move this somewhere else
-func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]oracle.Subscription, error) {
+func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]Subscription, error) {
 	// TODO: add check here to ensure its a reasonable amount of blocks. should be around 15-20 minutes in blocks
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: latestProcessedBlock, End: nil}
 
@@ -946,9 +946,9 @@ func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]or
 	}
 
 	// Loop over all found events. Super inneficient. just Proof of concept
-	blockSubscriptions := make([]oracle.Subscription, 0)
+	blockSubscriptions := make([]Subscription, 0)
 	for itrSubs.Next() {
-		sub := oracle.Subscription{
+		sub := Subscription{
 			Event:     itrSubs.Event,
 			Validator: m.Onchain.Validators()[phase0.ValidatorIndex(itrSubs.Event.ValidatorID)],
 		}
@@ -961,7 +961,7 @@ func (m *ApiService) GetSubscriptionsTillHead(latestProcessedBlock uint64) ([]or
 	return blockSubscriptions, nil
 }
 
-func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]oracle.Unsubscription, error) {
+func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]Unsubscription, error) {
 	// TODO: add check here to ensure its a reasonable amount of blocks. should be around 15-20 minutes in blocks
 	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: latestProcessedBlock, End: nil}
 	// Note that this event can be both donations and mev rewards
@@ -971,9 +971,9 @@ func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]
 	}
 
 	// Loop over all found events, TODO: inneficient. only finter events of this validator.
-	blockUnsubscriptions := make([]oracle.Unsubscription, 0)
+	blockUnsubscriptions := make([]Unsubscription, 0)
 	for itrUnsubs.Next() {
-		unsub := oracle.Unsubscription{
+		unsub := Unsubscription{
 			Event:     itrUnsubs.Event,
 			Validator: m.Onchain.Validators()[phase0.ValidatorIndex(itrUnsubs.Event.ValidatorID)],
 		}
@@ -987,8 +987,8 @@ func (m *ApiService) GetUnsubscriptionsTillHead(latestProcessedBlock uint64) ([]
 }
 
 func (m *ApiService) ApplyNonFinalizedState(
-	subs []oracle.Subscription,
-	unsubs []oracle.Unsubscription,
+	subs []Subscription,
+	unsubs []Unsubscription,
 	validators map[uint64]*oracle.ValidatorInfo) {
 
 	eventsBlocksList := make([]uint64, 0)
@@ -1092,8 +1092,8 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) error {
 	return nil
 }
 
-func GetSubInBlock(subs []oracle.Subscription, block uint64) []oracle.Subscription {
-	filteredSubs := make([]oracle.Subscription, 0)
+func GetSubInBlock(subs []Subscription, block uint64) []Subscription {
+	filteredSubs := make([]Subscription, 0)
 	for _, sub := range subs {
 		if sub.Event.Raw.BlockNumber == block {
 			filteredSubs = append(filteredSubs, sub)
@@ -1102,8 +1102,8 @@ func GetSubInBlock(subs []oracle.Subscription, block uint64) []oracle.Subscripti
 	return filteredSubs
 }
 
-func GetUnsubInBlock(subs []oracle.Unsubscription, block uint64) []oracle.Unsubscription {
-	filteredUnsubs := make([]oracle.Unsubscription, 0)
+func GetUnsubInBlock(subs []Unsubscription, block uint64) []Unsubscription {
+	filteredUnsubs := make([]Unsubscription, 0)
 	for _, unsub := range subs {
 		if unsub.Event.Raw.BlockNumber == block {
 			filteredUnsubs = append(filteredUnsubs, unsub)

@@ -22,6 +22,9 @@ import (
 // Hardcoded for Ethereum
 var SlotsInEpoch = uint64(32)
 
+// How often onchain validators are reloaded: 600 slots is 2 hours
+var UpdateValidatorsIntervalSlots = uint64(600)
+
 func main() {
 	// Load config from cli
 	cliCfg, err := config.NewCliConfig()
@@ -127,7 +130,6 @@ func main() {
 func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracle.Config) {
 
 	// Load all the validators from the beacon chain
-	// TODO: This is duplicated, not very nice
 	onchain.RefreshBeaconValidators()
 	oracleInstance.SetBeaconValidators(onchain.Validators())
 
@@ -202,8 +204,6 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			continue
 		}
 
-		// 600 slots is 2 hours. TODO: move this somewhere else
-		UpdateValidatorsIntervalSlots := uint64(600)
 		if oracleInstance.State().LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
 			onchain.RefreshBeaconValidators()
 			oracleInstance.SetBeaconValidators(onchain.Validators())
