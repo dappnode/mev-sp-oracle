@@ -59,7 +59,7 @@ var (
 		},
 	)
 
-	HttpRequestsTotal = prometheus.NewCounterVec(
+	HttpRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "oracle",
 			Name:      "http_requests_total",
@@ -68,7 +68,7 @@ var (
 		[]string{"code", "method", "path"},
 	)
 
-	HttpRequestsLatency = prometheus.NewHistogramVec(
+	HttpRequestsLatency = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "oracle",
 			Name:      "http_request_duration_seconds",
