@@ -1065,15 +1065,18 @@ func (or *Oracle) addSubscription(valIndex uint64, withdrawalAddress string, val
 
 		// And update it state according to the event
 		or.advanceStateMachine(valIndex, AutoSubscription)
+
+		// If subscription is new its auto
+		or.state.Validators[valIndex].SubscriptionType = Auto
 	} else {
 		// If we found the validator and is not subscribed, advance the state machine
 		// Most likely it was subscribed before, then unsubscribed and now auto subscribes
 		if !or.isSubscribed(valIndex) {
+			// If it wasnt subscribed before, with this proposal its now auto
+			or.state.Validators[valIndex].SubscriptionType = Auto
 			or.advanceStateMachine(valIndex, AutoSubscription)
 		}
 	}
-	// In any case, the subs type is auto
-	or.state.Validators[valIndex].SubscriptionType = Auto
 }
 
 // Consolidate the balance of a given validator index. This means moving the pending to its accumulated
