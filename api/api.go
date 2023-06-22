@@ -790,7 +790,7 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 		}
 	}
 
-	claimed, err := m.Onchain.GetContractClaimedBalance(withdrawalAddress, apiRetryOpts...)
+	claimed, err := m.Onchain.GetContractClaimedBalance(withdrawalAddress, nil, apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get claimed balance so far from contract: "+err.Error())
 		return

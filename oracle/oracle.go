@@ -520,6 +520,66 @@ func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64
 	return false, nil
 }
 
+// Ensures that our liabilities are equal to our assets where:
+// - liabilities: sum of all rewards of all validators + pool fees
+// - assets: sum of all donations + block rewards
+// They must be equal at any point in time and this function ensures so. Note
+// that there are two scenarios to prevent:
+// - liabilities > assets: means we are giving more money than we are receiving which will
+// result in the pool being unable to pay.
+// - assets > liabilities: means less rewards are distributed, and since everything is encoded
+// in the root, this means some funds will be locked forever.
+func (or *Oracle) RunReconciliation() {
+
+	// What we owe (liabilities)
+	totalLiabilities := big.NewInt(0)
+	for _, val := range or.State().Validators {
+		totalLiabilities.Add(totalLiabilities, val.AccumulatedRewardsWei)
+		totalLiabilities.Add(totalLiabilities, val.PendingRewardsWei)
+	}
+	totalLiabilities.Add(totalLiabilities, or.State().PoolAccumulatedFees)
+
+	log.Info("[Reconciliation] We owe (liabilities): ", totalLiabilities)
+
+	// What we have (assets)
+	totalAssets := big.NewInt(0)
+	for _, donation := range or.State().Donations {
+		totalAssets.Add(totalAssets, donation.DonationAmount)
+	}
+	for _, blockReward := range or.State().ProposedBlocks {
+		totalAssets.Add(totalAssets, blockReward.Reward)
+	}
+
+	log.Info("[Reconciliation] We have (assets): ", totalAssets)
+
+}
+
+func (or *Oracle) GetUniqueWithdrawalAddresses() []string {
+	var uniqueWithAdd []string
+
+	// Iterate all validators
+	for _, validator := range or.State().Validators {
+		skip := false
+		// Iterate all unique deposit addresses processed before
+		for _, u := range uniqueWithAdd {
+			// If the deposit address is already in the list, skip it
+			if utils.Equals(validator.WithdrawalAddress, u) {
+				skip = true
+				break
+			}
+		}
+		// Not found, add it
+		if !skip {
+			uniqueWithAdd = append(uniqueWithAdd, validator.WithdrawalAddress)
+		}
+	}
+
+	// Include also the pool address
+	uniqueWithAdd = append(uniqueWithAdd, or.State().PoolFeesAddress)
+
+	return uniqueWithAdd
+}
+
 // Returns true if a given validator can subscribe or not to the pool
 // Accepted states are:
 // -ValidatorStatePendingInitialized

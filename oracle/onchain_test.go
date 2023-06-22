@@ -104,6 +104,7 @@ func Test_IsAddressWhitelisted(t *testing.T) {
 }
 
 func Test_EndToEnd(t *testing.T) {
+	// This takes long, if timeout hits: go test -v -run Test_EndToEnd -timeout 30m
 	if skip {
 		t.Skip("Skipping test")
 	}
@@ -168,7 +169,7 @@ func Test_EndToEnd(t *testing.T) {
 		5888073,
 		5888079,
 		5888082,
-		5888090,
+		5888090, // already subs validator
 		5888096,
 		5888099,
 		5888101,
@@ -187,8 +188,67 @@ func Test_EndToEnd(t *testing.T) {
 		// freeze state
 
 		// 0xb0f08efb67c59a4b16b143cf3a4850e786c4295909bee85b41cdc7d78db5d329
-		// TODO: Add more blocks with subs unsubs etc
-		// TODO: Randomly add blocks without anything interesting
+
+		5889932, // vanila rewar (auto subs)
+		5890341, // vanila rewar (auto subs)
+		5892032, // vanila rewar (auto subs)
+		5893934, // vanila rewar (auto subs)
+		5894030, // vanila rewar (auto subs)
+		5895093, // vanila rewar (auto subs)
+		5895373, // vanila rewar (already subscribed before with AUTO)
+
+		5895384, // subs non existent validator
+		5895415, //BLOCK!	9209397, // subscription of validator with BLS cred. skipped
+
+		5896015, // vanila rewar (auto subs)
+		5896730, // vanila rewar (auto subs)
+		// 0xd9d4170d0a04dd0406961aaf574c18eda1c4f639226b1f2c85f9e91c5e211def
+
+		5897820, // vanila rewar (auto subs of a validator subscribed before with MANUAL)    -> BUG HERE. subscription TYPE.
+
+		5900857, // vanila rewar (auto subs)
+		5901298, // vanila rewar (auto subs)
+
+		5901838, //BLOCK 9214269,// subscription of validator with BLS cred. skipped
+		5901840, //BLOCK 9214271// subscription of validator with BLS cred. skipped
+		5901841, //BLOCK 9214272// subscription of validator with BLS cred. skipped
+		5901843, //BLOCK 9214273// subscription of validator with BLS cred. skipped
+		5901845, //BLOCK 9214275// subscription of validator with BLS cred. skipped
+		5901846, //BLOCK 9214276// subscription of validator with BLS cred. skipped
+		5901847, //BLOCK 9214277// subscription of validator with BLS cred. skipped
+		5901849, //BLOCK 9214279// subscription of validator with BLS cred. skipped
+		5901850, //BLOCK 9214280// subscription of validator with BLS cred. skipped
+		5901852, //BLOCK 9214281// subscription of validator with BLS cred. skipped
+
+		5901856, //block 9214285 // unsubscription
+		5901861, //block 9214288 // unsubscription
+		5901862, //block 9214289 // unsubscription
+		5901865, //block 9214290 // unsubscription
+		5901868, // block 9214293 // unsubscription
+		5901870, //block 9214295 // unsubscription
+		5901872, //block 9214296 // unsubscription
+		5901874, //block 9214298 // unsubscription
+		5901882, //block 9214306 // unsubscription
+		5901885, //block 9214307 // unsubscription
+		5901888, //block 9214310 		// unsubscription of an already unsubscribed validator.
+
+		5902555, // vanila rewar (auto subs)
+		// 0x5db21e0b873daedd188ff5976f4950d6f03d5db5bc46620036ecce45014792e9
+
+		5904027, // vanila rewar (auto subs)
+		5904240, // vanila rewar (auto subs)
+		5907004, // vanila rewar (auto subs)
+		5907780, // vanila rewar (auto subs)
+		5908715, // vanila rewar (auto subs)
+
+		5910468, // vanila rewar (auto subs)
+
+		// 0x3b256a0d99ea9b781fb55349146c21209fd05deb5f33f605aa8868e82fbd3b03
+
+		5911491, // vanila rewar (auto subs)
+
+		5912693, // block number 9222701 // unsubscription of a validator that doesnt exist.
+
 		// TODO: Randmly add missed blocks
 	}
 
@@ -222,15 +282,17 @@ func Test_EndToEnd(t *testing.T) {
 		require.NoError(t, err)
 
 		log.Info("Processed slot: ", processedSlot)
-	}
 
-	oracleInstance.FreezeCheckpoint()
+		if processedSlot == uint64(5910468) {
+			oracleInstance.FreezeCheckpoint()
+		}
+	}
 
 	// TODO: Run asserts
 	//oracleInstance.SaveStateToFile()
 	//oracleInstance.SaveToJson()
 
-	//require.Equal(t, "0x000000", oracleInstance.LatestCommitedState().MerkleRoot)
+	require.Equal(t, "0x3b256a0d99ea9b781fb55349146c21209fd05deb5f33f605aa8868e82fbd3b03", oracleInstance.State().CommitedStates[5910468].MerkleRoot)
 
 	// root: 0xf0ecfb7afe96f7f7b570598c71aaac8fae3e6880e078227106e3a29446d5dbf8
 	//AccumulatedBalanceWei=131064623899584732 LeafHash=7c049ecd5a07fc5b7d39573db41a1faca70a798112583dce61b0c8761eaa2166 WithdrawalAddress=0xe46f9be81f9a3aca1808bb8c36d353436bb96091
