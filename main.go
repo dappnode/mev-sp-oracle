@@ -213,6 +213,19 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 		if oracleInstance.State().LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 {
 			log.Info("Checkpoint reached, latest processed slot: ", oracleInstance.State().LatestProcessedSlot)
 
+			// This wont work since we need an archival geth node to fetch balances at specific blocks that are not the last
+			// as it is it errors "missing trie node". Leaving here for reference
+			//uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
+			//poolEthBalanceWei, err := onchain.GetPoolEthBalance(big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock))
+			//if err != nil {
+			//	log.Error("Could not get pool eth balance: ", err)
+			//}
+			//claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, oracleInstance.State().LatestProcessedBlock)
+			//err = oracleInstance.RunReconciliation(poolEthBalanceWei, claimedPerAccount)
+			//if err != nil {
+			//	log.Fatal("Reconciliation failed, state was not commited: ", err)
+			//}
+
 			// Freeze state
 			enoughData := oracleInstance.FreezeCheckpoint()
 			if !enoughData {

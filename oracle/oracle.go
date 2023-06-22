@@ -358,6 +358,8 @@ func (or *Oracle) LoadFromJson() (bool, error) {
 			state.DeployedSlot, or.cfg.DeployedSlot))
 	}
 
+	or.state = &state
+
 	mRoot, enoughData := or.getMerkleRootIfAny()
 	log.WithFields(log.Fields{
 		"Path":                 path,
@@ -370,7 +372,6 @@ func (or *Oracle) LoadFromJson() (bool, error) {
 		"EnoughData":           enoughData,
 	}).Info("Loaded state from file")
 
-	or.state = &state
 	return true, nil
 }
 
@@ -529,29 +530,51 @@ func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64
 // result in the pool being unable to pay.
 // - assets > liabilities: means less rewards are distributed, and since everything is encoded
 // in the root, this means some funds will be locked forever.
-func (or *Oracle) RunReconciliation() {
+func (or *Oracle) RunReconciliation(
+	contractBalanceWei *big.Int,
+	claimedAmountsWei map[string]*big.Int) error {
 
-	// What we owe (liabilities)
-	totalLiabilities := big.NewInt(0)
-	for _, val := range or.State().Validators {
-		totalLiabilities.Add(totalLiabilities, val.AccumulatedRewardsWei)
-		totalLiabilities.Add(totalLiabilities, val.PendingRewardsWei)
+	// We calculate:
+	// 1. what we owe: total pending + accumulated rewards for all vlaidators + pool fees.
+	// to this we have to substract the amount that each deposit address alredy claimed
+	// 2. what we have: the amount in the smart contract
+
+	// both amount have to match at any time, asssuming we run this on finalized
+	// on the same slots (finalized epochs)
+
+	// What we owe (1/2)
+	totalCumulativeRewards := big.NewInt(0)
+	for _, val := range or.state.Validators {
+		totalCumulativeRewards.Add(totalCumulativeRewards, val.AccumulatedRewardsWei)
+		totalCumulativeRewards.Add(totalCumulativeRewards, val.PendingRewardsWei)
 	}
-	totalLiabilities.Add(totalLiabilities, or.State().PoolAccumulatedFees)
+	totalCumulativeRewards.Add(totalCumulativeRewards, or.state.PoolAccumulatedFees)
 
-	log.Info("[Reconciliation] We owe (liabilities): ", totalLiabilities)
+	log.Info("[Reconciliation] Total amount of accumulated + pending rewards: ", totalCumulativeRewards)
 
-	// What we have (assets)
-	totalAssets := big.NewInt(0)
-	for _, donation := range or.State().Donations {
-		totalAssets.Add(totalAssets, donation.DonationAmount)
-	}
-	for _, blockReward := range or.State().ProposedBlocks {
-		totalAssets.Add(totalAssets, blockReward.Reward)
+	// What we owe (2/2)
+	totalAlreadyClaimed := big.NewInt(0)
+	for _, claimed := range claimedAmountsWei {
+		totalAlreadyClaimed.Add(totalAlreadyClaimed, claimed)
 	}
 
-	log.Info("[Reconciliation] We have (assets): ", totalAssets)
+	log.Info("[Reconciliation] Total amount already claimed by all addresses: ", totalAlreadyClaimed)
 
+	// What we really owe (total - already_claimed)
+	totalLiabilities := big.NewInt(0).Sub(totalCumulativeRewards, totalAlreadyClaimed)
+
+	log.Info("[Reconciliation] Total net liabilities (what we owe): ", totalLiabilities)
+
+	log.Info("[Reconciliation] Total pool balance (what we have): ", contractBalanceWei)
+
+	if totalLiabilities.Cmp(contractBalanceWei) != 0 {
+		return errors.New(fmt.Sprintf("[Reconciliation] Liabilities and balance dont match: %d vs %d",
+			totalLiabilities, contractBalanceWei))
+	}
+
+	log.Info("[Reconciliation] Success! Liabilities and balance match: ", totalLiabilities, " vs ", contractBalanceWei)
+
+	return nil
 }
 
 func (or *Oracle) GetUniqueWithdrawalAddresses() []string {

@@ -1258,20 +1258,20 @@ func (o *Onchain) GetAcceptGovernanceEvents(
 	return events, nil
 }
 
-func (o *Onchain) GetClaimedPerWithdrawalAddress(addresses string, finalizedBlock uint64) map[string]*big.Int {
+func (o *Onchain) GetClaimedPerWithdrawalAddress(addresses []string, finalizedBlock uint64) map[string]*big.Int {
 	claimedMap := make(map[string]*big.Int)
 
-	for _, depositAddress := range addresses {
+	for _, address := range addresses {
 		// Important to use finalized blocks. Otherwise our local oracle view and onchain view may differ
-		claimed, err := o.GetContractClaimedBalance(addresses, big.NewInt(0).SetUint64(finalizedBlock))
+		claimed, err := o.GetContractClaimedBalance(address, big.NewInt(0).SetUint64(finalizedBlock))
 		if err != nil {
-			log.Fatal("Could not get claimed balance for deposit address ", depositAddress, ": ", err.Error())
+			log.Fatal("Could not get claimed balance for deposit address ", address, ": ", err.Error())
 		}
-		_, found := claimedMap[addresses]
+		_, found := claimedMap[address]
 		if found {
-			log.Fatal("Duplicate deposit address found: ", depositAddress)
+			log.Fatal("Duplicate deposit address found: ", address)
 		}
-		claimedMap[addresses] = claimed
+		claimedMap[address] = claimed
 	}
 	return claimedMap
 }
