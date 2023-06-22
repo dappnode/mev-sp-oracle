@@ -358,6 +358,8 @@ func (or *Oracle) LoadFromJson() (bool, error) {
 			state.DeployedSlot, or.cfg.DeployedSlot))
 	}
 
+	or.state = &state
+
 	mRoot, enoughData := or.getMerkleRootIfAny()
 	log.WithFields(log.Fields{
 		"Path":                 path,
@@ -370,7 +372,6 @@ func (or *Oracle) LoadFromJson() (bool, error) {
 		"EnoughData":           enoughData,
 	}).Info("Loaded state from file")
 
-	or.state = &state
 	return true, nil
 }
 
@@ -518,6 +519,88 @@ func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64
 		"OracleSlot":  latestCommitedSlot,
 	}).Info("Oracle IS NOT in sync with the latest onchain root")
 	return false, nil
+}
+
+// Ensures that our liabilities are equal to our assets where:
+// - liabilities: sum of all rewards of all validators + pool fees
+// - assets: sum of all donations + block rewards
+// They must be equal at any point in time and this function ensures so. Note
+// that there are two scenarios to prevent:
+// - liabilities > assets: means we are giving more money than we are receiving which will
+// result in the pool being unable to pay.
+// - assets > liabilities: means less rewards are distributed, and since everything is encoded
+// in the root, this means some funds will be locked forever.
+func (or *Oracle) RunReconciliation(
+	contractBalanceWei *big.Int,
+	claimedAmountsWei map[string]*big.Int) error {
+
+	// We calculate:
+	// 1. what we owe: total pending + accumulated rewards for all vlaidators + pool fees.
+	// to this we have to substract the amount that each deposit address alredy claimed
+	// 2. what we have: the amount in the smart contract
+
+	// both amount have to match at any time, asssuming we run this on finalized
+	// on the same slots (finalized epochs)
+
+	// What we owe (1/2)
+	totalCumulativeRewards := big.NewInt(0)
+	for _, val := range or.state.Validators {
+		totalCumulativeRewards.Add(totalCumulativeRewards, val.AccumulatedRewardsWei)
+		totalCumulativeRewards.Add(totalCumulativeRewards, val.PendingRewardsWei)
+	}
+	totalCumulativeRewards.Add(totalCumulativeRewards, or.state.PoolAccumulatedFees)
+
+	log.Info("[Reconciliation] Total amount of accumulated + pending rewards: ", totalCumulativeRewards)
+
+	// What we owe (2/2)
+	totalAlreadyClaimed := big.NewInt(0)
+	for _, claimed := range claimedAmountsWei {
+		totalAlreadyClaimed.Add(totalAlreadyClaimed, claimed)
+	}
+
+	log.Info("[Reconciliation] Total amount already claimed by all addresses: ", totalAlreadyClaimed)
+
+	// What we really owe (total - already_claimed)
+	totalLiabilities := big.NewInt(0).Sub(totalCumulativeRewards, totalAlreadyClaimed)
+
+	log.Info("[Reconciliation] Total net liabilities (what we owe): ", totalLiabilities)
+
+	log.Info("[Reconciliation] Total pool balance (what we have): ", contractBalanceWei)
+
+	if totalLiabilities.Cmp(contractBalanceWei) != 0 {
+		return errors.New(fmt.Sprintf("[Reconciliation] Liabilities and balance dont match: %d vs %d",
+			totalLiabilities, contractBalanceWei))
+	}
+
+	log.Info("[Reconciliation] Success! Liabilities and balance match: ", totalLiabilities, " vs ", contractBalanceWei)
+
+	return nil
+}
+
+func (or *Oracle) GetUniqueWithdrawalAddresses() []string {
+	var uniqueWithAdd []string
+
+	// Iterate all validators
+	for _, validator := range or.State().Validators {
+		skip := false
+		// Iterate all unique deposit addresses processed before
+		for _, u := range uniqueWithAdd {
+			// If the deposit address is already in the list, skip it
+			if utils.Equals(validator.WithdrawalAddress, u) {
+				skip = true
+				break
+			}
+		}
+		// Not found, add it
+		if !skip {
+			uniqueWithAdd = append(uniqueWithAdd, validator.WithdrawalAddress)
+		}
+	}
+
+	// Include also the pool address
+	uniqueWithAdd = append(uniqueWithAdd, or.State().PoolFeesAddress)
+
+	return uniqueWithAdd
 }
 
 // Returns true if a given validator can subscribe or not to the pool

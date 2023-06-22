@@ -610,23 +610,26 @@ func (o *Onchain) GetOnchainSlotAndRoot(opts ...retry.Option) (string, uint64, e
 	return merkleRoot, slot, nil
 }
 
-// TODO: Only in finalized slots!
-func (o *Onchain) GetContractClaimedBalance(WithdrawalAddress string, opts ...retry.Option) (*big.Int, error) {
+// Returns the claimed balance of each address. Note that when using this for reconciliation you must run it
+// in finalized blocks to be able to compare apples with apples.
+func (o *Onchain) GetContractClaimedBalance(withdrawalAddress string, blockNumber *big.Int, opts ...retry.Option) (*big.Int, error) {
 	var claimedBalance *big.Int
 	var err error
 
-	if !common.IsHexAddress(WithdrawalAddress) {
-		log.Fatal("Invalid withdrawal address: ", WithdrawalAddress)
+	if !common.IsHexAddress(withdrawalAddress) {
+		log.Fatal("Invalid withdrawal address: ", withdrawalAddress)
 	}
 
-	hexDepAddres := common.HexToAddress(WithdrawalAddress)
+	hexDepAddres := common.HexToAddress(withdrawalAddress)
 
 	// Retries multiple times before errorings
 	err = retry.Do(
 		func() error {
-			// TODO: This should be performed in the last finalized slot for consistency
 			// Otherwise our local view and remote view can be different. See if it applies to other functions, like merkle tree.
 			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			if blockNumber != nil {
+				callOpts.BlockNumber = blockNumber
+			}
 			claimedBalance, err = o.Contract.ClaimedBalance(callOpts, hexDepAddres)
 			if err != nil {
 				log.Warn("Failed attempt to get claimed balance from contract: ", err.Error(), " Retrying...")
@@ -642,22 +645,23 @@ func (o *Onchain) GetContractClaimedBalance(WithdrawalAddress string, opts ...re
 	return claimedBalance, nil
 }
 
-func (o *Onchain) GetEthBalance(address string, opts ...retry.Option) (*big.Int, error) {
-	account := common.HexToAddress(address)
+func (o *Onchain) GetPoolEthBalance(blockNumber *big.Int, opts ...retry.Option) (*big.Int, error) {
+	account := common.HexToAddress(o.CliCfg.PoolAddress)
 	var err error
 	var balanceWei *big.Int
 
 	err = retry.Do(func() error {
-		balanceWei, err = o.ExecutionClient.BalanceAt(context.Background(), account, nil)
+		// If block number is nil latest known block is used
+		balanceWei, err = o.ExecutionClient.BalanceAt(context.Background(), account, blockNumber)
 		if err != nil {
-			log.Warn("Failed attempt to get balance for address ", address, ": ", err.Error(), " Retrying...")
-			return errors.New("could not get balance for address " + address + ": " + err.Error())
+			log.Warn("Failed attempt to get balance for address ", account.String(), ": ", err.Error(), " Retrying...")
+			return errors.New("could not get balance for address " + account.String() + ": " + err.Error())
 		}
 		return nil
 	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
-		return nil, errors.New("could not get balance for address " + address + ": " + err.Error())
+		return nil, errors.New("could not get balance for address " + account.String() + ": " + err.Error())
 	}
 
 	return balanceWei, nil
@@ -834,7 +838,7 @@ func (onchain *Onchain) GetConfigFromContract(
 
 	log.Info("Configured smoothing pool address: ", cliCfg.PoolAddress, " in network: ", network)
 
-	balance, err := onchain.GetEthBalance(cliCfg.PoolAddress)
+	balance, err := onchain.GetPoolEthBalance(nil)
 	if err != nil {
 		log.Fatal("Could not get pool address balance: " + err.Error())
 	}
@@ -1252,6 +1256,24 @@ func (o *Onchain) GetAcceptGovernanceEvents(
 	var events []*contract.ContractAcceptGovernance
 	log.Fatal("Not implemented: GetAcceptGovernanceEvents it not implemented")
 	return events, nil
+}
+
+func (o *Onchain) GetClaimedPerWithdrawalAddress(addresses []string, finalizedBlock uint64) map[string]*big.Int {
+	claimedMap := make(map[string]*big.Int)
+
+	for _, address := range addresses {
+		// Important to use finalized blocks. Otherwise our local oracle view and onchain view may differ
+		claimed, err := o.GetContractClaimedBalance(address, big.NewInt(0).SetUint64(finalizedBlock))
+		if err != nil {
+			log.Fatal("Could not get claimed balance for deposit address ", address, ": ", err.Error())
+		}
+		_, found := claimedMap[address]
+		if found {
+			log.Fatal("Duplicate deposit address found: ", address)
+		}
+		claimedMap[address] = claimed
+	}
+	return claimedMap
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) error {

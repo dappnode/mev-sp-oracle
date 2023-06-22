@@ -424,6 +424,70 @@ func Test_IsOracleInSyncWithChain(t *testing.T) {
 	require.Error(t, err)
 }
 
+func Test_GetUniqueDepositFromState(t *testing.T) {
+	oracle1 := NewOracle(&Config{
+		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
+	})
+
+	// Subscribe 3 validators with no balance
+	oracle1.addSubscription(1, "0xa000000000000000000000000000000000000000", "0x")
+	oracle1.addSubscription(2, "0xa000000000000000000000000000000000000000", "0x")
+	oracle1.addSubscription(3, "0xa000000000000000000000000000000000000000", "0x")
+	oracle1.addSubscription(4, "0xb000000000000000000000000000000000000000", "0x")
+	oracle1.addSubscription(5, "0xc000000000000000000000000000000000000000", "0x")
+
+	unique1 := oracle1.GetUniqueWithdrawalAddresses()
+	require.Equal(t, 4, len(unique1))
+	require.ElementsMatch(t, []string{
+		"0xa000000000000000000000000000000000000000",
+		"0xb000000000000000000000000000000000000000",
+		"0xc000000000000000000000000000000000000000",
+		"0xfee0000000000000000000000000000000000000"},
+		unique1)
+
+	oracle2 := NewOracle(&Config{
+		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
+	})
+
+	// Subscribe 3 validators with no balance
+	oracle2.addSubscription(1, "0xa000000000000000000000000000000000000000", "0x")
+	oracle2.addSubscription(2, "0xa000000000000000000000000000000000000000", "0x")
+	oracle2.addSubscription(3, "0xa000000000000000000000000000000000000000", "0x")
+	oracle2.addSubscription(4, "0xb000000000000000000000000000000000000000", "0x")
+	oracle2.addSubscription(5, "0xb000000000000000000000000000000000000000", "0x")
+	oracle2.addSubscription(6, "0xc000000000000000000000000000000000000000", "0x")
+	oracle2.addSubscription(7, "0xc000000000000000000000000000000000000000", "0x")
+	oracle2.addSubscription(8, "0xd000000000000000000000000000000000000000", "0x")
+	oracle2.addSubscription(9, "0xd000000000000000000000000000000000000000", "0x")
+	oracle2.addSubscription(9, "0xc000000000000000000000000000000000000000", "0x")
+
+	unique2 := oracle2.GetUniqueWithdrawalAddresses()
+	require.Equal(t, 5, len(unique2))
+	require.ElementsMatch(t, []string{
+		"0xa000000000000000000000000000000000000000",
+		"0xb000000000000000000000000000000000000000",
+		"0xc000000000000000000000000000000000000000",
+		"0xd000000000000000000000000000000000000000",
+		"0xfee0000000000000000000000000000000000000"}, unique2)
+
+	oracle3 := NewOracle(&Config{
+		PoolFeesAddress: "0xfee0000000000000000000000000000000000000",
+	})
+
+	// Subscribe 3 validators with no balance
+	oracle3.addSubscription(1, "0x1000000000000000000000000000000000000000", "0x")
+	oracle3.addSubscription(2, "0x1000000000000000000000000000000000000000", "0x")
+	oracle3.addSubscription(3, "0x1000000000000000000000000000000000000000", "0x")
+	oracle3.addSubscription(4, "0x1000000000000000000000000000000000000000", "0x")
+	oracle3.addSubscription(5, "0x1000000000000000000000000000000000000000", "0x")
+
+	unique3 := oracle3.GetUniqueWithdrawalAddresses()
+	require.Equal(t, 2, len(unique3))
+	require.ElementsMatch(t, []string{
+		"0x1000000000000000000000000000000000000000",
+		"0xfee0000000000000000000000000000000000000"}, unique3)
+}
+
 func Test_Oracle_CanValidatorSubscribeToPool(t *testing.T) {
 
 	val1 := &v1.Validator{
