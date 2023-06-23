@@ -42,8 +42,9 @@ func NewOracle(cfg *Config) *Oracle {
 		PoolAccumulatedFees:  big.NewInt(0),
 		Validators:           make(map[uint64]*ValidatorInfo, 0),
 		CommitedStates:       make(map[uint64]*OnchainState, 0),
-		Subscriptions:        make([]*contract.ContractSubscribeValidator, 0),
-		Unsubscriptions:      make([]*contract.ContractUnsubscribeValidator, 0),
+		SubscriptionEvents:   make([]*contract.ContractSubscribeValidator, 0),
+		UnsubscriptionEvents: make([]*contract.ContractUnsubscribeValidator, 0),
+		EtherReceivedEvents:  make([]*contract.ContractEtherReceived, 0),
 		Donations:            make([]*contract.ContractEtherReceived, 0),
 		ProposedBlocks:       make([]SummarizedBlock, 0),
 		MissedBlocks:         make([]SummarizedBlock, 0),
@@ -120,6 +121,11 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 
 	// Get donations to the pool in this block
 	blockDonations := fullBlock.GetDonations(or.cfg.PoolAddress)
+
+	// Store all events raw for trazability
+	or.state.SubscriptionEvents = append(or.state.SubscriptionEvents, fullBlock.Events.SubscribeValidator...)
+	or.state.UnsubscriptionEvents = append(or.state.UnsubscriptionEvents, fullBlock.Events.UnsubscribeValidator...)
+	or.state.EtherReceivedEvents = append(or.state.EtherReceivedEvents, fullBlock.Events.EtherReceived...)
 
 	// Handle subscriptions first thing
 	or.handleManualSubscriptions(fullBlock.Events.SubscribeValidator)
@@ -530,7 +536,7 @@ func (or *Oracle) IsOracleInSyncWithChain(onchainRoot string, onchainSlot uint64
 // result in the pool being unable to pay.
 // - assets > liabilities: means less rewards are distributed, and since everything is encoded
 // in the root, this means some funds will be locked forever.
-func (or *Oracle) RunReconciliation(
+func (or *Oracle) RunOnchainReconciliation(
 	contractBalanceWei *big.Int,
 	claimedAmountsWei map[string]*big.Int) error {
 
@@ -573,6 +579,40 @@ func (or *Oracle) RunReconciliation(
 	}
 
 	log.Info("[Reconciliation] Success! Liabilities and balance match: ", totalLiabilities, " vs ", contractBalanceWei)
+
+	return nil
+}
+
+func (or *Oracle) RunOffchainReconciliation() error {
+	liabilities := big.NewInt(0)
+
+	for _, val := range or.state.Validators {
+		liabilities.Add(liabilities, val.AccumulatedRewardsWei)
+		liabilities.Add(liabilities, val.PendingRewardsWei)
+	}
+	liabilities.Add(liabilities, or.state.PoolAccumulatedFees)
+
+	assets := big.NewInt(0)
+
+	for _, etherRx := range or.state.EtherReceivedEvents {
+		assets.Add(assets, etherRx.DonationAmount)
+	}
+	for _, subs := range or.state.SubscriptionEvents {
+		assets.Add(assets, subs.SubscriptionCollateral)
+	}
+	for _, vanilaBlock := range or.state.ProposedBlocks {
+		if vanilaBlock.RewardType == VanilaBlock {
+			assets.Add(assets, vanilaBlock.Reward)
+		}
+	}
+
+	log.Info("[Offchain reconciliation] Liabilities: ", liabilities, "wei ", utils.WeiToEther(liabilities), " Ether")
+	log.Info("[Offchain reconciliation] Assets: ", assets, "wei ", utils.WeiToEther(assets), " Ether")
+
+	if liabilities.Cmp(assets) != 0 {
+		return errors.New(fmt.Sprintf("Liabilities and assets dont match: %d vs %d",
+			liabilities, assets))
+	}
 
 	return nil
 }
@@ -898,7 +938,6 @@ func (or *Oracle) handleManualSubscriptions(
 			or.state.Validators[valIdx].SubscriptionType = Manual
 			or.increaseValidatorPendingRewards(valIdx, collateral)
 			or.advanceStateMachine(valIdx, ManualSubscription)
-			or.state.Subscriptions = append(or.state.Subscriptions, sub)
 			continue
 		}
 
@@ -993,7 +1032,6 @@ func (or *Oracle) handleManualUnsubscriptions(
 			or.advanceStateMachine(valIdx, Unsubscribe)
 			or.increaseAllPendingRewards(or.state.Validators[valIdx].PendingRewardsWei)
 			or.resetPendingRewards(valIdx)
-			or.state.Unsubscriptions = append(or.state.Unsubscriptions, unsub)
 			log.WithFields(log.Fields{
 				"BlockNumber":      unsub.Raw.BlockNumber,
 				"TxHash":           unsub.Raw.TxHash,

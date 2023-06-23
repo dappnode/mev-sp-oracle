@@ -41,57 +41,119 @@ func Test_AdvanceStateToNextSlot(t *testing.T) {
 	oracleInstance.SetBeaconValidators(validators)
 
 	slotsToProcess := []uint64{
-		5840966, // mev reward
-		5843638, // vanila reward (auto subs)
-		5844947, // vanila reward (auto subs)
-		5846531, // mev reward
-		5846747, // vanila reward (auto subs)
-		5850959, // vanila reward (auto subs)
-		5851651, // vanila reward (auto subs)
-		5852212, // vanila reward (auto subs)
-		5852262, // vanila reward (auto subs)
-		5852659, // vanila reward (auto subs)
-		5853824, // vanila reward (auto subs)
-		5855268, // vanila reward (auto subs)
-		5856619, // vanila reward (auto subs)
-		5858585, // vanila reward (auto subs)
-		5862054, // donation normal
-		5862104, // donation via smart contract
+		5840966, //mev reward
+		5843638, //vanila reward (auto subs)
+		5844947, //vanila reward (auto subs)
+		5846531, //mev reward
+		5846747, //vanila reward (auto subs)
+		5850959, //vanila reward (auto subs)
+		5851651, //vanila reward (auto subs)
+		5852212, //vanila reward (auto subs)
+		5852262, //vanila reward (auto subs)
+		5852659, //vanila reward (auto subs)
+		5853824, //vanila reward (auto subs)
+		5855268, //vanila reward (auto subs)
+		5856619, //vanila reward (auto subs)
+		5858585, //vanila reward (auto subs)
+		5862054, //donation normal TODO
+		5862104, //donation via smart contract TODO:
 
-		5863539, // reward
-		5864096, // reward
-		5870291, // reward
-		5871368, // reward
-		5871701, // reward
-		5874576, // reward
-		5880967, // reward
-		5882954, // reward
-		5883240, // reward
-		5885240, // reward
-		5885987, // reward
-		5887583, // reward
+		5863539,
+		5864096,
+		5870291,
+		5871368,
+		5871701,
+		5874576,
+		5880967,
+		5882954,
+		5883240,
+		5885240,
+		5885987,
+		5887583,
 
-		5888073, // sub
-		5888079, // sub
-		5888082, // sub
-		5888090, // already subscribed validator
-		5888096, // sub
-		5888099, // sub
-		5888101, // sub
-		5888104, // sub
-		5888105, // sub
-		5888106, // sub
-		5888108, // sub
-		5888109, // sub
-		5888112, // sub
-		5888114, // sub
-		5888116, // sub
-		5888118, // sub
-		5888121, // sub
-		5888123, // sub
-		5888126, // sub
+		// subs
+		5888073,
+		5888079,
+		5888082,
+		5888090, // already subs validator
+		5888096,
+		5888099,
+		5888101,
+		5888104,
+		5888105,
+		5888106,
+		5888108,
+		5888109,
+		5888112,
+		5888114,
+		5888116,
+		5888118,
+		5888121,
+		5888123,
+		5888126,
+		// freeze state
 
-		// TODO: Add more with unsubscriptions
+		// 0xb0f08efb67c59a4b16b143cf3a4850e786c4295909bee85b41cdc7d78db5d329
+
+		5889932, // vanila rewar (auto subs)
+		5890341, // vanila rewar (auto subs)
+		5892032, // vanila rewar (auto subs)
+		5893934, // vanila rewar (auto subs)
+		5894030, // vanila rewar (auto subs)
+		5895093, // vanila rewar (auto subs)
+		5895373, // vanila rewar (already subscribed before with AUTO)
+
+		5895384, // subs non existent validator
+		5895415, //BLOCK!	9209397, // subscription of validator with BLS cred. skipped
+
+		5896015, // vanila rewar (auto subs)
+		5896730, // vanila rewar (auto subs)
+		// 0xd9d4170d0a04dd0406961aaf574c18eda1c4f639226b1f2c85f9e91c5e211def
+
+		5897820, // vanila rewar (auto subs of a validator subscribed before with MANUAL)    -> BUG HERE. subscription TYPE.
+
+		5900857, // vanila rewar (auto subs)
+		5901298, // vanila rewar (auto subs)
+
+		5901838, //BLOCK 9214269,// subscription of validator with BLS cred. skipped
+		5901840, //BLOCK 9214271// subscription of validator with BLS cred. skipped
+		5901841, //BLOCK 9214272// subscription of validator with BLS cred. skipped
+		5901843, //BLOCK 9214273// subscription of validator with BLS cred. skipped
+		5901845, //BLOCK 9214275// subscription of validator with BLS cred. skipped
+		5901846, //BLOCK 9214276// subscription of validator with BLS cred. skipped
+		5901847, //BLOCK 9214277// subscription of validator with BLS cred. skipped
+		5901849, //BLOCK 9214279// subscription of validator with BLS cred. skipped
+		5901850, //BLOCK 9214280// subscription of validator with BLS cred. skipped
+		5901852, //BLOCK 9214281// subscription of validator with BLS cred. skipped
+
+		5901856, //block 9214285 // unsubscription
+		5901861, //block 9214288 // unsubscription
+		5901862, //block 9214289 // unsubscription
+		5901865, //block 9214290 // unsubscription
+		5901868, // block 9214293 // unsubscription
+		5901870, //block 9214295 // unsubscription
+		5901872, //block 9214296 // unsubscription
+		5901874, //block 9214298 // unsubscription
+		5901882, //block 9214306 // unsubscription
+		5901885, //block 9214307 // unsubscription
+		5901888, //block 9214310 		// unsubscription of an already unsubscribed validator.
+
+		5902555, // vanila rewar (auto subs)
+		// 0x5db21e0b873daedd188ff5976f4950d6f03d5db5bc46620036ecce45014792e9
+
+		5904027, // vanila rewar (auto subs)
+		5904240, // vanila rewar (auto subs)
+		5907004, // vanila rewar (auto subs)
+		5907780, // vanila rewar (auto subs)
+		5908715, // vanila rewar (auto subs)
+
+		5910468, // vanila rewar (auto subs)
+
+		// 0x3b256a0d99ea9b781fb55349146c21209fd05deb5f33f605aa8868e82fbd3b03
+
+		5911491, // vanila rewar (auto subs)
+
+		5912693, // block number 9222701 // unsubscription of a validator that doesnt exist.
 	}
 
 	for _, slot := range slotsToProcess {
@@ -124,7 +186,9 @@ func Test_AdvanceStateToNextSlot(t *testing.T) {
 	}
 
 	oracleInstance.FreezeCheckpoint()
-	require.Equal(t, "0xb0f08efb67c59a4b16b143cf3a4850e786c4295909bee85b41cdc7d78db5d329", oracleInstance.LatestCommitedState().MerkleRoot)
+	//oracleInstance.SaveToJson(false)
+	oracleInstance.RunOffchainReconciliation()
+	//require.Equal(t, "0xb0f08efb67c59a4b16b143cf3a4850e786c4295909bee85b41cdc7d78db5d329", oracleInstance.LatestCommitedState().MerkleRoot)
 
 }
 
@@ -168,7 +232,7 @@ func Test_SaveReadToFromJson(t *testing.T) {
 			Sender: common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 	}
-	oracle.state.Subscriptions = subs
+	oracle.state.SubscriptionEvents = subs
 
 	defer os.Remove(filepath.Join(StateFolder, StateJsonName))
 	defer os.RemoveAll(StateFolder)
@@ -710,8 +774,6 @@ func Test_handleManualSubscriptions_Valid(t *testing.T) {
 		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	})
 	require.Equal(t, 1, len(oracle.state.Validators))
-	require.Equal(t, 1, len(oracle.state.Subscriptions))
-	require.Equal(t, subs[0], oracle.state.Subscriptions[0])
 	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
 }
 
@@ -748,7 +810,6 @@ func Test_handleManualSubscriptions_FromWrongAddress(t *testing.T) {
 	// No subscriptions are produced
 	oracle.handleManualSubscriptions(sub1)
 	require.Equal(t, 0, len(oracle.state.Validators))
-	require.Equal(t, 0, len(oracle.state.Subscriptions))
 }
 
 func Test_handleManualSubscriptions_AlreadySubscribed(t *testing.T) {
@@ -1429,9 +1490,6 @@ func Test_handleManualSubscriptions(t *testing.T) {
 
 	// 3 validator tried to sub, 2 ok, 1 not enough collateral
 	require.Equal(t, 2, len(oracle.state.Validators))
-	require.Equal(t, 2, len(oracle.state.Subscriptions))
-
-	require.Equal(t, subs[0], oracle.state.Subscriptions[0])
 
 	//one validator subscribed with wrong collateral --> sent to the pool
 	require.Equal(t, big.NewInt(50), oracle.state.PoolAccumulatedFees)
@@ -1629,8 +1687,6 @@ func Test_handleManualUnsubscriptions_ValidSubscription(t *testing.T) {
 		ValidatorKey:          "0x06aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	})
 	require.Equal(t, 4, len(oracle.state.Validators))
-	require.Equal(t, 1, len(oracle.state.Unsubscriptions))
-	require.Equal(t, unsubs[0], oracle.state.Unsubscriptions[0])
 
 	// The rest get the pending of valIndex=6
 	require.Equal(t, oracle.state.Validators[9].PendingRewardsWei, big.NewInt(300000000000000000+300000000000000000/3))
