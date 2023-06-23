@@ -226,6 +226,11 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			//	log.Fatal("Reconciliation failed, state was not commited: ", err)
 			//}
 
+			err := oracleInstance.RunOffchainReconciliation()
+			if err != nil {
+				log.Fatal("Offchain reconciliation failed, cant freeze checkpoint: ", err)
+			}
+
 			// Freeze state
 			enoughData := oracleInstance.FreezeCheckpoint()
 			if !enoughData {

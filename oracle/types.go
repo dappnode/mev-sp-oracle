@@ -187,20 +187,32 @@ type OnchainState struct {
 }
 
 type OracleState struct {
-	StateHash            string                    `json:"state_hash"`
-	LatestProcessedSlot  uint64                    `json:"latest_processed_slot"`
-	LatestProcessedBlock uint64                    `json:"latest_processed_block"`
-	NextSlotToProcess    uint64                    `json:"next_slot_to_process"`
-	Validators           map[uint64]*ValidatorInfo `json:"validators"`
-	CommitedStates       map[uint64]*OnchainState  `json:"commited_states"`
-	PoolAccumulatedFees  *big.Int                  `json:"pool_accumulated_fees"`
+	StateHash            string   `json:"state_hash"`
+	LatestProcessedSlot  uint64   `json:"latest_processed_slot"`
+	LatestProcessedBlock uint64   `json:"latest_processed_block"`
+	NextSlotToProcess    uint64   `json:"next_slot_to_process"`
+	PoolAccumulatedFees  *big.Int `json:"pool_accumulated_fees"`
 
-	Subscriptions   []*contract.ContractSubscribeValidator   `json:"subscriptions"`
-	Unsubscriptions []*contract.ContractUnsubscribeValidator `json:"unsubscriptions"`
-	Donations       []*contract.ContractEtherReceived        `json:"donations"`
-	ProposedBlocks  []SummarizedBlock                        `json:"proposed_blocks"`
-	MissedBlocks    []SummarizedBlock                        `json:"missed_blocks"`
-	WrongFeeBlocks  []SummarizedBlock                        `json:"wrong_fee_blocks"`
+	// Stores the latest state of the validators at LatestProcessedSlot
+	Validators map[uint64]*ValidatorInfo `json:"validators"`
+
+	// Contains frozen checkpoints of the validator state on different slots
+	CommitedStates map[uint64]*OnchainState `json:"commited_states"`
+
+	// Stores all events both valid and invalid
+	SubscriptionEvents   []*contract.ContractSubscribeValidator   `json:"subscriptions_events"`
+	UnsubscriptionEvents []*contract.ContractUnsubscribeValidator `json:"unsubscriptions_events"`
+
+	// Stored all EtherReceived events (MEV rewards and donations)
+	EtherReceivedEvents []*contract.ContractEtherReceived `json:"ether_received_events"`
+
+	// Stores a subset of EtherReceived events, just donations
+	Donations []*contract.ContractEtherReceived `json:"donations"`
+
+	// Summarized versions of the blocks
+	ProposedBlocks []SummarizedBlock `json:"proposed_blocks"`
+	MissedBlocks   []SummarizedBlock `json:"missed_blocks"`
+	WrongFeeBlocks []SummarizedBlock `json:"wrong_fee_blocks"`
 
 	// Config parameters
 	PoolFeesPercentOver10000 int      `json:"pool_fees_percent_over_10000"`
