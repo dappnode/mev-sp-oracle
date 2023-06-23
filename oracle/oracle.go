@@ -1072,9 +1072,12 @@ func (or *Oracle) addSubscription(valIndex uint64, withdrawalAddress string, val
 		// If we found the validator and is not subscribed, advance the state machine
 		// Most likely it was subscribed before, then unsubscribed and now auto subscribes
 		if !or.isSubscribed(valIndex) {
-			// If it wasnt subscribed before, with this proposal its now auto
-			or.state.Validators[valIndex].SubscriptionType = Auto
 			or.advanceStateMachine(valIndex, AutoSubscription)
+
+			if !or.isBanned(valIndex) {
+				// If it wasnt subscribed before, with this proposal its now auto
+				or.state.Validators[valIndex].SubscriptionType = Auto
+			}
 		}
 	}
 }

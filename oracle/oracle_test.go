@@ -850,6 +850,297 @@ func Test_handleManualSubscriptions_ThenSendBlock(t *testing.T) {
 	}
 	oracle.handleCorrectBlockProposal(block1)
 	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
+
+	// Another proposal keeps the validator subs type in manual
+	block2 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    33,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(90000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0327a30991170f917d7b83def6e44d26577871ed",
+	}
+	oracle.handleCorrectBlockProposal(block2)
+	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
+}
+
+func Test_handleManualSubscriptions_AutoThenSubscribe(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	// Force auto block proposal
+	block1 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    33,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(90000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0327a30991170f917d7b83def6e44d26577871ed",
+	}
+	oracle.handleCorrectBlockProposal(block1)
+	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
+
+	// Now subscribe (but it was already auto subscribed)
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualSubscriptions(subs)
+
+	// State is keps in auto, since the subscription was ignored
+	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
+}
+
+func Test_SubscribeUnsubscribe_Auto(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	// Now subscribe (but it was already auto subscribed)
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualSubscriptions(subs)
+	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
+
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
+			ValidatorID: 33,
+			Raw:         types.Log{TxHash: [32]byte{0x1}},
+			Sender:      common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualUnsubscriptions(unsubs)
+	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
+
+	// Force auto block proposal
+	block1 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    33,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(90000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0327a30991170f917d7b83def6e44d26577871ed",
+	}
+	oracle.handleCorrectBlockProposal(block1)
+
+	// State is keps in auto, since the subscription was ignored
+	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
+}
+
+func Test_AutoUnsubscribeThenManual(t *testing.T) { // TODO: Missing Then auto
+
+	oracle := NewOracle(&Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	// Force auto block proposal
+	block1 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    33,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(90000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0327a30991170f917d7b83def6e44d26577871ed",
+	}
+	oracle.handleCorrectBlockProposal(block1)
+	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
+
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
+			ValidatorID: 33,
+			Raw:         types.Log{TxHash: [32]byte{0x1}},
+			Sender:      common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualUnsubscriptions(unsubs)
+	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
+
+	// Now subscribe (but it was already auto subscribed)
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualSubscriptions(subs)
+	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
+
+}
+
+func Test_AutoUnsubscribeThenAuto(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	// Force auto block proposal
+	block1 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    33,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(90000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0327a30991170f917d7b83def6e44d26577871ed",
+	}
+	oracle.handleCorrectBlockProposal(block1)
+	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
+
+	unsubs := []*contract.ContractUnsubscribeValidator{
+		&contract.ContractUnsubscribeValidator{
+			ValidatorID: 33,
+			Raw:         types.Log{TxHash: [32]byte{0x1}},
+			Sender:      common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualUnsubscriptions(unsubs)
+	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
+
+	// Force auto block proposal again
+	block2 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    33,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(90000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0327a30991170f917d7b83def6e44d26577871ed",
+	}
+	oracle.handleCorrectBlockProposal(block2)
+	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
+	require.Equal(t, Active, oracle.state.Validators[33].ValidatorStatus)
+}
+
+func Test_BannedValidatorAutoSubs(t *testing.T) {
+
+	oracle := NewOracle(&Config{
+		CollateralInWei: big.NewInt(1000),
+	})
+
+	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
+		33: &v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	// Now subscribe (but it was already auto subscribed)
+	subs := []*contract.ContractSubscribeValidator{
+		&contract.ContractSubscribeValidator{
+			ValidatorID:            33,
+			SubscriptionCollateral: big.NewInt(1000),
+			Raw:                    types.Log{TxHash: [32]byte{0x1}},
+			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+		},
+	}
+
+	oracle.handleManualSubscriptions(subs)
+
+	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
+
+	// Force banned
+	oracle.state.Validators[33].ValidatorStatus = Banned
+
+	block2 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    33,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(90000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0327a30991170f917d7b83def6e44d26577871ed",
+	}
+	oracle.handleCorrectBlockProposal(block2)
+
+	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
+	require.Equal(t, Banned, oracle.state.Validators[33].ValidatorStatus)
+
+	// Force auto block proposal again
+	block3 := SummarizedBlock{
+		Slot:              0,
+		ValidatorIndex:    33,
+		ValidatorKey:      "0x",
+		Reward:            big.NewInt(90000000),
+		RewardType:        VanilaBlock,
+		WithdrawalAddress: "0x0327a30991170f917d7b83def6e44d26577871ed",
+	}
+	oracle.handleCorrectBlockProposal(block3)
 }
 
 func Test_handleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) {
