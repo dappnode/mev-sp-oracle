@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -26,6 +27,19 @@ var SlotsInEpoch = uint64(32)
 var UpdateValidatorsIntervalSlots = uint64(600)
 
 func main() {
+	//file is created if not exists, otherwise it appends errors to the existing file
+	//0666 means permisions to read and write to all users, but not execute
+	file, err := os.OpenFile("/oracle-data/oracleLogs.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal("error opening or creating the oracleLogs.txt file: ", err)
+	}
+	defer file.Close()
+
+	// Create a MultiWriter with file and stdout
+	multiWriter := io.MultiWriter(file, os.Stdout)
+	// Set log output to the MultiWriter
+	log.SetOutput(multiWriter)
+
 	// Load config from cli
 	cliCfg, err := config.NewCliConfig()
 	if err != nil {

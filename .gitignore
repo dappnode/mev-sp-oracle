@@ -11,6 +11,7 @@ deployments/teku
 deployments/postgres-data
 deployments/metabase-data
 deployments/.env
+deployments/oracle-data/oracleLogs.txt
 state.gob
 state.json
 state_unused.gob
