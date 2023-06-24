@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -26,17 +27,21 @@ var SlotsInEpoch = uint64(32)
 // How often onchain validators are reloaded: 600 slots is 2 hours
 var UpdateValidatorsIntervalSlots = uint64(600)
 
+// logs file and path
+const logsName = "logs.txt"
+const logsPath = "oracle-logs"
+
 func main() {
 	//file is created if not exists, otherwise it appends errors to the existing file
 	//0666 means permisions to read and write to all users, but not execute
-	file, err := os.OpenFile("/oracle-data/oracleLogs.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	file, err := os.OpenFile(filepath.Join(logsPath, logsName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatal("error opening or creating the oracleLogs.txt file: ", err)
 	}
 	defer file.Close()
 
 	// Create a MultiWriter with file and stdout
-	multiWriter := io.MultiWriter(file, os.Stdout)
+	multiWriter := io.MultiWriter(os.Stdout, file)
 	// Set log output to the MultiWriter
 	log.SetOutput(multiWriter)
 

@@ -39,6 +39,7 @@ services:
     volumes:
       - ./oracle-data:/oracle-data
       - ./keystore:/keystore
+      - ./oracle-logs:/oracle-logs
 
   geth:
     image: "ethereum/client-go:v1.11.4"
