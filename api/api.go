@@ -23,7 +23,6 @@ import (
 	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/hako/durafmt"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 
@@ -31,7 +30,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TODO: Add getters so that the api cannot screw up the state
+// Oracle does not serve some endpoint if not in sync to latest finalized epoch. Some
+// slots behind are allowed, since its normal that when a new epoch is finalized, some
+// slots are still pending to be processed. This is the max number of slots allowed
+var MaxSlotsBehind = uint64(64)
 
 // Note that the api has no paging, so it is not suitable for large queries, but
 // it should be able to scale to a few thousand subscribed validators without any problem
@@ -57,8 +59,6 @@ const (
 	pathMemoryValidatorByIndex       = "/memory/validator/{valindex}"
 	pathMemoryValidatorsByWithdrawal = "/memory/validators/{withdrawalAddress}"
 	pathMemoryFeesInfo               = "/memory/feesinfo"
-	pathMemorySubscriptions          = "/memory/subscriptions"   // TODO
-	pathMemoryUnsubscriptions        = "/memory/unsubscriptions" // TODO
 	pathMemoryAllBlocks              = "/memory/allblocks"
 	pathMemoryProposedBlocks         = "/memory/proposedblocks"
 	pathMemoryMissedBlocks           = "/memory/missedblocks"
@@ -67,11 +67,7 @@ const (
 	pathMemoryPoolStatistics         = "/memory/statistics"
 
 	// Onchain endpoints: what is submitted to the contract
-	pathOnchainValidators             = "/onchain/validators"                     // TODO
-	pathOnchainValidatorByIndex       = "/onchain/validator/{valindex}"           // TODO
-	pathOnchainValidatorsByWithdrawal = "/onchain/validators/{withdrawalAddress}" // TODO
-	pathOnchainMerkleRoot             = "/onchain/merkleroot"                     // TODO:
-	pathOnchainMerkleProof            = "/onchain/proof/{withdrawalAddress}"
+	pathOnchainMerkleProof = "/onchain/proof/{withdrawalAddress}"
 )
 
 type ApiService struct {
@@ -205,9 +201,7 @@ func (m *ApiService) getRouter() http.Handler {
 	// Onchain endpoints
 	r.HandleFunc(pathOnchainMerkleProof, m.handleOnchainMerkleProof).Methods(http.MethodGet)
 
-	//r.HandleFunc(pathLatestCheckpoint, m.handleLatestCheckpoint)
-
-	//not strictly necessary but good to have
+	// Not strictly necessary but good to have
 	r.Use(mux.CORSMethodMiddleware(r))
 	r.Use(prometheusMiddleware)
 
@@ -395,11 +389,11 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		OracleHeadDistance:          finalizedSlot - m.oracle.State().LatestProcessedSlot,
 		NextCheckpointSlot:          m.oracle.State().LatestProcessedSlot + slotsTillNextCheckpoint,
 		NextCheckpointTime:          "", // TODO:
-		NextCheckpointRemaining:     SlotsToTime(slotsTillNextCheckpoint),
+		NextCheckpointRemaining:     utils.SlotsToTime(slotsTillNextCheckpoint),
 		NextCheckpointRemainingUnix: slotsTillNextCheckpoint * SecondsInSlot,
 		PreviousCheckpointSlot:      0,  // TODO:
 		PreviousCheckpointTime:      "", // TODO:
-		PreviousCheckpointAge:       SlotsToTime(slotsFromLastCheckpoint),
+		PreviousCheckpointAge:       utils.SlotsToTime(slotsFromLastCheckpoint),
 		PreviousCheckpointAgeUnix:   slotsFromLastCheckpoint * SecondsInSlot,
 		ExecutionChainId:            chainId.String(),
 		ConsensusChainId:            strconv.FormatUint(depositContract.ChainID, 10),
@@ -427,6 +421,10 @@ func (m *ApiService) handleConfig(w http.ResponseWriter, req *http.Request) {
 }
 
 func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Request) {
+	if !m.OracleReady(uint64(64)) {
+		m.respondError(w, http.StatusServiceUnavailable, "Oracle node is currently syncing and not serving requests")
+		return
+	}
 	validators := maps.Values(m.oracle.State().Validators)
 
 	// Order by index
@@ -449,6 +447,11 @@ func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Req
 }
 
 func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.Request) {
+	if !m.OracleReady(MaxSlotsBehind) {
+		m.respondError(w, http.StatusServiceUnavailable, "Oracle node is currently syncing and not serving requests")
+		return
+	}
+
 	vars := mux.Vars(req)
 	valIndexStr := vars["valindex"]
 	valIndex, ok := IsValidIndex(valIndexStr)
@@ -473,6 +476,11 @@ func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.
 }
 
 func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, req *http.Request) {
+	if !m.OracleReady(MaxSlotsBehind) {
+		m.respondError(w, http.StatusServiceUnavailable, "Oracle node is currently syncing and not serving requests")
+		return
+	}
+
 	vars := mux.Vars(req)
 	withdrawalAddress := vars["withdrawalAddress"]
 
@@ -481,13 +489,6 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 
 	if !IsValidAddress(withdrawalAddress) {
 		m.respondError(w, http.StatusBadRequest, "invalid withdrawalAddress: "+withdrawalAddress)
-		return
-	}
-
-	MaxSlotsBehind := uint64(32 * 3)
-	err := m.OracleReady(MaxSlotsBehind)
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "oracle not ready: "+err.Error())
 		return
 	}
 
@@ -729,6 +730,11 @@ func (m *ApiService) handleMemoryDonations(w http.ResponseWriter, req *http.Requ
 }
 
 func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.Request) {
+	if !m.OracleReady(MaxSlotsBehind) {
+		m.respondError(w, http.StatusServiceUnavailable, "Oracle node is currently syncing and not serving requests")
+		return
+	}
+
 	vars := mux.Vars(req)
 	withdrawalAddress := vars["withdrawalAddress"]
 
@@ -739,14 +745,6 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 	// Use always lowercase
 	withdrawalAddress = strings.ToLower(withdrawalAddress)
-
-	// Error if the oracle is not synced to latest
-	MaxSlotsBehind := uint64(32 * 1)
-	err := m.OracleReady(MaxSlotsBehind)
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "oracle not ready: "+err.Error())
-		return
-	}
 
 	contractRoot, contractSlot, err := m.Onchain.GetOnchainSlotAndRoot(apiRetryOpts...)
 	if err != nil {
@@ -1064,7 +1062,7 @@ func (m *ApiService) ApplyNonFinalizedState(
 	}
 }
 
-func (m *ApiService) OracleReady(maxSlotsBehind uint64) error {
+func (m *ApiService) OracleReady(maxSlotsBehind uint64) bool {
 	// Allow 3 epochs 32*3 slots out of sync (behind latest finalized). This allows to always serve requests since
 	// otherwise the oracle wont be able to reply, since from time to time its normal that it fall behind sync
 	// since it has to process the new epochs that keep arriving.
@@ -1072,7 +1070,7 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) error {
 
 	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), "finalized")
 	if err != nil {
-		return errors.Wrap(err, "could not get consensus latest finalized slot")
+		return false
 	}
 
 	finalizedSlot := uint64(finality.Finalized.Epoch) * SlotsInEpoch
@@ -1086,10 +1084,9 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) error {
 	_ = oracleInSync*/
 
 	if slotsFromFinalized > maxSlotsBehind {
-		return errors.New(fmt.Sprintf("oracle not in sync, try again later: %d slots behind. Max allowed: %d",
-			slotsFromFinalized, maxSlotsBehind))
+		return false
 	}
-	return nil
+	return true
 }
 
 func GetSubInBlock(subs []Subscription, block uint64) []Subscription {
@@ -1110,16 +1107,4 @@ func GetUnsubInBlock(subs []Unsubscription, block uint64) []Unsubscription {
 		}
 	}
 	return filteredUnsubs
-}
-
-// TODO: Duplicated, move to utils and take it from there
-// Converts from slots to readable time (eg 1 day 9 hours 20 minutes)
-func SlotsToTime(slots uint64) string {
-	// Hardcoded. Mainnet Ethereum configuration
-	SecondsInSlot := uint64(12)
-
-	timeduration := time.Duration(slots*SecondsInSlot) * time.Second
-	strDuration := durafmt.Parse(timeduration).String()
-
-	return strDuration
 }
