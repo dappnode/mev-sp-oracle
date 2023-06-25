@@ -65,8 +65,7 @@ Note that the collateral that a validator deposits via its withdrawal address is
 
 The oracle uses the following [state machine](https://excalidraw.com/#json=lnKxFVwNZ82gz7gVZNHoq,m3mIc64GhKrpg3urVyI6dg) to track the status of the different validators that are subscribed to the smoothing pool. Different actions can trigger a state change and in the following image all possible transitions are described.
 
-TODO: Take image from repo
-![statemachine](https://i.ibb.co/YWzW8wX/states.png)
+![statemachine](https://github.com/dappnode/mev-sp-oracle/blob/main/spec/states.png?raw=true)
 
 There are 5 different states a validator can have:
 * `Active`: A validator is active and subscribed to the pool, earning rewards over the time.
@@ -126,10 +125,7 @@ type RawLeaf struct {
 }
 ```
 
-TDO: Get image from repo
-
-
-![trees](https://ibb.co/2Zxzj9p)
+![trees](https://github.com/dappnode/mev-sp-oracle/blob/main/spec/merkles.png?raw=true)
 
 * The merkle tree leafs are ordered by its deposit address in ascending order.
 * The merkle tree is prepended (first element) with a leaf containing `POOL_FEES_ADDRESS` and the accumulated balance. See rewards calculation section.
