@@ -135,6 +135,11 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		return nil, errors.Wrap(err, "Error instantiating contract")
 	}
 
+	var updaterAddress common.Address
+	if updaterKey != nil {
+		updaterAddress = crypto.PubkeyToAddress(updaterKey.PublicKey)
+	}
+
 	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
@@ -142,7 +147,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		Contract:        contract,
 		NumRetries:      cliCfg.NumRetries,
 		updaterKey:      updaterKey,
-		UpdaterAddress:  crypto.PubkeyToAddress(updaterKey.PublicKey),
+		UpdaterAddress:  updaterAddress,
 	}, nil
 }
 
