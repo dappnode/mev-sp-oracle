@@ -6,6 +6,7 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/ethereum/go-ethereum/common"
@@ -18,7 +19,7 @@ func Test_ApplyNonFinalizedState_Subscription(t *testing.T) {
 
 	api := NewApiService(&oracle.Config{
 		CollateralInWei: big.NewInt(1000),
-	}, nil, nil)
+	}, &config.CliConfig{ApiPort: 7300}, nil, nil)
 
 	type test struct {
 		Collateral          *big.Int
@@ -103,7 +104,7 @@ func Test_ApplyNonFinalizedState_Subscription(t *testing.T) {
 func Test_ApplyNonFinalizedState_Unsubscribe(t *testing.T) {
 	api := NewApiService(&oracle.Config{
 		CollateralInWei: big.NewInt(1000),
-	}, nil, nil)
+	}, &config.CliConfig{ApiPort: 7300}, nil, nil)
 
 	type test struct {
 		OracleState         oracle.ValidatorStatus
@@ -160,7 +161,7 @@ func Test_ApplyNonFinalizedState_Unsubscribe(t *testing.T) {
 func Test_ApplyNonFinalizedState_MultipleEvents(t *testing.T) {
 	api := NewApiService(&oracle.Config{
 		CollateralInWei: big.NewInt(1000),
-	}, nil, nil)
+	}, &config.CliConfig{ApiPort: 7300}, nil, nil)
 
 	validators := map[uint64]*oracle.ValidatorInfo{
 		1: {

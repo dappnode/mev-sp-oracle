@@ -273,10 +273,15 @@ func (or *Oracle) SaveToJson(saveSlot bool) error {
 // check are performed to ensure the state is valid such as checking
 // the hash of the state and ensuring the configuation has not changed
 func (or *Oracle) LoadFromJson() (bool, error) {
+	path := filepath.Join(StateFolder, StateJsonName)
+	has, err := or.loadFromJson(path)
+	return has, err
+}
+
+func (or *Oracle) loadFromJson(path string) (bool, error) {
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
 
-	path := filepath.Join(StateFolder, StateJsonName)
 	log.Info("Loading oracle state from json file: ", path)
 
 	jsonFile, err := os.Open(path)
@@ -379,6 +384,31 @@ func (or *Oracle) LoadFromJson() (bool, error) {
 	}).Info("Loaded state from file")
 
 	return true, nil
+}
+
+func (or *Oracle) LoadGivenState(slotCheckpoint uint64) (bool, error) {
+	// Try to load the given state
+	path := filepath.Join(StateFolder, fmt.Sprintf("state_%d.json", slotCheckpoint))
+	has, err := or.loadFromJson(path)
+	if err != nil {
+		return false, err
+	}
+
+	// If not found, attemp to load previous states up to "attempts" checkpoints before
+	attempts := 3
+	if !has {
+		for i := 1; i < attempts; i++ {
+			trySlot := slotCheckpoint - or.cfg.CheckPointSizeInSlots*uint64(i)
+			log.Info("Could not find slot for checkpoint, ", slotCheckpoint, ", trying slot: ", trySlot)
+			path = filepath.Join(StateFolder, fmt.Sprintf("state_%d.json", trySlot))
+			has, err = or.loadFromJson(path)
+			if has {
+				break
+			}
+		}
+	}
+
+	return has, err
 }
 
 // Takes the current state, creates a copy of it and freezes it, storing
