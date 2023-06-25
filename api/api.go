@@ -81,12 +81,13 @@ type ApiService struct {
 
 func NewApiService(
 	cfg *oracle.Config,
+	cliCfg *config.CliConfig,
 	oracle *oracle.Oracle,
 	onchain *oracle.Onchain) *ApiService {
 
 	return &ApiService{
 		// TODO: configure, add cli flag
-		ApiListenAddr: "0.0.0.0:7300",
+		ApiListenAddr: fmt.Sprintf("0.0.0.0:%d", cliCfg.ApiPort),
 		cfg:           cfg,
 		oracle:        oracle,
 		Onchain:       onchain,

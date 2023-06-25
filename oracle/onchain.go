@@ -55,6 +55,7 @@ type Onchain struct {
 	Contract        *contract.Contract
 	NumRetries      int
 	updaterKey      *ecdsa.PrivateKey
+	UpdaterAddress  common.Address
 
 	// This is not used only by the api TOOD: remove?
 	validators map[phase0.ValidatorIndex]*v1.Validator
@@ -141,6 +142,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		Contract:        contract,
 		NumRetries:      cliCfg.NumRetries,
 		updaterKey:      updaterKey,
+		UpdaterAddress:  crypto.PubkeyToAddress(updaterKey.PublicKey),
 	}, nil
 }
 
@@ -393,6 +395,47 @@ func (o *Onchain) IsAddressWhitelisted(address common.Address, opts ...retry.Opt
 		}
 	}
 	return false, nil
+}
+
+type ReportType struct {
+	Slot  uint64
+	Votes uint64
+}
+
+func (o *Onchain) GetAddressToVotedReport(address common.Address, opts ...retry.Option) (ReportType, error) {
+	var reportHash [32]byte
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			var err error
+			reportHash, err = o.Contract.AddressToVotedReportHash(callOpts, address)
+			if err != nil {
+				log.Warn("Failed attempt to get address to voted report from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get address to voted report from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return ReportType{}, errors.New("could not get address to voted report from contract: " + err.Error())
+	}
+
+	var report ReportType
+	err = retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			var err error
+			report, err = o.Contract.ReportHashToReport(callOpts, reportHash)
+			if err != nil {
+				log.Warn("Failed attempt to get report from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get report from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+	if err != nil {
+		return ReportType{}, errors.New("could not get report from contract: " + err.Error())
+	}
+	return report, nil
 }
 
 func (o *Onchain) GetAllOracleMembers(opts ...retry.Option) ([]common.Address, error) {
@@ -1388,6 +1431,7 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) er
 	log.WithFields(log.Fields{
 		"TxHash":        tx.Hash().Hex(),
 		"NewMerkleRoot": newMerkleRoot,
+		"Slot":          slot,
 	}).Info("Tx sent to Ethereum updating rewards merkle root, wait to be validated")
 
 	// Leave 60 minutes for the tx to be validated

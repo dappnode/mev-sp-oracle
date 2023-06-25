@@ -18,6 +18,8 @@ type CliConfig struct {
 	ExecutionEndpoint string
 	PoolAddress       string
 	LogLevel          string
+	ApiPort           int
+	MetricsPort       int
 }
 
 // By default the release is a custom build. CI takes care of upgrading it with
@@ -53,6 +55,8 @@ func NewCliConfig() (*CliConfig, error) {
 	var updaterKeystorePass = flag.String("updater-keystore-pass", "", "Password of the updater keystore file")
 	var numRetries = flag.Int("num-retries", 0, "Number of retries for each interaction (consensus, execution): 0 infinite")
 	var logLevel = flag.String("log-level", "info", "Logging verbosity (trace, debug, info=default, warn, error, fatal, panic)")
+	var apiPort = flag.Int("api-port", 7300, "Port for the API server")
+	var metricsPort = flag.Int("metrics-port", 8008, "Port for the metrics server")
 
 	// Mandatory flags:
 	var consensusEndpoint = flag.String("consensus-endpoint", "", "Ethereum consensus endpoint")
@@ -97,6 +101,8 @@ func NewCliConfig() (*CliConfig, error) {
 		ExecutionEndpoint: *executionEndpoint,
 		PoolAddress:       *poolAddress,
 		LogLevel:          *logLevel,
+		ApiPort:           *apiPort,
+		MetricsPort:       *metricsPort,
 	}
 	logConfig(cliConf)
 	return cliConf, nil
@@ -112,5 +118,7 @@ func logConfig(cfg *CliConfig) {
 		"ExecutionEndpoint": cfg.ExecutionEndpoint,
 		"PoolAddress":       cfg.PoolAddress,
 		"LogLevel":          cfg.LogLevel,
+		"ApiPort":           cfg.ApiPort,
+		"MetricsPort":       cfg.MetricsPort,
 	}).Info("Cli Config:")
 }
