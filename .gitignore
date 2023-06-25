@@ -15,3 +15,5 @@ deployments/oracle-logs
 state.gob
 state.json
 state_unused.gob
+oracle-logs/*
+keystore_latest

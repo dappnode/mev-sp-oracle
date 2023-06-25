@@ -91,14 +91,19 @@ func Test_IsAddressWhitelisted(t *testing.T) {
 	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
 		ExecutionEndpoint: "http://127.0.0.1:8545",
-		PoolAddress:       "0x8eba4a4a8d4dfa78bcb734efd1ea9f33b61e3243",
+		PoolAddress:       "0xF21fbbA423f3a893A2402d68240B219308AbCA46",
 	}
 	onchain, err := NewOnchain(cfgOnchain, nil)
 	require.NoError(t, err)
 
 	// Hardcoded for this contract: https://goerli.etherscan.io/address/0x8eba4A4A8d4DFa78BCB734efD1eA9f33b61e3243
-	deployedBlock := uint64(9094304)
-	isWhitelisted, err := onchain.IsAddressWhitelisted(deployedBlock, "0x14264aD0471ee1f068CFAC40A9FcC352274ced56")
+	address := common.HexToAddress("0x8eba4a4a8d4dfa78bcb734efd1ea9f33b61e3243")
+	isWhitelisted, err := onchain.IsAddressWhitelisted(address)
+	require.NoError(t, err)
+	require.Equal(t, false, isWhitelisted)
+
+	address = common.HexToAddress("0x0017914E98A2f791D59038EC10325152AC1D7438")
+	isWhitelisted, err = onchain.IsAddressWhitelisted(address)
 	require.NoError(t, err)
 	require.Equal(t, true, isWhitelisted)
 }

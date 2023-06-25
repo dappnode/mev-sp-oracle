@@ -370,76 +370,70 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 	return header, receipts, nil
 }
 
-func (o *Onchain) IsAddressWhitelisted(
-	deployedBlock uint64,
-	address string,
-	opts ...retry.Option) (bool, error) {
-
-	var err error
-
-	latestBlock, err := o.ExecutionClient.BlockNumber(context.Background())
-	if err != nil {
-		return false, errors.New("Error getting latest block number: " + err.Error())
-	}
-
-	if deployedBlock > latestBlock {
-		return false, errors.New(fmt.Sprintf("Deployed block is higher than latest block: %d > %d",
-			deployedBlock, latestBlock))
-	}
-
-	// How many blocks to check at once. A very high value can choke the node
-	// Around 10k to 30k should be a reasonable value. 30k is around 4 days of
-	// events in one call.
-	chunkSize := uint64(30000)
-
-	// Listen for even since the deployed block till the latest block in
-	// increments of chunkSize
-	for start := deployedBlock; start < latestBlock; start += chunkSize {
-		end := start + chunkSize - 1
-
-		if end > latestBlock {
-			end = latestBlock
-		}
-
-		log.Info("Checking whitelist events from block ", start, " to ", end)
-
-		filterOpts := &bind.FilterOpts{Context: context.Background(), Start: start, End: &end}
-
-		var itr *contract.ContractAddOracleMemberIterator
-
-		err = retry.Do(func() error {
-			itr, err = o.Contract.FilterAddOracleMember(filterOpts)
+func (o *Onchain) IsAddressWhitelisted(address common.Address, opts ...retry.Option) (bool, error) {
+	var whitelistedAddresses []common.Address
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			var err error
+			whitelistedAddresses, err = o.Contract.GetAllOracleMembers(callOpts)
 			if err != nil {
-				log.Warn("Failed attempt to filter AddOracleMember event. Retrying...")
-				return errors.New("Failed attempt to filter AddOracleMember event. Retrying...")
+				log.Warn("Failed attempt to get all oracle members from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get all oracle members from contract: " + err.Error())
 			}
 			return nil
 		}, o.GetRetryOpts(opts)...)
 
-		if err != nil {
-			return false, errors.New("Error getting AddOracleMember events")
-		}
-
-		// Loop over all found events
-		for itr.Next() {
-			newOracleMember := itr.Event.NewOracleMember.String()
-
-			// If we found an event with the address we are looking for, return true
-			// as it means the address is whitelisted
-			if utils.Equals(address, newOracleMember) {
-				log.WithFields(log.Fields{
-					"TxHash":          itr.Event.Raw.TxHash.String(),
-					"NewOracleMember": itr.Event.NewOracleMember.String(),
-				}).Info("Detected AddOracleMember with selected account")
-				return true, nil
-			}
-		}
-		err = itr.Close()
-		if err != nil {
-			log.Fatal("could not close iterator for new donation events", err)
+	if err != nil {
+		return false, errors.New("could not get all oracle members from contract: " + err.Error())
+	}
+	for _, whitelistedAddress := range whitelistedAddresses {
+		if whitelistedAddress == address {
+			return true, nil
 		}
 	}
 	return false, nil
+}
+
+func (o *Onchain) GetAllOracleMembers(opts ...retry.Option) ([]common.Address, error) {
+	var addresses []common.Address
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			var err error
+			addresses, err = o.Contract.GetAllOracleMembers(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get all oracle members from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get all oracle members from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("could not get all oracle members from contract: " + err.Error())
+	}
+
+	return addresses, nil
+}
+
+func (o *Onchain) GetQuorum(opts ...retry.Option) (uint64, error) {
+	var quorum uint64
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			var err error
+			quorum, err = o.Contract.Quorum(callOpts)
+			if err != nil {
+				log.Warn("Failed attempt to get quorum from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get quorum from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return 0, errors.New("could not get quorum from contract: " + err.Error())
+	}
+	return quorum, nil
 }
 
 func (o *Onchain) GetContractCollateral(opts ...retry.Option) (*big.Int, error) {
@@ -654,6 +648,27 @@ func (o *Onchain) GetPoolEthBalance(blockNumber *big.Int, opts ...retry.Option) 
 		// If block number is nil latest known block is used
 		balanceWei, err = o.ExecutionClient.BalanceAt(context.Background(), account, blockNumber)
 		if err != nil {
+			log.Warn("Failed attempt to get balance for pool address ", account.String(), ": ", err.Error(), " Retrying...")
+			return errors.New("could not get balance for pool address " + account.String() + ": " + err.Error())
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("could not get balance for pool address " + account.String() + ": " + err.Error())
+	}
+
+	return balanceWei, nil
+}
+
+func (o *Onchain) GetAddressEthBalance(account common.Address, opts ...retry.Option) (*big.Int, error) {
+	var err error
+	var balanceWei *big.Int
+
+	err = retry.Do(func() error {
+		// If block number is nil latest known block is used
+		balanceWei, err = o.ExecutionClient.BalanceAt(context.Background(), account, nil)
+		if err != nil {
 			log.Warn("Failed attempt to get balance for address ", account.String(), ": ", err.Error(), " Retrying...")
 			return errors.New("could not get balance for address " + account.String() + ": " + err.Error())
 		}
@@ -844,32 +859,37 @@ func (onchain *Onchain) GetConfigFromContract(
 	}
 	log.Info("Pool address balance: ", utils.WeiToEther(balance), " Eth")
 
+	// We get the block when the contract was deployed from the contract itself
 	deployedBlock, err := onchain.GetContractDeploymentBlock()
 	if err != nil {
 		log.Fatal("Could not get contract deployment block: " + err.Error())
 	}
 	log.Info("[Loaded from contract] Contract deployed at block: ", deployedBlock)
 
+	// Get that block from the execution layer
 	block, err := onchain.BlockByNumber(deployedBlock)
 	if err != nil {
 		log.Fatal("Could not get block by number: " + err.Error())
 	}
 
+	// Calculate the corresponding slot given the block time and genesis time
 	blockTime := block.Time()
 	SecondsInSlot := uint64(12)
 	deployedSlot := (blockTime - genesisTime) / SecondsInSlot
 
-	/* TODO:
+	// Now we get the info at that slot from the consensus client
 	blockAtSlot, err := onchain.GetConsensusBlockAtSlot(deployedSlot)
 	if err != nil {
 		log.Fatal("Could not get block at slot: " + err.Error())
 	}
 
-	customBlockAtSlot := oracle.VersionedSignedBeaconBlock{blockAtSlot}
-	if customBlockAtSlot.GetBlockNumber() != deployedBlock.Uint64() {
-		log.Fatal("Could not map the deployed block with a slot, missmatch: ",
-			customBlockAtSlot.GetBlockNumber(), " != ", deployedBlock)
-	}*/
+	fullBlock := FullBlock{ConsensusBlock: blockAtSlot}
+
+	// And assert that indeed it matches
+	if fullBlock.GetBlockNumber() != deployedBlock.Uint64() {
+		log.Fatal("Block number from consensus and execution client dont match: ",
+			fullBlock.GetBlockNumber(), " != ", deployedBlock.Uint64())
+	}
 
 	log.Info("[Loaded from contract] Contract deployed in slot: ", deployedSlot)
 
@@ -901,8 +921,21 @@ func (onchain *Onchain) GetConfigFromContract(
 	if cliCfg.DryRun {
 		log.Warn("The pool contract WILL NOT be updated, running in dry-run mode")
 	} else {
-		log.Warn("The pool contract WILL BE updated, running in normal mode")
+		log.Warn("The pool contract WILL BE updated, running in updater mode")
 	}
+
+	whitelistedAddresses, err := onchain.GetAllOracleMembers()
+	if err != nil {
+		log.Fatal("Could not get whitelisted addresses: " + err.Error())
+	}
+
+	log.Info("[Loaded from contract] Whitelisted addresses: ", whitelistedAddresses)
+
+	quorum, err := onchain.GetQuorum()
+	if err != nil {
+		log.Fatal("Could not get quorum: " + err.Error())
+	}
+	log.Info("[Loaded from contract] Quorum: ", quorum, "/", len(whitelistedAddresses))
 
 	conf := &Config{
 		ConsensusEndpoint:        cliCfg.ConsensusEndpoint,
