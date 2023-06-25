@@ -57,7 +57,9 @@ Running in `verifier` mode:
 --dry-run
 ```
 
-## How to deploy
+## Deployments
+
+This repo contains not only the oracle software but also a docker-compose with all required components such as consensus, execution clients and prometheus/grafana to monitor the setup. Everything is provisioned, so you just need to do the following.
 
 ### Goerli Testnet
 
@@ -65,8 +67,6 @@ Running in `verifier` mode:
 $ sudo openssl rand -hex 32 > jwtsecret
 $ chmod 777 teku
 ```
-
-Goerli deposit contract is `0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b` but some validators were predeposited, so not all of the will be indexes and most likely doesn't have a deposit address observable onchain.
 
 Store in `.env` so that it's picked up by `docker-compose`
 
