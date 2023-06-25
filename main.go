@@ -136,6 +136,20 @@ func main() {
 		log.Info("Found previous state to continue syncing")
 	}
 
+	// Get onchain root and slot
+	_, onchainSlot, err := onchain.GetOnchainSlotAndRoot()
+	if err != nil {
+		log.Fatal("Could not get onchain slot and root: ", err)
+	}
+
+	latestCommited, _ := oracleInstance.LatestCommitedSlot()
+
+	// Check that the oracle hasnt synced beyond the onchain slot. Only if not dry run
+	if !cfg.DryRun && latestCommited > onchainSlot {
+		log.Fatal("The loaded state goes beyond the onchain slot, please restore to a previous state file and restart the oracle. onchainSlot=",
+			onchainSlot, " latestCommited=", latestCommited)
+	}
+
 	api := api.NewApiService(cfg, oracleInstance, onchain)
 
 	metrics.RunMetrics(8008)
@@ -315,36 +329,40 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			}
 
 			// If the oracle has permission to update the contract root (!dryRun), we have enough data
-			// to construct a merkle tree and also the new state slot is the one onchain + checkpoint size
-			// Then we can update the new merkle root
-			if !cfg.DryRun && enoughData && newState.Slot == onchainSlot+cfg.CheckPointSizeInSlots {
-				err := onchain.UpdateContractMerkleRoot(newState.Slot, newState.MerkleRoot)
-				if err != nil {
-					// There is a very improbable case that this tx is expected to fail. If quorum is n for
-					// m oracles, if n+1 oracles submit the tx at the same time, the last tx will revert.
-					// In this case it would be expected to fail, but note that the above delay should
-					// prevent this from happening.
-					log.Fatal("Could not update contract merkle root: ", err)
-				}
-
-				// Wait until the state we submitted is consolidated in the contract
-				for {
-					onchainRoot, onchainSlot, err = onchain.GetOnchainSlotAndRoot()
+			// to construct a merkle tree.
+			if !cfg.DryRun && enoughData {
+				// If the new state is the one onchain + checkpoint size then its time to update the root
+				// Then we can update the new merkle root. onchainSlot == 0 is an special case when the
+				// contract was just initialized and there is no root yet.
+				if (newState.Slot == onchainSlot+cfg.CheckPointSizeInSlots) || onchainSlot == 0 {
+					err := onchain.UpdateContractMerkleRoot(newState.Slot, newState.MerkleRoot)
 					if err != nil {
-						log.Fatal("Could not get onchain slot and root: ", err)
+						// There is a very improbable case that this tx is expected to fail. If quorum is n for
+						// m oracles, if n+1 oracles submit the tx at the same time, the last tx will revert.
+						// In this case it would be expected to fail, but note that the above delay should
+						// prevent this from happening.
+						log.Fatal("Could not update contract merkle root: ", err)
 					}
 
-					if onchainRoot == newState.MerkleRoot && onchainSlot == newState.Slot {
-						log.WithFields(log.Fields{
-							"OnchainRoot": onchainRoot,
-							"OnchainSlot": onchainSlot,
-							"OracleRoot":  newState.MerkleRoot,
-							"OracleSlot":  newState.Slot,
-						}).Info("The submitted state is now consolidated in the contract")
-						break
-					} else {
-						log.Info("Submitted merkle root is not consolidated, waiting for other oracles to update it")
-						time.Sleep(1 * time.Minute)
+					// Wait until the state we submitted is consolidated in the contract
+					for {
+						onchainRoot, onchainSlot, err = onchain.GetOnchainSlotAndRoot()
+						if err != nil {
+							log.Fatal("Could not get onchain slot and root: ", err)
+						}
+
+						if onchainRoot == newState.MerkleRoot && onchainSlot == newState.Slot {
+							log.WithFields(log.Fields{
+								"OnchainRoot": onchainRoot,
+								"OnchainSlot": onchainSlot,
+								"OracleRoot":  newState.MerkleRoot,
+								"OracleSlot":  newState.Slot,
+							}).Info("The submitted state is now consolidated in the contract")
+							break
+						} else {
+							log.Info("Submitted merkle root is not consolidated, waiting for other oracles to update it")
+							time.Sleep(1 * time.Minute)
+						}
 					}
 				}
 			}
