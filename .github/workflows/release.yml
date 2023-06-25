@@ -45,3 +45,4 @@ jobs:
             ${{env.LASTEST_TAG}}
           build-args: |
             ${{steps.version_step.outputs.version}}
+            BUILD_VERSION=${{ steps.commit.outputs.hash }}
