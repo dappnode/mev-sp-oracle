@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"io"
+	"math/big"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/metrics"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/dappnode/mev-sp-oracle/utils"
+	"github.com/ethereum/go-ethereum/common"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -28,23 +30,10 @@ var SlotsInEpoch = uint64(32)
 var UpdateValidatorsIntervalSlots = uint64(600)
 
 // logs file and path
-const logsName = "logs.txt"
-const logsPath = "oracle-logs"
+const LogsName = "logs.txt"
+const LogsFolder = "oracle-logs"
 
 func main() {
-	//file is created if not exists, otherwise it appends errors to the existing file
-	//0666 means permisions to read and write to all users, but not execute
-	file, err := os.OpenFile(filepath.Join(logsPath, logsName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatal("error opening or creating the oracleLogs.txt file: ", err)
-	}
-	defer file.Close()
-
-	// Create a MultiWriter with file and stdout
-	multiWriter := io.MultiWriter(os.Stdout, file)
-	// Set log output to the MultiWriter
-	log.SetOutput(multiWriter)
-
 	// Load config from cli
 	cliCfg, err := config.NewCliConfig()
 	if err != nil {
@@ -54,8 +43,27 @@ func main() {
 	customFormatter := new(log.TextFormatter)
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
 	customFormatter.FullTimestamp = true
+	customFormatter.DisableColors = true
 	log.SetFormatter(customFormatter)
 	//log.SetReportCaller(true)
+
+	//file is created if not exists, otherwise it appends errors to the existing file
+	//0666 means permisions to read and write to all users, but not execute
+	err = os.MkdirAll(LogsFolder, os.ModePerm)
+	if err != nil {
+		log.Fatal("error creating the oracleLogs.txt folder: ", err)
+	}
+	file, err := os.OpenFile(filepath.Join(LogsFolder, LogsName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal("error opening or creating the oracleLogs.txt file: ", err)
+	}
+	log.Info("Persisting logs in ", file.Name())
+	defer file.Close()
+
+	// Create a MultiWriter with file and stdout
+	multiWriter := io.MultiWriter(os.Stdout, file)
+	// Set log output to the MultiWriter
+	log.SetOutput(multiWriter)
 
 	log.Info("Starting smoothing pool oracle")
 	log.Info("Version: ", config.ReleaseVersion)
@@ -70,15 +78,15 @@ func main() {
 
 	// Load key with rights to update the oracle (if not dry run)
 	var updaterKey *ecdsa.PrivateKey
-	var updaterAddress string
+	var updaterAddress common.Address
 	if !cliCfg.DryRun {
 		keystore, err := utils.DecryptKey(cliCfg)
 		if err != nil {
 			log.Fatal("Could not decrypt updater key: ", err)
 		}
 		updaterKey = keystore.PrivateKey
-		updaterAddress = keystore.Address.String()
-		log.Info("Oracle contract will be update with address: ", updaterAddress)
+		updaterAddress = keystore.Address
+		log.Info("Oracle contract will be updated with new roots using address: ", updaterAddress.String())
 	}
 
 	// Instance of the onchain object to handle onchain interactions
@@ -87,21 +95,33 @@ func main() {
 		log.Fatal("Could not create new onchain object: ", err)
 	}
 
-	// Populate config, most of the parameters are loaded from the smart contract
-	cfg := onchain.GetConfigFromContract(cliCfg)
-
-	// If we are not in dry run mode, means this instance will update the contract
-	if !cfg.DryRun {
-		log.Info("Checking if configured address ", updaterAddress, " is whitelisted to update the contract")
-		isWhitelisted, err := onchain.IsAddressWhitelisted(cfg.DeployedBlock, updaterAddress)
+	if !cliCfg.DryRun {
+		log.Info("Checking if configured address ", updaterAddress.String(), " is whitelisted to update the contract")
+		isWhitelisted, err := onchain.IsAddressWhitelisted(updaterAddress)
 		if err != nil {
 			log.Fatal("Could not get whitelist status: " + err.Error())
 		}
 		if !isWhitelisted {
 			log.Fatal("Pool address is not whitelisted, please run the 'whitelist' command first")
 		}
-		log.Info("Ok ", updaterAddress, " is whitelisted")
+		log.Info("Ok ", updaterAddress.String(), " is whitelisted")
+
+		// Check the updater address has some Eth balance
+		balance, err := onchain.GetAddressEthBalance(updaterAddress)
+		if err != nil {
+			log.Fatal("Could not get updater address balance: ", err)
+		}
+
+		// Ensure it has balance, otherwise it wont be able to pay tx fees
+		if balance.Cmp(big.NewInt(0)) == 0 {
+			log.Fatal("Updater address: ", updaterAddress.String(), " has no balance, please send some Eth to it")
+		} else {
+			log.Info("Updater address: ", updaterAddress.String(), " has balance: ", utils.WeiToEther(balance), "Eth, ensure its enough to cover txs during some time")
+		}
 	}
+
+	// Populate config, most of the parameters are loaded from the smart contract
+	cfg := onchain.GetConfigFromContract(cliCfg)
 
 	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)

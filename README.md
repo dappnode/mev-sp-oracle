@@ -42,11 +42,11 @@ Running in `updater` mode:
 --consensus-endpoint="http://127.0.0.1:5051" \
 --execution-endpoint="http://127.0.0.1:8545" \
 --pool-address=0xF21fbbA423f3a893A2402d68240B219308AbCA46 \
---updater-keystore-path=xxx \
---updater-keystore-pass=yyy
+--updater-keystore-path=keystore-path \
+--updater-keystore-pass=password-of-keystore
 ```
 
-Running in verifier mode:
+Running in `verifier` mode:
 
 ```
 ./mev-sp-oracle \
@@ -59,10 +59,6 @@ Running in verifier mode:
 ## How to deploy
 
 ### Goerli Testnet
-
-Debug tools:
-* https://prater.beaconcha.in
-* https://goerli.etherscan.io
 
 ```console
 $ sudo openssl rand -hex 32 > jwtsecret
