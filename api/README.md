@@ -23,6 +23,11 @@ Returns if a given validator public key is registered in a set of relays. Use to
 curl 157.90.93.245:7300/registeredrelays/0xb1ce83f50ba296bdfedba0e4a42a65f8cee1bdeb2ba78aaa61b452141684930406412bbef6c0f65b4121f8fc82dbb6ba
 ```
 
+Returns the whole oracle state.
+```
+curl 157.90.93.245:7300/state
+```
+
 
 ## Memory endpoints
 

@@ -86,7 +86,6 @@ func NewApiService(
 	onchain *oracle.Onchain) *ApiService {
 
 	return &ApiService{
-		// TODO: configure, add cli flag
 		ApiListenAddr: fmt.Sprintf("0.0.0.0:%d", cliCfg.ApiPort),
 		cfg:           cfg,
 		oracle:        oracle,
@@ -897,7 +896,12 @@ func (m *ApiService) handleState(w http.ResponseWriter, req *http.Request) {
 	// Just dump the whole known state of the oracle. This is useful for debugging. Note that
 	// if the state becomes too big, we may need to page it here. This use the same type
 	// as the oracle state type.
-	m.respondOK(w, m.oracle.State())
+	state, err := m.oracle.StateWithHash()
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get state: "+err.Error())
+		return
+	}
+	m.respondOK(w, state)
 }
 
 func IsValidIndex(v string) (uint64, bool) {
