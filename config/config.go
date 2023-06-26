@@ -20,6 +20,7 @@ type CliConfig struct {
 	LogLevel          string
 	ApiPort           int
 	MetricsPort       int
+	CheckPointSyncUrl string
 }
 
 // By default the release is a custom build. CI takes care of upgrading it with
@@ -57,6 +58,7 @@ func NewCliConfig() (*CliConfig, error) {
 	var logLevel = flag.String("log-level", "info", "Logging verbosity (trace, debug, info=default, warn, error, fatal, panic)")
 	var apiPort = flag.Int("api-port", 7300, "Port for the API server")
 	var metricsPort = flag.Int("metrics-port", 8008, "Port for the metrics server")
+	var checkPointSyncUrl = flag.String("checkpoint-sync-url", "", "URL for the checkpoint sync server: http://url:port/state")
 
 	// Mandatory flags:
 	var consensusEndpoint = flag.String("consensus-endpoint", "", "Ethereum consensus endpoint")
@@ -103,6 +105,7 @@ func NewCliConfig() (*CliConfig, error) {
 		LogLevel:          *logLevel,
 		ApiPort:           *apiPort,
 		MetricsPort:       *metricsPort,
+		CheckPointSyncUrl: *checkPointSyncUrl,
 	}
 	logConfig(cliConf)
 	return cliConf, nil
@@ -120,5 +123,6 @@ func logConfig(cfg *CliConfig) {
 		"LogLevel":          cfg.LogLevel,
 		"ApiPort":           cfg.ApiPort,
 		"MetricsPort":       cfg.MetricsPort,
+		"CheckPointSyncUrl": cfg.CheckPointSyncUrl,
 	}).Info("Cli Config:")
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/big"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -127,14 +128,39 @@ func main() {
 	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)
 
-	found, err := oracleInstance.LoadFromJson()
-	if err != nil {
-		log.Fatal("Critical error loading state from json: ", err)
-	}
-	if !found {
-		log.Warn("Previous state not found or could not be loaded, syncing from the begining slot=", oracleInstance.State().DeployedSlot)
+	// If checkpoint sync url is provided, load state from it
+	if cliCfg.CheckPointSyncUrl != "" {
+		log.Warn("Checkpoint sync url provided, loading state from it. Ensure you trust the provider: ", cliCfg.CheckPointSyncUrl)
+		resp, err := http.Get(cliCfg.CheckPointSyncUrl)
+		if err != nil {
+			log.Fatal("Could not call checkpoint sync endpoint: ", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Fatal("Got error: ", resp.Status, " from checkpoint sync url: ", cliCfg.CheckPointSyncUrl)
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal("Could not read response body: ", err)
+		}
+
+		_, err = oracleInstance.LoadFromBytes(bodyBytes)
+		if err != nil {
+			log.Fatal("Critical error loading state from checkpoint: ", err)
+		}
+
 	} else {
-		log.Info("Found previous state to continue syncing")
+		found, err := oracleInstance.LoadFromJson()
+		if err != nil {
+			log.Fatal("Critical error loading state from json: ", err)
+		}
+		if !found {
+			log.Warn("Previous state not found or could not be loaded, syncing from the begining slot=", oracleInstance.State().DeployedSlot)
+		} else {
+			log.Info("Found previous state to continue syncing")
+		}
 	}
 
 	// Get onchain root and slot

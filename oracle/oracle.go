@@ -77,6 +77,20 @@ func (or *Oracle) State() *OracleState {
 	return or.state
 }
 
+// Returns the state of the oracle, recalculating the hash of the state for
+// verification purposes
+func (or *Oracle) StateWithHash() (*OracleState, error) {
+	or.mutex.Lock()
+
+	// Update hash
+	err := or.hashStateLockFree()
+	if err != nil {
+		return nil, errors.Wrap(err, "error hashing the oracle state")
+	}
+	or.mutex.Unlock()
+	return or.State(), nil
+}
+
 // Sets the known validators from the beacon chain, must be updated regularly
 func (or *Oracle) SetBeaconValidators(
 	validators map[phase0.ValidatorIndex]*v1.Validator) {
@@ -274,11 +288,11 @@ func (or *Oracle) SaveToJson(saveSlot bool) error {
 // the hash of the state and ensuring the configuation has not changed
 func (or *Oracle) LoadFromJson() (bool, error) {
 	path := filepath.Join(StateFolder, StateJsonName)
-	has, err := or.loadFromJson(path)
+	has, err := or.LoadFromPath(path)
 	return has, err
 }
 
-func (or *Oracle) loadFromJson(path string) (bool, error) {
+func (or *Oracle) LoadFromPath(path string) (bool, error) {
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
 
@@ -297,9 +311,15 @@ func (or *Oracle) loadFromJson(path string) (bool, error) {
 		return false, errors.Wrap(err, "could not read json file")
 	}
 
+	found, err := or.LoadFromBytes(byteValue)
+
+	return found, err
+}
+
+func (or *Oracle) LoadFromBytes(rawBytes []byte) (bool, error) {
 	var state OracleState
 
-	err = json.Unmarshal(byteValue, &state)
+	err := json.Unmarshal(rawBytes, &state)
 	if err != nil {
 		return false, errors.Wrap(err, "could not unmarshal json file")
 	}
@@ -320,12 +340,12 @@ func (or *Oracle) loadFromJson(path string) (bool, error) {
 
 	// We calculate the hash of the state we read
 	calculatedHashByte := sha256.Sum256(jsonNoHash[:])
-	calculatedHashStrig := hexutil.Encode(calculatedHashByte[:])
+	calculatedHashString := hexutil.Encode(calculatedHashByte[:])
 
 	// Hashes must match
-	if !utils.Equals(recoveredHash, calculatedHashStrig) {
+	if !utils.Equals(recoveredHash, calculatedHashString) {
 		return false, errors.New(fmt.Sprintf("hash mismatch, recovered: %s, calculated: %s",
-			recoveredHash, calculatedHashStrig))
+			recoveredHash, calculatedHashString))
 	}
 
 	// Sanity check to ensure the oracle config matches the loaded state
@@ -373,7 +393,6 @@ func (or *Oracle) loadFromJson(path string) (bool, error) {
 
 	mRoot, enoughData := or.getMerkleRootIfAny()
 	log.WithFields(log.Fields{
-		"Path":                 path,
 		"LatestProcessedSlot":  state.LatestProcessedSlot,
 		"LatestProcessedBlock": state.LatestProcessedBlock,
 		"NextSlotToProcess":    state.NextSlotToProcess,
@@ -382,14 +401,13 @@ func (or *Oracle) loadFromJson(path string) (bool, error) {
 		"MerkleRoot":           mRoot,
 		"EnoughData":           enoughData,
 	}).Info("Loaded state from file")
-
 	return true, nil
 }
 
 func (or *Oracle) LoadGivenState(slotCheckpoint uint64) (bool, error) {
 	// Try to load the given state
 	path := filepath.Join(StateFolder, fmt.Sprintf("state_%d.json", slotCheckpoint))
-	has, err := or.loadFromJson(path)
+	has, err := or.LoadFromPath(path)
 	if err != nil {
 		return false, err
 	}
@@ -401,7 +419,7 @@ func (or *Oracle) LoadGivenState(slotCheckpoint uint64) (bool, error) {
 			trySlot := slotCheckpoint - or.cfg.CheckPointSizeInSlots*uint64(i)
 			log.Info("Could not find slot for checkpoint, ", slotCheckpoint, ", trying slot: ", trySlot)
 			path = filepath.Join(StateFolder, fmt.Sprintf("state_%d.json", trySlot))
-			has, err = or.loadFromJson(path)
+			has, err = or.LoadFromPath(path)
 			if has {
 				break
 			}
