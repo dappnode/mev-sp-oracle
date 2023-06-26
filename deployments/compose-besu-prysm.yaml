@@ -24,7 +24,7 @@ x-logging: &logging
 
 services:
   oracle:
-    image: "dappnode/mev-sp-oracle:f636523"
+    image: "dappnode/mev-sp-oracle:1.0.0-rc.0"
     restart: "no"
     <<: *logging
     depends_on:
@@ -51,19 +51,19 @@ services:
       - --network=${NETWORK}
       - --data-path=/opt/besu/database
       - --engine-host-allowlist=*
-      - --engine-rpc-enabled=true
+      - --engine-rpc-enabled
       - --engine-rpc-port=8551
       - --engine-jwt-secret=/jwtsecret/jwtsecret
-      - --engine-jwt-disabled=false
       - --p2p-port=30303
       - --metrics-enabled=true
       - --metrics-host=0.0.0.0
       - --metrics-port=9545
       - --host-allowlist=*
-      - --rpc-http-enabled=true
+      - --rpc-http-enabled
       - --rpc-http-port=8545
       - --rpc-ws-enabled=true
       - --rpc-http-cors-origins=*
+      - --rpc-http-host=0.0.0.0
       - --sync-mode=X_SNAP
       - --data-storage-format=BONSAI
 
@@ -87,14 +87,15 @@ services:
       - --jwt-secret=/jwtsecret/jwtsecret
       - --p2p-tcp-port=13000
       - --p2p-udp-port=12000
-      - --execution-endpoint="http://besu:8551"
+      - --execution-endpoint=http://besu:8551
       - --grpc-gateway-host=0.0.0.0
       - --grpc-gateway-port=3500
       - --monitoring-host=0.0.0.0
       - --monitoring-port=8080
-      - --slots-per-archive-point=32
+      - --slots-per-archive-point=1
       - --genesis-state=/genesis/genesis.ssz
-  
+      - --checkpoint-state=/genesis/oracle_deploy_state_new.ssz
+      - --checkpoint-block=/genesis/oracle_block.ssz
     ports:
       - 127.0.0.1:13000:13000
       - 127.0.0.1:12000:12000

@@ -10,8 +10,10 @@ deployments/geth
 deployments/teku
 deployments/besu
 deployments/prysm
+deployments/lighthouse
 deployments/postgres-data
 deployments/metabase-data
 deployments/.env
 state.gob
+state.json
 state_unused.gob

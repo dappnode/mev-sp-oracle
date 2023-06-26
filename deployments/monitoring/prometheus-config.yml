@@ -21,3 +21,6 @@ scrape_configs:
   - job_name: "oracle"
     static_configs:
     - targets: ["oracle:8008"]
+  - job_name: "lighthouse"
+    static_configs:
+    - targets: ["lighthouse:8008"]
