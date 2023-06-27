@@ -69,7 +69,7 @@ services:
       - --data-storage-format=BONSAI
 
     ports:
-      - 127.0.0.1:8545:8545 # debug tool, delete mapping in prod
+      - 127.0.0.1:8545:8545 
       - 30303:30303/tcp
       - 30303:30303/udp
     volumes:
@@ -102,8 +102,8 @@ services:
       - --checkpoint-block=/chain-state/5792000_block.ssz
       - --disable-backfill-rate-limiting
     ports:
-      - 0.0.0.0:3500:3500
-      - 0.0.0.0:12000:12000
+      - 127.0.0.1:3500:3500
+      - 127.0.0.1:12000:12000
 
     volumes:
       - ./lighthouse:/opt/lighthouse/data
