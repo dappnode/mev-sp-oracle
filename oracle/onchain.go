@@ -182,12 +182,21 @@ func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 		return false, errors.New("Could not fetch consensus client sync progress: " + err.Error())
 	}
 
-	// Exeuction client returns nil if not syncing (in sync)
-	// Give couple of slots to consensus client
-	if execSync == nil && (consSync.SyncDistance < 2) {
-		return true, nil
+	// If no errors arised while fetching the sync progress of both clients, check if the clients are in sync
+	// If the execution client is not nil, it means it is not synced
+	if execSync != nil {
+		log.Info("Exec client not in sync")
+		return false, nil
 	}
-	return false, nil
+
+	// If the sync distance is greater than 5, the consensus client is not in sync
+	if consSync.SyncDistance > 5 {
+		log.Info("Consensus client not in sync, Current sync distance: %d slots", consSync.SyncDistance)
+		return false, nil
+	}
+
+	// if both clients are synced, return true
+	return true, nil
 }
 
 func (o *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*spec.VersionedSignedBeaconBlock, error) {
