@@ -1,0 +1,141 @@
+# instructions
+
+# 1. create jwtsecret folder and jwtsecret file
+# mkdir jwtsecret
+# cd jwtsecret
+# sudo openssl rand -hex 32 > jwtsecret
+
+# 2. create besu data folder to avoid permision issues
+# mkdir besu
+
+# 3. define environment variables
+
+# 4. run docker-compose
+# docker-compose up -d
+
+version: "3.9"
+
+# just used by the oracle
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 2000m
+
+services:
+  oracle:
+    image: "dappnode/mev-sp-oracle:1.0.0-rc.0"
+    restart: "no"
+    <<: *logging
+    depends_on:
+      - besu
+      - lighthouse
+    command:
+      - --consensus-endpoint=http://lighthouse:3500
+      - --execution-endpoint=http://besu:8545
+      - --pool-address=${POOL_ADDRESS}
+      #- --updater-keystore-path=/keystore
+      #- --updater-keystore-pass=${UPDATER_KEYSTORE_PASS}
+      - --dry-run
+    ports:
+      - 7300:7300
+    volumes:
+      - ./oracle-data:/oracle-data
+      - ./oracle-logs:/oracle-logs
+      - ./keystore:/keystore
+
+  besu:
+    image: "hyperledger/besu:23.4"
+    restart: on-failure
+    stop_grace_period: 5m
+    command:
+      - --network=goerli
+      - --data-path=/opt/besu/database
+      - --engine-host-allowlist=*
+      - --engine-rpc-enabled
+      - --engine-rpc-port=8551
+      - --engine-jwt-secret=/jwtsecret/jwtsecret
+      - --p2p-port=30303
+      - --metrics-enabled=true
+      - --metrics-host=0.0.0.0
+      - --metrics-port=9545
+      - --host-allowlist=*
+      - --rpc-http-enabled
+      - --rpc-http-port=8545
+      - --rpc-ws-enabled=true
+      - --rpc-http-cors-origins=*
+      - --rpc-http-host=0.0.0.0
+      - --sync-mode=X_SNAP
+      - --data-storage-format=BONSAI
+
+    ports:
+      - 127.0.0.1:8545:8545 # debug tool, delete mapping in prod
+      - 30303:30303/tcp
+      - 30303:30303/udp
+    volumes:
+      - ./besu:/opt/besu/database
+      - ./jwtsecret:/jwtsecret
+
+  lighthouse:
+    image: "sigp/lighthouse:v4.2.0"
+    restart: on-failure
+    depends_on:
+      - besu
+    command:
+      - lighthouse
+      - --network=prater
+      - beacon_node
+      - --datadir=/opt/lighthouse/data
+      - --http
+      - --http-allow-origin=*
+      - --http-address=0.0.0.0
+      - --http-port=3500
+      - --port=12000
+      - --metrics
+      - --metrics-address=0.0.0.0
+      - --metrics-port=8008
+      - --metrics-allow-origin=*
+      - --execution-jwt=/jwtsecret/jwtsecret
+      - --execution-endpoint=http://besu:8551
+      - --slots-per-restore-point=512
+      - --checkpoint-state=/chain-state/5792000_state.ssz
+      - --checkpoint-block=/chain-state/5792000_block.ssz
+      - --disable-backfill-rate-limiting
+    ports:
+      - 0.0.0.0:3500:3500
+      - 0.0.0.0:12000:12000
+
+    volumes:
+      - ./lighthouse:/opt/lighthouse/data
+      - ./genesis:/genesis
+      - ./chain-state:/chain-state
+      - ./jwtsecret:/jwtsecret
+
+
+  prometheus:
+    image: prom/prometheus:v2.43.1
+    volumes:
+      - ./monitoring/prometheus-config.yml:/etc/prometheus/prometheus.yml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - 127.0.0.1:9090:9090
+    restart: on-failure
+
+  grafana:
+    image: grafana/grafana:9.5.1
+    env_file:
+      - ./monitoring/configuration/grafana-plugins.env
+    volumes:
+      - ./monitoring/configuration/grafana.ini:/etc/grafana/grafana.ini
+      - ./monitoring/configuration/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./monitoring/configuration/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./monitoring/configuration/dashboards:/var/lib/grafana/dashboards/
+      - ./monitoring/configuration/customizations/custom-logo.svg:/usr/share/grafana/public/img/grafana_icon.svg
+      - ./monitoring/configuration/customizations/custom-logo.svg:/usr/share/grafana/public/img/grafana_typelogo.svg
+      - ./monitoring/configuration/customizations/custom-logo.png:/usr/share/grafana/public/img/fav32.png
+    ports:
+      - 3000:3000
+    restart: on-failure
+    depends_on:
+      - prometheus

@@ -8,12 +8,15 @@ deployments/goerli/postgres-data
 deployments/goerli/metabase-data
 deployments/geth
 deployments/teku
+deployments/besu
+deployments/lighthouse
 deployments/postgres-data
 deployments/metabase-data
 deployments/.env
 deployments/oracle-logs
 state.gob
 state.json
+state_*
 state_unused.gob
 oracle-logs/*
 keystore_latest
