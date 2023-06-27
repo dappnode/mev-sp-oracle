@@ -36,7 +36,6 @@ import (
 
 // This file provides different functions to access the blockchain state from both consensus and
 // execution layer and modifying the its state via smart contract calls.
-// TODO: Move cache to onchain struct + test it
 type EpochDuties struct {
 	Epoch  uint64
 	Duties []*api.ProposerDuty
@@ -46,19 +45,17 @@ type EpochDuties struct {
 // This is useful to not query the beacon node for each slot
 // since ProposerDuties returns the duties for the whole epoch
 // Note that the cache is meant to store only one epoch's duties
-var ProposalDutyCache EpochDuties // TODO: Make the cache part of onchain
+var ProposalDutyCache EpochDuties
 
 type Onchain struct {
 	ConsensusClient *http.Service
 	ExecutionClient *ethclient.Client
-	CliCfg          *config.CliConfig // TODO:  remove?
 	Contract        *contract.Contract
 	NumRetries      int
 	updaterKey      *ecdsa.PrivateKey
 	UpdaterAddress  common.Address
-
-	// This is not used only by the api TOOD: remove?
-	validators map[phase0.ValidatorIndex]*v1.Validator
+	PoolAddress     string
+	validators      map[phase0.ValidatorIndex]*v1.Validator
 }
 
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
@@ -143,7 +140,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 	return &Onchain{
 		ConsensusClient: consensusClient,
 		ExecutionClient: executionClient,
-		CliCfg:          cliCfg,
+		PoolAddress:     cliCfg.PoolAddress,
 		Contract:        contract,
 		NumRetries:      cliCfg.NumRetries,
 		updaterKey:      updaterKey,
@@ -697,7 +694,7 @@ func (o *Onchain) GetContractClaimedBalance(withdrawalAddress string, blockNumbe
 }
 
 func (o *Onchain) GetPoolEthBalance(blockNumber *big.Int, opts ...retry.Option) (*big.Int, error) {
-	account := common.HexToAddress(o.CliCfg.PoolAddress)
+	account := common.HexToAddress(o.PoolAddress)
 	var err error
 	var balanceWei *big.Int
 
@@ -791,7 +788,6 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 			log.Fatal("slot does not match requested slot: ", fullBlock.GetSlotUint64(), " vs ", slot)
 		}
 
-		// TODO: Some events are missing here
 		etherReceived, err := o.GetEtherReceivedEvents(fullBlock.GetBlockNumber())
 		if err != nil {
 			log.Fatal("failed getting ether received events: ", err)
@@ -855,7 +851,7 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 		isFromSubscriber := oracle.isSubscribed(fullBlock.GetProposerIndexUint64())
 
 		// Check if the reward was sent to the pool
-		isPoolRewarded := fullBlock.isAddressRewarded(o.CliCfg.PoolAddress)
+		isPoolRewarded := fullBlock.isAddressRewarded(o.PoolAddress)
 
 		// This calculation is expensive, do it only if the reward went to the pool or
 		// if the block is from a subscribed validator.
@@ -1429,7 +1425,7 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) er
 	auth.NoSend = false
 	auth.Context = context.Background()
 
-	address := common.HexToAddress(o.CliCfg.PoolAddress)
+	address := common.HexToAddress(o.PoolAddress)
 
 	instance, err := contract.NewContract(address, o.ExecutionClient)
 	if err != nil {
@@ -1480,7 +1476,6 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) er
 
 // Loads all validator from the beacon chain into the oracle, must be called periodically
 func (o *Onchain) RefreshBeaconValidators() {
-	// TODO: protect with mutex?
 	log.Info("Loading existing validators from the beacon chain")
 	vals, err := o.GetFinalizedValidators()
 	if err != nil {
@@ -1499,7 +1494,6 @@ func (o *Onchain) RefreshBeaconValidators() {
 }
 
 func (o *Onchain) Validators() map[phase0.ValidatorIndex]*v1.Validator {
-	// TODO: protect with mutex?
 	return o.validators
 }
 
@@ -1513,7 +1507,7 @@ func (o *Onchain) GetRetryOpts(opts []retry.Option) []retry.Option {
 	// to override the default retry options
 	if len(opts) == 0 {
 		return []retry.Option{
-			retry.Attempts(uint(o.CliCfg.NumRetries)),
+			retry.Attempts(uint(o.NumRetries)),
 			retry.Delay(15 * time.Second),
 		}
 	} else {

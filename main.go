@@ -169,6 +169,7 @@ func main() {
 		log.Fatal("Could not get onchain slot and root: ", err)
 	}
 
+	// Get latest commited slot locally
 	latestCommited, _ := oracleInstance.LatestCommitedSlot()
 
 	// Check that the oracle has not synced beyond the onchain slot. Only if not dry run
@@ -321,8 +322,8 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				fmt.Sprintf("%d", newState.Slot),
 				newState.MerkleRoot).Set(1)
 
-			// Ensure we haven't already votes for this checkpoint. Could happen if the oracle
-			// restarts before the checkpoint is consolidated
+			// Ensure we haven't already voted for this checkpoint. Could happen if the oracle
+			// restarts before the checkpoint is consolidated. Wait while pending
 			for {
 				report, err := onchain.GetAddressToVotedReport(onchain.UpdaterAddress)
 				if err != nil {

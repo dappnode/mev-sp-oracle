@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -193,4 +194,15 @@ func Test_WithdrawalCredentials(t *testing.T) {
 func Test_AreAddressEqual(t *testing.T) {
 	require.Equal(t, true, Equals("0x0000", "0x0000"))
 	require.Equal(t, false, Equals("0x0000", "0x0001"))
+}
+
+func Test_WeiToEther(t *testing.T) {
+	t1 := WeiToEther(big.NewInt(1000000000000000000))
+	require.Equal(t, "1", fmt.Sprintf("%.0f", t1))
+
+	t2 := WeiToEther(big.NewInt(100000000000000000))
+	require.Equal(t, "0.1", fmt.Sprintf("%.1f", t2))
+
+	t3 := WeiToEther(big.NewInt(12987678998))
+	require.Equal(t, "0.000000012987678998", fmt.Sprintf("%.18f", t3))
 }

@@ -138,7 +138,8 @@ func (merklelizer *Merklelizer) OrderByWithdrawalAddress(leafs []RawLeaf) []RawL
 	return sortedLeafs
 }
 
-// return map of withdrawal address -> and its hashed leaf. rethink this
+// Returns a map of withdrawal address to the hashed leaf and raw leaf. It also
+// returns the merkle tree and false if there was not enough information to create a tree
 func (merklelizer *Merklelizer) GenerateTreeFromState(state *OracleState) (map[string]mt.DataBlock, map[string]RawLeaf, *mt.MerkleTree, bool) {
 
 	blocks := make([]mt.DataBlock, 0)
