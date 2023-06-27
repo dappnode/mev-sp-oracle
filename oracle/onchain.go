@@ -191,7 +191,7 @@ func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 
 	// If the sync distance is greater than 5, the consensus client is not in sync
 	if consSync.SyncDistance > 5 {
-		log.Info("Consensus client not in sync, Current sync distance: %d slots", consSync.SyncDistance)
+		log.Info("Consensus client not in sync, Client is more than 5 slots behind")
 		return false, nil
 	}
 
