@@ -867,7 +867,7 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 				Timestamp:    fmt.Sprintf("%d", signedRegistration.Message.Timestamp.UnixNano()),
 			}
 
-			if strings.ToLower(signedRegistration.Message.FeeRecipient.String()) == strings.ToLower(m.Onchain.CliCfg.PoolAddress) {
+			if utils.Equals(signedRegistration.Message.FeeRecipient.String(), m.Onchain.PoolAddress) {
 				correctFeeRelays = append(correctFeeRelays, relayRegistration)
 			} else {
 				wrongFeeRelays = append(wrongFeeRelays, relayRegistration)

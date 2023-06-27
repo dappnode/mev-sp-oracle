@@ -150,20 +150,6 @@ type SummarizedBlock struct {
 	WithdrawalAddress string     `json:"withdrawal_address"`
 }
 
-// Subscription event and the associated validator (if any)
-// TODO: Remove and also fix API
-type Subscription struct { //TODO: remove
-	Event     *contract.ContractSubscribeValidator `json:"event"`
-	Validator *v1.Validator                        `json:"validator"`
-}
-
-// Unsubscription event and the associated validator (if any)
-// TODO: Rething and add json:xxx
-type Unsubscription struct { //TODO: remove
-	Event     *contract.ContractUnsubscribeValidator `json:"event"`
-	Validator *v1.Validator                          `json:"validator"`
-}
-
 // Represents all the information that is stored of a validator
 type ValidatorInfo struct {
 	ValidatorStatus       ValidatorStatus  `json:"status"`

@@ -201,7 +201,6 @@ func DecryptKey(cfg *config.CliConfig) (*keystore.Key, error) {
 	return nil, errors.New("running in dry run mode, key is not needed")
 }
 
-// TODO: Test
 // Not the most efficient way of deep coping, if performance
 // matters, dont use this.
 func DeepCopy(a, b interface{}) {
@@ -213,7 +212,6 @@ func DeepCopy(a, b interface{}) {
 	dec.Decode(b)
 }
 
-// TODO: unit test
 func GetActivationSlotOfLatestProcessedValidator(
 	validators map[phase0.ValidatorIndex]*v1.Validator) uint64 {
 	MaxUint := ^uint64(0)
@@ -243,7 +241,6 @@ func GetActivationSlotOfLatestProcessedValidator(
 	return latestEpoch * SlotsInEpoch
 }
 
-// TODO: unit test
 func WeiToEther(wei *big.Int) *big.Float {
 	return new(big.Float).Quo(new(big.Float).SetInt(wei), big.NewFloat(params.Ether))
 }

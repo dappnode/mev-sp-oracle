@@ -127,7 +127,6 @@ func Test_EndToEnd(t *testing.T) {
 
 	oracleInstance := NewOracle(cfg)
 
-	// TODO: missing tons of things like subscriptions unsubs, etc.
 	onchain.RefreshBeaconValidators()
 	oracleInstance.SetBeaconValidators(onchain.Validators())
 
