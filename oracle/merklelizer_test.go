@@ -43,10 +43,23 @@ func Test_GenerateTreeFromState(t *testing.T) {
 		AccumulatedRewardsWei: big.NewInt(60000),
 	}
 
-	// TODO: add test to _, _
-	_, _, tree, _ := merklelizer.GenerateTreeFromState(state)
+	addressToHash, addressToLeaf, tree, enoughData := merklelizer.GenerateTreeFromState(state)
 	require.Equal(t, "7c58e94268a0d3d89578d2e90e483e3d53a3cb26315852d1544a5a386c83335e", hex.EncodeToString(tree.Root))
+	require.Equal(t, true, enoughData)
+	// 6 + 1 (pool address)
+	require.Equal(t, 7, len(addressToHash))
+	require.Equal(t, 7, len(addressToLeaf))
+}
 
+func Test_NotEnoughData(t *testing.T) {
+	merklelizer := NewMerklelizer()
+	oracle := NewOracle(&Config{
+		PoolFeesAddress: "0x0000000000000000000000000000000000000000",
+	})
+	state := oracle.state
+
+	_, _, _, enoughData := merklelizer.GenerateTreeFromState(state)
+	require.Equal(t, false, enoughData)
 }
 
 func Test_AggregateValidatorsIndexes_NoAggregation(t *testing.T) {
@@ -184,10 +197,7 @@ func Test_AggregateValidatorsIndexes_NoAggregationOrdered(t *testing.T) {
 		},
 	}
 
-	// TODO: add checks on merkle root
-
 	rawLeafs := merklelizer.AggregateValidatorsIndexes(state)
-	fmt.Println(rawLeafs)
 	require.Equal(t, expected, rawLeafs)
 }
 
@@ -236,10 +246,14 @@ func Test_AggregateValidatorsIndexes_AggregationAll(t *testing.T) {
 		},
 	}
 
-	// TODO: add checks on merkle root
-
 	rawLeafs := merklelizer.AggregateValidatorsIndexes(state)
 	require.Equal(t, expected, rawLeafs)
+
+	addressToHash, addressToLeaf, tree, enoughData := merklelizer.GenerateTreeFromState(state)
+	require.Equal(t, true, enoughData)
+	require.Equal(t, 2, len(addressToHash))
+	require.Equal(t, 2, len(addressToLeaf))
+	require.Equal(t, "c1d127273fc365b0201e71a3622f1b459b31473366dda390b4044c7257706885", hex.EncodeToString(tree.Root))
 }
 
 func Test_AggregateValidatorsIndexes_Aggregation_And_Leftover(t *testing.T) {
