@@ -1004,7 +1004,7 @@ func (onchain *Onchain) GetConfigFromContract(
 		DryRun:                   cliCfg.DryRun,
 		NumRetries:               cliCfg.NumRetries,
 		UpdaterKeyPass:           cliCfg.UpdaterKeyPass,
-		UpdaterKeyPath:           cliCfg.UpdaterKeyPath,
+		UpdaterKeyFile:           cliCfg.UpdaterKeyFile,
 	}
 
 	return conf
