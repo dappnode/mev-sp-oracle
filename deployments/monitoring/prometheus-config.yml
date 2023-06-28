@@ -1,8 +1,18 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 60s
+  evaluation_interval: 60s
   external_labels:
-    monitor: "Monitoring"
+    monitor: "oracle_OPERATOR_PLACEHOLDER"
+
+remote_write:
+  - url: https://URL_PLACEHOLDER.grafana.net/api/prom/push
+    basic_auth:
+      username: USERNAME_PLACEHOLDER
+      password: PASSWORD_PLACEHOLDER
+    write_relabel_configs:
+    - source_labels: [__name__]
+      regex: '^oracle.*'
+      action: keep
 
 scrape_configs:
   - job_name: "geth"
