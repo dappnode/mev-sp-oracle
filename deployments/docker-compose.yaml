@@ -30,7 +30,7 @@ services:
       - --consensus-endpoint=http://teku:5051
       - --execution-endpoint=http://geth:8545
       - --pool-address=${POOL_ADDRESS}
-      #- --updater-keystore-path=/keystore
+      #- --updater-keystore-file=/keystore
       #- --updater-keystore-pass=${UPDATER_KEYSTORE_PASS}
       - --dry-run
       - --log-level=debug
