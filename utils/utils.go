@@ -187,7 +187,7 @@ func Equals(a string, b string) bool {
 func DecryptKey(cfg *config.CliConfig) (*keystore.Key, error) {
 	// Only parse it not in dry run mode
 	if !cfg.DryRun {
-		jsonBytes, err := ioutil.ReadFile(cfg.UpdaterKeyPath)
+		jsonBytes, err := ioutil.ReadFile(cfg.UpdaterKeyFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to read updater key file")
 		}

@@ -91,7 +91,7 @@ type Config struct {
 	NumRetries               int      `json:"num_retries"`
 	CollateralInWei          *big.Int `json:"collateral_in_wei"`
 	UpdaterKeyPass           string   `json:"-"`
-	UpdaterKeyPath           string   `json:"-"`
+	UpdaterKeyFile           string   `json:"-"`
 }
 
 // All the events that the contract can emit

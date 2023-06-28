@@ -11,7 +11,7 @@ import (
 
 type CliConfig struct {
 	DryRun            bool
-	UpdaterKeyPath    string
+	UpdaterKeyFile    string
 	UpdaterKeyPass    string
 	NumRetries        int
 	ConsensusEndpoint string
@@ -52,7 +52,7 @@ func NewCliConfig() (*CliConfig, error) {
 	// Optional flags:
 	var version = flag.Bool("version", false, "Prints the release version and exits")
 	var dryRun = flag.Bool("dry-run", false, "If enabled, the pool contract will not be updated")
-	var updaterKeystorePath = flag.String("updater-keystore-path", "", "Path to the password-protected keystore file of the updater")
+	var updaterKeystoreFile = flag.String("updater-keystore-file", "", "Password protected keystore file of the updater")
 	var updaterKeystorePass = flag.String("updater-keystore-pass", "", "Password of the updater keystore file")
 	var numRetries = flag.Int("num-retries", 0, "Number of retries for each interaction (consensus, execution): 0 infinite")
 	var logLevel = flag.String("log-level", "info", "Logging verbosity (trace, debug, info=default, warn, error, fatal, panic)")
@@ -74,7 +74,7 @@ func NewCliConfig() (*CliConfig, error) {
 
 	// Some simple cli argument validation
 
-	if !*dryRun && *updaterKeystorePath == "" {
+	if !*dryRun && *updaterKeystoreFile == "" {
 		return nil, errors.New("you must provide a keystore file to update the contract root")
 	}
 
@@ -82,7 +82,7 @@ func NewCliConfig() (*CliConfig, error) {
 		return nil, errors.New("you must provide a password for the keystore file")
 	}
 
-	if *dryRun && *updaterKeystorePath != "" {
+	if *dryRun && *updaterKeystoreFile != "" {
 		return nil, errors.New("you can't provide a keystore file in dry run mode")
 	}
 
@@ -96,7 +96,7 @@ func NewCliConfig() (*CliConfig, error) {
 
 	cliConf := &CliConfig{
 		DryRun:            *dryRun,
-		UpdaterKeyPath:    *updaterKeystorePath,
+		UpdaterKeyFile:    *updaterKeystoreFile,
 		UpdaterKeyPass:    *updaterKeystorePass,
 		NumRetries:        *numRetries,
 		ConsensusEndpoint: *consensusEndpoint,
@@ -114,7 +114,7 @@ func NewCliConfig() (*CliConfig, error) {
 func logConfig(cfg *CliConfig) {
 	log.WithFields(log.Fields{
 		"DryRun":            cfg.DryRun,
-		"UpdaterKeyPath":    cfg.UpdaterKeyPath,
+		"UpdaterKeyFile":    cfg.UpdaterKeyFile,
 		"UpdaterKeyPass":    "hidden",
 		"NumRetries":        cfg.NumRetries,
 		"ConsensusEndpoint": cfg.ConsensusEndpoint,
