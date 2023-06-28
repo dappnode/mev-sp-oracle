@@ -295,9 +295,13 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	for _, block := range m.oracle.State().ProposedBlocks {
 		totalRewardsSentWei.Add(totalRewardsSentWei, block.Reward)
 	}
+
 	totalDonationsWei := big.NewInt(0)
 	for _, donation := range m.oracle.State().Donations {
 		totalDonationsWei.Add(totalDonationsWei, donation.DonationAmount)
+
+		// Note that rewards also take donations into account
+		totalRewardsSentWei.Add(totalRewardsSentWei, donation.DonationAmount)
 	}
 
 	totalProposedBlocks := uint64(len(m.oracle.State().ProposedBlocks))
