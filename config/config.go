@@ -115,7 +115,7 @@ func logConfig(cfg *CliConfig) {
 	log.WithFields(log.Fields{
 		"DryRun":            cfg.DryRun,
 		"UpdaterKeyPath":    cfg.UpdaterKeyPath,
-		"UpdaterKeyPass":    cfg.UpdaterKeyPass,
+		"UpdaterKeyPass":    "hidden",
 		"NumRetries":        cfg.NumRetries,
 		"ConsensusEndpoint": cfg.ConsensusEndpoint,
 		"ExecutionEndpoint": cfg.ExecutionEndpoint,
