@@ -47,6 +47,10 @@ var apiRetryOpts = []retry.Option{
 
 const defaultMerkleRoot = "0x0000000000000000000000000000000000000000000000000000000000000000"
 
+// Hardcoded for Ethereum
+var SlotsInEpoch = uint64(32)
+var SecondsInSlot = uint64(12)
+
 const (
 	// Available endpoints
 	pathStatus            = "/status"
@@ -362,8 +366,6 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		m.respondError(w, http.StatusInternalServerError, "could not get consensus latest finalized slot: "+err.Error())
 	}
 
-	SlotsInEpoch := uint64(32)
-	SecondsInSlot := uint64(12)
 	finalizedEpoch := uint64(finality.Finalized.Epoch)
 	finalizedSlot := finalizedEpoch * SlotsInEpoch
 
@@ -372,11 +374,17 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		oracleSync = true
 	}
 
-	// Slots that passed since last checkpoint
-	slotsFromLastCheckpoint := m.oracle.State().LatestProcessedSlot % m.cfg.CheckPointSizeInSlots
+	_, onchainSlot, err := m.Onchain.GetOnchainSlotAndRoot(apiRetryOpts...)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get onchain slot and root: "+err.Error())
+	}
 
-	// Remaining slots till next checkpoint
-	slotsTillNextCheckpoint := m.cfg.CheckPointSizeInSlots - slotsFromLastCheckpoint
+	// If the oracle is not in sync, we cant really calculate the slots till the next checkpoint
+	// because we are behind. So we just set it to 0
+	nextCheckpointInSlots := uint64(0)
+	if finalizedSlot < (onchainSlot + m.cfg.CheckPointSizeInSlots) {
+		nextCheckpointInSlots = onchainSlot + m.cfg.CheckPointSizeInSlots - finalizedSlot
+	}
 
 	status := httpOkStatus{
 		IsConsensusInSync:           consInSync,
@@ -387,14 +395,14 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		LatestFinalizedEpoch:        finalizedEpoch,
 		LatestFinalizedSlot:         finalizedSlot,
 		OracleHeadDistance:          finalizedSlot - m.oracle.State().LatestProcessedSlot,
-		NextCheckpointSlot:          m.oracle.State().LatestProcessedSlot + slotsTillNextCheckpoint,
+		NextCheckpointSlot:          onchainSlot + m.cfg.CheckPointSizeInSlots,
 		NextCheckpointTime:          "", // TODO:
-		NextCheckpointRemaining:     utils.SlotsToTime(slotsTillNextCheckpoint),
-		NextCheckpointRemainingUnix: slotsTillNextCheckpoint * SecondsInSlot,
-		PreviousCheckpointSlot:      0,  // TODO:
+		NextCheckpointRemaining:     utils.SlotsToTime(nextCheckpointInSlots),
+		NextCheckpointRemainingUnix: nextCheckpointInSlots * SecondsInSlot,
+		PreviousCheckpointSlot:      onchainSlot,
 		PreviousCheckpointTime:      "", // TODO:
-		PreviousCheckpointAge:       utils.SlotsToTime(slotsFromLastCheckpoint),
-		PreviousCheckpointAgeUnix:   slotsFromLastCheckpoint * SecondsInSlot,
+		PreviousCheckpointAge:       utils.SlotsToTime(finalizedSlot - onchainSlot),
+		PreviousCheckpointAgeUnix:   (finalizedSlot - onchainSlot) * SecondsInSlot,
 		ExecutionChainId:            chainId.String(),
 		ConsensusChainId:            strconv.FormatUint(depositContract.ChainID, 10),
 		DepositContact:              hexutil.Encode(depositContract.Address[:]),
