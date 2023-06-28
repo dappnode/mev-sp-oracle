@@ -57,6 +57,8 @@ Running in `verifier` mode:
 --dry-run
 ```
 
+Note that syncing might take some time, but if you trust another oracle you can use it as a checkpoint sync with `--checkpoint-sync-url=http://ip_address:7300/state`. This will get the state from that oracle, and continue syncing from there. Not recommended to be used in `updater` mode.
+
 ## Deployments
 
 This repo contains not only the oracle software but also a docker-compose with all required components such as consensus, execution clients and prometheus/grafana to monitor the setup. Everything is provisioned, so you just need to do the following.
