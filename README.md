@@ -78,6 +78,13 @@ export POOL_ADDRESS=0xF21fbbA423f3a893A2402d68240B219308AbCA46
 export UPDATER_KEYSTORE_PASS=xxx
 ```
 
+And manually modify the following placeholders in `deployments/monitoring/prometheus-config.yml`:
+* Change `OPERATOR_PLACEHOLDER` for your identifier eg `monitor: "oracle_someentity"`.
+* Replace the `URL_PLACEHOLDER` (or whole url) to the one you want to push metrics to.
+* Replace `USERNAME_PLACEHOLDER`.
+* And `PASSWORD_PLACEHOLDER`.
+
+
 ```
 docker-compose up -d
 ```
