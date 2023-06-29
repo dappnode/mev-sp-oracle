@@ -1397,11 +1397,11 @@ func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) er
 	}
 
 	// Unused, leaving for reference. We rely on automatic gas estimation, see below (nil values)
-	gasTipCap, err := o.ExecutionClient.SuggestGasTipCap(context.Background())
-	if err != nil {
-		return errors.New(fmt.Sprintf("could not get gas tip cap suggestion: %s", err))
-	}
-	_ = gasTipCap
+	//gasTipCap, err := o.ExecutionClient.SuggestGasTipCap(context.Background())
+	//if err != nil {
+	//	return errors.New(fmt.Sprintf("could not get gas tip cap suggestion: %s", err))
+	//}
+	//_ = gasTipCap
 
 	chaindId, err := o.ExecutionClient.NetworkID(context.Background())
 	if err != nil {
