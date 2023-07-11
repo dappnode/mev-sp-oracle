@@ -97,34 +97,6 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 			depositContract.ChainID, chainId))
 	}
 
-	// Print sync status of consensus and execution client
-	execSync, err := executionClient.SyncProgress(context.Background())
-	if err != nil {
-		return nil, errors.Wrap(err, "Error fetching execution client sync progress")
-	}
-
-	// nil means synced
-	if execSync == nil {
-		header, err := executionClient.HeaderByNumber(context.Background(), nil)
-		if err != nil {
-			return nil, errors.Wrap(err, "Error fetching execution client header")
-		}
-		log.Info("Execution client is in sync, block number: ", header.Number)
-	} else {
-		log.Info("Execution client is NOT in sync, current block: ", execSync.CurrentBlock)
-	}
-
-	consSync, err := consensusClient.NodeSyncing(context.Background())
-	if err != nil {
-		return nil, errors.Wrap(err, "Error fetching consensus client sync progress")
-	}
-
-	if consSync.SyncDistance == 0 {
-		log.Info("Consensus client is in sync, head slot: ", consSync.HeadSlot)
-	} else {
-		log.Info("Consensus client is NOT in sync, slots behind: ", consSync.SyncDistance)
-	}
-
 	// Instantiate the smoothing pool contract to run get/set operations on it
 	address := common.HexToAddress(cliCfg.PoolAddress)
 	contract, err := contract.NewContract(address, executionClient)
@@ -180,7 +152,7 @@ func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	}
 
 	// If no errors arised while fetching the sync progress of both clients, check if the clients are in sync
-	// If the execution client is not nil, it means it is not synced
+	// If the execution client is not nil, it means it is still syncing, so it is not "in sync"
 	if execSync != nil {
 		log.Info("Exec client not in sync")
 		return false, nil

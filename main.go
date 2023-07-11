@@ -97,6 +97,24 @@ func main() {
 		log.Fatal("Could not create new onchain object: ", err)
 	}
 
+	var cfg *oracle.Config
+
+	// Populate config, most of the parameters are directly loaded from the smart contract or chain data. Need to make sure that
+	// the contract is deployed and the nodes are in sync before loading the config
+	for {
+		inSync, err := onchain.AreNodesInSync()
+		if err != nil {
+			log.Fatal("Could not check if nodes are in sync: ", err)
+		} else if inSync {
+			log.Info("Nodes are in sync, loading parameters from remote chain...")
+			cfg = onchain.GetConfigFromContract(cliCfg)
+			break // Exit the loop if nodes are in sync
+		}
+
+		log.Println("Nodes are not in sync. Oracle could not load parameters from remote chain. Waiting 1 minute to check again")
+		time.Sleep(1 * time.Minute)
+	}
+
 	if !cliCfg.DryRun {
 		log.Info("Checking if configured address ", updaterAddress.String(), " is whitelisted to update the contract")
 		isWhitelisted, err := onchain.IsAddressWhitelisted(updaterAddress)
@@ -121,9 +139,6 @@ func main() {
 			log.Info("Updater address: ", updaterAddress.String(), " has balance: ", utils.WeiToEther(balance), "Eth, ensure its enough to cover txs during some time")
 		}
 	}
-
-	// Populate config, most of the parameters are loaded from the smart contract
-	cfg := onchain.GetConfigFromContract(cliCfg)
 
 	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)
