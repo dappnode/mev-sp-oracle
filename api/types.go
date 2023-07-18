@@ -33,6 +33,7 @@ type httpOkStatus struct {
 }
 
 type httpOkRelayersState struct {
+	ValPubKey            string      `json:"valpubkey"`
 	CorrectFeeRecipients bool        `json:"correct_fee_recipients"`
 	CorrectFeeRelays     []httpRelay `json:"correct_fee_relayers"`
 	WrongFeeRelays       []httpRelay `json:"wrong_fee_relayers"`
