@@ -830,78 +830,93 @@ func (m *ApiService) handleOnchainMerkleProof(w http.ResponseWriter, req *http.R
 
 func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
-	valPubKey := vars["valpubkey"]
-	if !IsValidPubkey(valPubKey) {
-		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid validator pubkey format"))
-		return
-	}
-	var correctFeeRelays []httpRelay
-	var wrongFeeRelays []httpRelay
-	var unregisteredRelays []httpRelay
-	registeredCorrectFee := false
-	var relays []string
-
-	if m.Network == "mainnet" {
-		relays = config.MainnetRelays
-	} else if m.Network == "goerli" {
-		relays = config.GoerliRelays
-	} else {
-		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid network: %s", m.Network))
+	valPubKeys := vars["valpubkey"]
+	if valPubKeys == "" {
+		m.respondError(w, http.StatusBadRequest, "no validator pubkey provided")
 		return
 	}
 
-	for _, relay := range relays {
-		url := fmt.Sprintf("https://%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
-		resp, err := http.Get(url)
-		if err != nil {
-			m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
+	// Split the valPubKeys into individual keys (assuming they are comma-separated)
+	keys := strings.Split(valPubKeys, ",")
+
+	var results []httpOkRelayersState
+
+	for _, valPubKey := range keys {
+		if !IsValidPubkey(valPubKey) {
+			m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid validator pubkey format: %s", valPubKey))
 			return
 		}
-		defer resp.Body.Close()
+		var correctFeeRelays []httpRelay
+		var wrongFeeRelays []httpRelay
+		var unregisteredRelays []httpRelay
+		registeredCorrectFee := false
+		var relays []string
 
-		if resp.StatusCode == http.StatusOK {
-			signedRegistration := &builderApiV1.SignedValidatorRegistration{}
+		if m.Network == "mainnet" {
+			relays = config.MainnetRelays
+		} else if m.Network == "goerli" {
+			relays = config.GoerliRelays
+		} else {
+			m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid network: %s", m.Network))
+			return
+		}
 
-			bodyBytes, err := io.ReadAll(resp.Body)
+		for _, relay := range relays {
+			url := fmt.Sprintf("https://%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
+			resp, err := http.Get(url)
 			if err != nil {
 				m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
 				return
 			}
+			defer resp.Body.Close()
 
-			if err = json.Unmarshal(bodyBytes, signedRegistration); err != nil {
-				m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
-				return
-			}
+			if resp.StatusCode == http.StatusOK {
+				signedRegistration := &builderApiV1.SignedValidatorRegistration{}
 
-			relayRegistration := httpRelay{
-				RelayAddress: relay,
-				FeeRecipient: signedRegistration.Message.FeeRecipient.String(),
-				Timestamp:    fmt.Sprintf("%d", signedRegistration.Message.Timestamp.UnixNano()),
-			}
+				bodyBytes, err := io.ReadAll(resp.Body)
+				if err != nil {
+					m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
+					return
+				}
 
-			if utils.Equals(signedRegistration.Message.FeeRecipient.String(), m.Onchain.PoolAddress) {
-				correctFeeRelays = append(correctFeeRelays, relayRegistration)
+				if err = json.Unmarshal(bodyBytes, signedRegistration); err != nil {
+					m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
+					return
+				}
+
+				relayRegistration := httpRelay{
+					RelayAddress: relay,
+					FeeRecipient: signedRegistration.Message.FeeRecipient.String(),
+					Timestamp:    fmt.Sprintf("%d", signedRegistration.Message.Timestamp.UnixNano()),
+				}
+
+				if utils.Equals(signedRegistration.Message.FeeRecipient.String(), m.Onchain.PoolAddress) {
+					correctFeeRelays = append(correctFeeRelays, relayRegistration)
+				} else {
+					wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
+				}
 			} else {
-				wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
+				unregisteredRelays = append(unregisteredRelays, httpRelay{
+					RelayAddress: relay,
+				})
 			}
-		} else {
-			unregisteredRelays = append(unregisteredRelays, httpRelay{
-				RelayAddress: relay,
-			})
 		}
+
+		// Only if there are some correct registrations and no invalid ones, it's ok
+		if len(wrongFeeRelays) == 0 && len(correctFeeRelays) > 0 {
+			registeredCorrectFee = true
+		}
+
+		results = append(results, httpOkRelayersState{
+			ValPubKey:            valPubKey,
+			CorrectFeeRecipients: registeredCorrectFee,
+			CorrectFeeRelays:     correctFeeRelays,
+			WrongFeeRelays:       wrongFeeRelays,
+			UnregisteredRelays:   unregisteredRelays,
+		})
 	}
 
-	// Only if there are some correct registrations and no invalid ones, its ok
-	if len(wrongFeeRelays) == 0 && len(correctFeeRelays) > 0 {
-		registeredCorrectFee = true
-	}
-
-	m.respondOK(w, httpOkRelayersState{
-		CorrectFeeRecipients: registeredCorrectFee,
-		CorrectFeeRelays:     correctFeeRelays,
-		WrongFeeRelays:       wrongFeeRelays,
-		UnregisteredRelays:   unregisteredRelays,
-	})
+	m.respondOK(w, results)
 }
 
 func (m *ApiService) handleState(w http.ResponseWriter, req *http.Request) {
