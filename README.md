@@ -93,3 +93,6 @@ Use to check that all env variables were correctly replaced
 ```console
 docker compose convert
 ```
+
+# Future License
+Smooth was developed by Dappnode. While we plan to adopt an open source license, we haven't selected one yet, so all rights are reserved for the time being. Please reach out to us if you have thoughts on licensing.
