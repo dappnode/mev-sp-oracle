@@ -840,8 +840,15 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 
 	// Split the valPubKeys into individual keys (assuming they are comma-separated)
 	keys := strings.Split(valPubKeys, ",")
-
+	// Check if the number of pubkeys exceeds the maximum limit (50 in this case)
+	if len(keys) > 50 {
+		m.respondError(w, http.StatusBadRequest, "maximum number of pubkeys exceeded (max: 50)")
+		return
+	}
 	var results []httpOkRelayersState
+
+	allValidatorsRegisteredCorrectFee := true // Assume all validators have correct fee registrations by default
+	var incorrectValidators []string          // Initialize an array to store incorrect validators
 
 	for _, valPubKey := range keys {
 		if !IsValidPubkey(valPubKey) {
@@ -863,6 +870,8 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 			return
 		}
 
+		// Iterate through all the relays and check if the validator has registered with the correct fee
+		// on any of them
 		for _, relay := range relays {
 			url := fmt.Sprintf("https://%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
 			resp, err := http.Get(url)
@@ -896,6 +905,7 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 					correctFeeRelays = append(correctFeeRelays, relayRegistration)
 				} else {
 					wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
+					registeredCorrectFee = false // Set to false if any wrong fee registration is found
 				}
 			} else {
 				unregisteredRelays = append(unregisteredRelays, httpRelay{
@@ -909,6 +919,11 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 			registeredCorrectFee = true
 		}
 
+		// If the validator is incorrect, add its pubkey to the incorrectValidators array
+		if !registeredCorrectFee {
+			incorrectValidators = append(incorrectValidators, valPubKey)
+		}
+
 		results = append(results, httpOkRelayersState{
 			ValPubKey:            valPubKey,
 			CorrectFeeRecipients: registeredCorrectFee,
@@ -916,9 +931,25 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 			WrongFeeRelays:       wrongFeeRelays,
 			UnregisteredRelays:   unregisteredRelays,
 		})
+
+		// Update the allValidatorsRegisteredCorrectFee status
+		if !registeredCorrectFee {
+			allValidatorsRegisteredCorrectFee = false
+		}
 	}
 
-	m.respondOK(w, results)
+	// Define and populate the response struct.
+	response := struct {
+		Validators           []httpOkRelayersState
+		AllValidatorsCorrect bool
+		IncorrectValidators  []string
+	}{
+		Validators:           results,
+		AllValidatorsCorrect: allValidatorsRegisteredCorrectFee,
+		IncorrectValidators:  incorrectValidators,
+	}
+
+	m.respondOK(w, response)
 }
 
 func (m *ApiService) handleState(w http.ResponseWriter, req *http.Request) {
