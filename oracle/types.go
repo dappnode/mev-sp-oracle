@@ -218,7 +218,7 @@ type RawLeaf struct {
 
 func (r *RewardType) String() string {
 	if *r == VanilaBlock {
-		return "vanila"
+		return "vanilla"
 	} else if *r == MevBlock {
 		return "mev"
 	} else if *r == UnknownRewardType {
@@ -237,7 +237,7 @@ func (s *RewardType) UnmarshalJSON(b []byte) error {
 		return errors.Wrap(err, "unmarshaling reward type")
 	}
 
-	if rewardtype == "vanila" {
+	if rewardtype == "vanilla" {
 		*s = VanilaBlock
 	} else if rewardtype == "mev" {
 		*s = MevBlock
