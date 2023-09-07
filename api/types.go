@@ -138,6 +138,13 @@ type httpOkValidatorInfo struct {
 	SubscriptionType      string `json:"subscription_type"`
 }
 
+type ValidatorRelayResult struct {
+	Index            int
+	ValidatorResult  httpOkRelayersState
+	IsValidatorValid bool
+	Err              error
+}
+
 // Subscription event and the associated validator (if any)
 // TODO: Perhaps remove, no longer need if refactored a bit
 type Subscription struct { //TODO: remove
