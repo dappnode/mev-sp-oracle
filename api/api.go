@@ -938,13 +938,7 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 			return
 		}
 
-		// If the validator is or has been registered, the relayer will return a 200 message
-		// with the signed registration message. If the validator has never been registered,
-		// the relayer will return code 400 or 404 (depending on the relay) with the following message:
-		// {
-		//   "code": 404,
-		//   "message": "no registration found for validator 0xafcdacfb67396a41a72676f3b064bcf62e977e5ef1d8aebadeed06e97156d4f640516fb205d12211ada9a54fcc26cc58"
-		// }
+		// If the validator is or has been registered, the relayer will return a 200 message with the signed registration message.
 		// https://flashbots.github.io/relay-specs/#/Data/getValidatorRegistration
 		if resp.StatusCode == http.StatusOK {
 			signedRegistration := &builderApiV1.SignedValidatorRegistration{}
@@ -963,7 +957,7 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 				Timestamp:    fmt.Sprintf("%d", signedRegistration.Message.Timestamp.UnixNano()),
 			}
 
-			// If the fee recipient matches the pool address, the relayer is registered
+			// If the fee recipient matches the pool address, the relayer is registered with the correct fee recipient (the smoothing pool one)
 			if utils.Equals(signedRegistration.Message.FeeRecipient.String(), m.Onchain.PoolAddress) {
 				correctFeeRelays = append(correctFeeRelays, relayRegistration)
 			} else {
@@ -971,17 +965,12 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 				wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
 			}
 
-			// else if (signedRegistration.Message.FeeRecipient.String() != m.Onchain.PoolAddress) && (signedRegistration.Message.FeeRecipient.String() != "") {
-			// 	// If the fee recipient does not match the pool address, the relayer is registered but with the wrong fee recipient
-			// 	wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
-			// }
-
 		} else if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusNotFound {
-			// the validator is not registered with the relayer
+			// If the validator has never been registered, the relayer will return code 400 or 404 (depending on the relay)
 			unregisteredRelays = append(unregisteredRelays, httpRelay{RelayAddress: relay})
 		} else {
-			// there was an error calling the relayer, so we couldnt check if the validator is/was registered with the correct
-			// fee recipient, so we return an error.
+			// If we get here, the relayer had an internal server error, so we couldnt check if the validator is/was registered with the correct
+			// fee recipient. We return an error.
 			resultsChan <- ValidatorRelayResult{
 				Index: idx,
 				Err:   fmt.Errorf("error calling relayer %s for validator %s: %v", relay, valPubKey, string(bodyBytes)),
