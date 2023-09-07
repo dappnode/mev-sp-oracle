@@ -832,122 +832,188 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 	vars := mux.Vars(req)
 	valPubKeys := vars["valpubkey"]
 	if valPubKeys == "" {
-		m.respondError(w, http.StatusBadRequest, "no validator pubkey provided")
+		m.respondError(w, http.StatusBadRequest, "No validator pubkey provided!")
 		return
 	}
 
-	// Split the valPubKeys into individual keys (assuming they are comma-separated)
 	keys := strings.Split(valPubKeys, ",")
-	// Check if the number of pubkeys exceeds the maximum limit (50 in this case)
 	if len(keys) > 50 {
-		m.respondError(w, http.StatusBadRequest, "maximum number of pubkeys exceeded (max: 50)")
+		m.respondError(w, http.StatusBadRequest, "Maximum number of pubkeys exceeded (max: 50)")
 		return
 	}
-	var results []httpOkRelayersState
 
-	allValidatorsRegisteredCorrectFee := true // Assume all validators have correct fee registrations by default
-	var incorrectValidators []string          // Initialize an array to store incorrect validators
-
-	for _, valPubKey := range keys {
-		if !IsValidPubkey(valPubKey) {
-			m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid validator pubkey format: %s", valPubKey))
+	for _, key := range keys {
+		if !IsValidPubkey(key) {
+			m.respondError(w, http.StatusBadRequest, "Invalid validator pubkey format: "+key)
 			return
-		}
-		var correctFeeRelays []httpRelay
-		var wrongFeeRelays []httpRelay
-		var unregisteredRelays []httpRelay
-		registeredCorrectFee := false
-		var relays []string
-
-		if m.Network == "mainnet" {
-			relays = config.MainnetRelays
-		} else if m.Network == "goerli" {
-			relays = config.GoerliRelays
-		} else {
-			m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid network: %s", m.Network))
-			return
-		}
-
-		// Iterate through all the relays and check if the validator has registered with the correct fee
-		// on any of them
-		for _, relay := range relays {
-			url := fmt.Sprintf("https://%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
-			resp, err := http.Get(url)
-			if err != nil {
-				m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
-				return
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode == http.StatusOK {
-				signedRegistration := &builderApiV1.SignedValidatorRegistration{}
-
-				bodyBytes, err := io.ReadAll(resp.Body)
-				if err != nil {
-					m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
-					return
-				}
-
-				if err = json.Unmarshal(bodyBytes, signedRegistration); err != nil {
-					m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
-					return
-				}
-
-				relayRegistration := httpRelay{
-					RelayAddress: relay,
-					FeeRecipient: signedRegistration.Message.FeeRecipient.String(),
-					Timestamp:    fmt.Sprintf("%d", signedRegistration.Message.Timestamp.UnixNano()),
-				}
-
-				if utils.Equals(signedRegistration.Message.FeeRecipient.String(), m.Onchain.PoolAddress) {
-					correctFeeRelays = append(correctFeeRelays, relayRegistration)
-				} else {
-					wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
-					registeredCorrectFee = false // Set to false if any wrong fee registration is found
-				}
-			} else {
-				unregisteredRelays = append(unregisteredRelays, httpRelay{
-					RelayAddress: relay,
-				})
-			}
-		}
-
-		// Only if there are some correct registrations and no invalid ones, it's ok
-		if len(wrongFeeRelays) == 0 && len(correctFeeRelays) > 0 {
-			registeredCorrectFee = true
-		}
-
-		// If the validator is incorrect, add its pubkey to the incorrectValidators array
-		if !registeredCorrectFee {
-			incorrectValidators = append(incorrectValidators, valPubKey)
-		}
-
-		results = append(results, httpOkRelayersState{
-			ValPubKey:            valPubKey,
-			CorrectFeeRecipients: registeredCorrectFee,
-			CorrectFeeRelays:     correctFeeRelays,
-			WrongFeeRelays:       wrongFeeRelays,
-			UnregisteredRelays:   unregisteredRelays,
-		})
-
-		// Update the allValidatorsRegisteredCorrectFee status
-		if !registeredCorrectFee {
-			allValidatorsRegisteredCorrectFee = false
 		}
 	}
 
-	// Define and populate the response struct.
+	results, allValid, err := m.processValidatorsConcurrently(keys)
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	response := struct {
 		Validators           []httpOkRelayersState
 		AllValidatorsCorrect bool
 		IncorrectValidators  []string
 	}{
 		Validators:           results,
-		AllValidatorsCorrect: allValidatorsRegisteredCorrectFee,
-		IncorrectValidators:  incorrectValidators,
+		AllValidatorsCorrect: allValid,
+		IncorrectValidators:  m.extractIncorrectValidators(results),
 	}
 
 	m.respondOK(w, response)
+}
+
+func (m *ApiService) processValidatorsConcurrently(keys []string) ([]httpOkRelayersState, bool, error) {
+	var results []httpOkRelayersState
+	allValidatorsRegisteredCorrectFee := true
+	resultsChan := make(chan ValidatorRelayResult, len(keys))
+
+	for i, key := range keys {
+		go m.processSingleValidator(i, key, resultsChan)
+	}
+
+	for range keys {
+		res := <-resultsChan
+		if res.Err != nil {
+			return nil, false, res.Err
+		}
+		if !res.IsValidatorValid {
+			allValidatorsRegisteredCorrectFee = false
+		}
+		results = append(results, res.ValidatorResult)
+	}
+	close(resultsChan)
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].ValPubKey < results[j].ValPubKey
+	})
+
+	return results, allValidatorsRegisteredCorrectFee, nil
+}
+
+func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsChan chan ValidatorRelayResult) {
+	var correctFeeRelays []httpRelay
+	var wrongFeeRelays []httpRelay
+	var unregisteredRelays []httpRelay
+	registeredCorrectFee := false
+	var relays []string
+
+	if m.Network == "mainnet" {
+		relays = config.MainnetRelays
+	} else if m.Network == "goerli" {
+		relays = config.GoerliRelays
+	} else {
+		resultsChan <- ValidatorRelayResult{
+			Index: idx,
+			Err:   fmt.Errorf("invalid network: %s", m.Network),
+		}
+		return
+	}
+
+	for _, relay := range relays {
+		url := fmt.Sprintf("https://%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
+		resp, err := http.Get(url)
+		if err != nil {
+			resultsChan <- ValidatorRelayResult{
+				Index: idx,
+				Err:   fmt.Errorf("error calling relayer %s for validator %s: %v", relay, valPubKey, err),
+			}
+			return
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			resultsChan <- ValidatorRelayResult{
+				Index: idx,
+				Err:   fmt.Errorf("error reading response from relayer %s for validator %s: %v", relay, valPubKey, err),
+			}
+			return
+		}
+
+		// If the validator is or has been registered, the relayer will return a 200 message
+		// with the signed registration message. If the validator has never been registered,
+		// the relayer will return code 400 or 404 (depending on the relay) with the following message:
+		// {
+		//   "code": 404,
+		//   "message": "no registration found for validator 0xafcdacfb67396a41a72676f3b064bcf62e977e5ef1d8aebadeed06e97156d4f640516fb205d12211ada9a54fcc26cc58"
+		// }
+		// https://flashbots.github.io/relay-specs/#/Data/getValidatorRegistration
+		if resp.StatusCode == http.StatusOK {
+			signedRegistration := &builderApiV1.SignedValidatorRegistration{}
+
+			if err = json.Unmarshal(bodyBytes, signedRegistration); err != nil {
+				resultsChan <- ValidatorRelayResult{
+					Index: idx,
+					Err:   fmt.Errorf("error unmarshalling relay response from relayer %s for validator %s: %v", relay, valPubKey, err),
+				}
+				return
+			}
+
+			relayRegistration := httpRelay{
+				RelayAddress: relay,
+				FeeRecipient: signedRegistration.Message.FeeRecipient.String(),
+				Timestamp:    fmt.Sprintf("%d", signedRegistration.Message.Timestamp.UnixNano()),
+			}
+
+			// If the fee recipient matches the pool address, the relayer is registered
+			if utils.Equals(signedRegistration.Message.FeeRecipient.String(), m.Onchain.PoolAddress) {
+				correctFeeRelays = append(correctFeeRelays, relayRegistration)
+			} else {
+				// if the fee recipient does not match the pool address, the relayer is registered but with the wrong fee recipient
+				wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
+			}
+
+			// else if (signedRegistration.Message.FeeRecipient.String() != m.Onchain.PoolAddress) && (signedRegistration.Message.FeeRecipient.String() != "") {
+			// 	// If the fee recipient does not match the pool address, the relayer is registered but with the wrong fee recipient
+			// 	wrongFeeRelays = append(wrongFeeRelays, relayRegistration)
+			// }
+
+		} else if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusNotFound {
+			// the validator is not registered with the relayer
+			unregisteredRelays = append(unregisteredRelays, httpRelay{RelayAddress: relay})
+		} else {
+			// there was an error calling the relayer, so we couldnt check if the validator is/was registered with the correct
+			// fee recipient, so we return an error.
+			resultsChan <- ValidatorRelayResult{
+				Index: idx,
+				Err:   fmt.Errorf("error calling relayer %s for validator %s: %v", relay, valPubKey, string(bodyBytes)),
+			}
+		}
+	}
+
+	// If there are no wrong fee relays and there are correct fee relays, the validator is registered with the correct fee recipient
+	// we do not accept validators that have not registered to any relay
+	if len(wrongFeeRelays) == 0 && len(correctFeeRelays) > 0 {
+		registeredCorrectFee = true
+	}
+
+	resultsChan <- ValidatorRelayResult{
+		Index: idx,
+		ValidatorResult: httpOkRelayersState{
+			ValPubKey:            valPubKey,
+			CorrectFeeRecipients: registeredCorrectFee,
+			CorrectFeeRelays:     correctFeeRelays,
+			WrongFeeRelays:       wrongFeeRelays,
+			UnregisteredRelays:   unregisteredRelays,
+		},
+		IsValidatorValid: registeredCorrectFee,
+	}
+}
+
+func (m *ApiService) extractIncorrectValidators(results []httpOkRelayersState) []string {
+	var incorrectValidators []string
+	for _, result := range results {
+		if !result.CorrectFeeRecipients {
+			incorrectValidators = append(incorrectValidators, result.ValPubKey)
+		}
+	}
+	return incorrectValidators
 }
 
 func (m *ApiService) handleState(w http.ResponseWriter, req *http.Request) {
@@ -976,6 +1042,8 @@ func IsValidAddress(v string) bool {
 	return re.MatchString(v)
 }
 
+// The validator's BLS public key, uniquely identifying them. 48-bytes, hex encoded with 0x prefix, case insensitive.
+// example: example: 0x93247f2209abcacf57b75a51dafae777f9dd38bc7053d1af526f220a7445a6d1a2753e5f3e8b1cfe39b46f43611ef74a
 func IsValidPubkey(v string) bool {
 	re := regexp.MustCompile("^0x[0-9a-fA-f]{96}$")
 	return re.MatchString(v)
