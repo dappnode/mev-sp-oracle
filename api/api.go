@@ -903,19 +903,8 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 	var wrongFeeRelays []httpRelay
 	var unregisteredRelays []httpRelay
 	registeredCorrectFee := false
-	var relays []string
 
-	if m.Network == "mainnet" {
-		relays = config.MainnetRelays
-	} else if m.Network == "goerli" {
-		relays = config.GoerliRelays
-	} else {
-		resultsChan <- ValidatorRelayResult{
-			Index: idx,
-			Err:   fmt.Errorf("invalid network: %s", m.Network),
-		}
-		return
-	}
+	relays := m.cliCfg.RelayersEndpoints
 
 	for _, relay := range relays {
 		url := fmt.Sprintf("https://%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
