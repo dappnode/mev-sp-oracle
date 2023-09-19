@@ -34,6 +34,7 @@ services:
       #- --updater-keystore-pass=${UPDATER_KEYSTORE_PASS}
       - --dry-run
       - --log-level=debug
+      - --relayers-endpoints=${REGISTERED_RELAYS}
     ports:
       - 7300:7300
     volumes:
