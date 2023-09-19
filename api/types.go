@@ -40,6 +40,12 @@ type httpOkRelayersState struct {
 	UnregisteredRelays   []httpRelay `json:"unregistered_relayers"`
 }
 
+type httpOkMultiRelayersState struct {
+	Validators           []httpOkRelayersState `json:"validators"`
+	AllValidatorsCorrect bool                  `json:"all_validators_correct"`
+	IncorrectValidators  []string              `json:"incorrect_validators"`
+}
+
 type httpRelay struct {
 	RelayAddress string `json:"relay_address"`
 	FeeRecipient string `json:"fee_recipient"`
@@ -138,8 +144,7 @@ type httpOkValidatorInfo struct {
 	SubscriptionType      string `json:"subscription_type"`
 }
 
-type ValidatorRelayResult struct {
-	Index            int
+type validatorRelayResult struct {
 	ValidatorResult  httpOkRelayersState
 	IsValidatorValid bool
 	Err              error

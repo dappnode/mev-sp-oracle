@@ -857,26 +857,20 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-	response := struct {
-		Validators           []httpOkRelayersState
-		AllValidatorsCorrect bool
-		IncorrectValidators  []string
-	}{
+	m.respondOK(w, httpOkMultiRelayersState{
 		Validators:           results,
 		AllValidatorsCorrect: allValid,
 		IncorrectValidators:  m.extractIncorrectValidators(results),
-	}
-
-	m.respondOK(w, response)
+	})
 }
 
 func (m *ApiService) processValidatorsConcurrently(keys []string) ([]httpOkRelayersState, bool, error) {
 	var results []httpOkRelayersState
 	allValidatorsRegisteredCorrectFee := true
-	resultsChan := make(chan ValidatorRelayResult, len(keys))
+	resultsChan := make(chan validatorRelayResult)
 
-	for i, key := range keys {
-		go m.processSingleValidator(i, key, resultsChan)
+	for _, key := range keys {
+		go m.processSingleValidator(key, resultsChan)
 	}
 
 	for range keys {
@@ -891,14 +885,10 @@ func (m *ApiService) processValidatorsConcurrently(keys []string) ([]httpOkRelay
 	}
 	close(resultsChan)
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].ValPubKey < results[j].ValPubKey
-	})
-
 	return results, allValidatorsRegisteredCorrectFee, nil
 }
 
-func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsChan chan ValidatorRelayResult) {
+func (m *ApiService) processSingleValidator(valPubKey string, resultsChan chan validatorRelayResult) {
 	var correctFeeRelays []httpRelay
 	var wrongFeeRelays []httpRelay
 	var unregisteredRelays []httpRelay
@@ -910,9 +900,8 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 		url := fmt.Sprintf("%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
 		resp, err := http.Get(url)
 		if err != nil {
-			resultsChan <- ValidatorRelayResult{
-				Index: idx,
-				Err:   fmt.Errorf("error calling relayer %s for validator %s: %v", relay, valPubKey, err),
+			resultsChan <- validatorRelayResult{
+				Err: fmt.Errorf("error calling relayer %s for validator %s: %v", relay, valPubKey, err),
 			}
 			return
 		}
@@ -920,9 +909,8 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 		bodyBytes, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			resultsChan <- ValidatorRelayResult{
-				Index: idx,
-				Err:   fmt.Errorf("error reading response from relayer %s for validator %s: %v", relay, valPubKey, err),
+			resultsChan <- validatorRelayResult{
+				Err: fmt.Errorf("error reading response from relayer %s for validator %s: %v", relay, valPubKey, err),
 			}
 			return
 		}
@@ -933,9 +921,8 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 			signedRegistration := &builderApiV1.SignedValidatorRegistration{}
 
 			if err = json.Unmarshal(bodyBytes, signedRegistration); err != nil {
-				resultsChan <- ValidatorRelayResult{
-					Index: idx,
-					Err:   fmt.Errorf("error unmarshalling relay response from relayer %s for validator %s: %v", relay, valPubKey, err),
+				resultsChan <- validatorRelayResult{
+					Err: fmt.Errorf("error unmarshalling relay response from relayer %s for validator %s: %v", relay, valPubKey, err),
 				}
 				return
 			}
@@ -960,9 +947,8 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 		} else {
 			// If we get here, the relayer had an internal server error, so we couldnt check if the validator is/was registered with the correct
 			// fee recipient. We return an error.
-			resultsChan <- ValidatorRelayResult{
-				Index: idx,
-				Err:   fmt.Errorf("error calling relayer %s for validator %s: %v", relay, valPubKey, string(bodyBytes)),
+			resultsChan <- validatorRelayResult{
+				Err: fmt.Errorf("error calling relayer %s for validator %s: %v", relay, valPubKey, string(bodyBytes)),
 			}
 		}
 	}
@@ -973,8 +959,7 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 		registeredCorrectFee = true
 	}
 
-	resultsChan <- ValidatorRelayResult{
-		Index: idx,
+	resultsChan <- validatorRelayResult{
 		ValidatorResult: httpOkRelayersState{
 			ValPubKey:            valPubKey,
 			CorrectFeeRecipients: registeredCorrectFee,
