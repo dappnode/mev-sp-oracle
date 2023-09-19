@@ -298,6 +298,42 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		totalRewardsSentWei.Add(totalRewardsSentWei, block.Reward)
 	}
 
+	// Get the latest slot of the blockchain
+	consSync, err := m.Onchain.ConsensusClient.NodeSyncing(context.Background())
+	if err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get consensus sync progress: "+err.Error())
+	}
+
+	if consSync.SyncDistance > 5 {
+		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("consensus client is out of sync, slot: %d ", consSync.SyncDistance))
+	}
+
+	// 30 days/month * 24 hours/day * 3600 seconds/day / 12 seconds/slot
+	SlotsInOneMonth := uint64(216000)
+
+	// Prevent underflow
+	if uint64(consSync.HeadSlot) < SlotsInOneMonth {
+		m.respondError(w, http.StatusInternalServerError, "head slot is lower than slots in a month, this should not happen")
+	}
+
+	// Only consider blocks in the last 30 days
+	limitSlot := uint64(consSync.HeadSlot) - SlotsInOneMonth
+
+	totalRewardsSent30DaysWei := big.NewInt(0)
+	for _, block := range m.oracle.State().ProposedBlocks {
+		// Filter blocks in the last 30 days
+		if block.Slot > limitSlot {
+			totalRewardsSent30DaysWei.Add(totalRewardsSent30DaysWei, block.Reward)
+		}
+	}
+
+	rewardsPerValidatorPer30Days := big.NewInt(0)
+	totalValidatorsEarning := totalActive + totalYellowCard
+	if totalSubscribed != 0 {
+		// This metric can be biased if multiple validators exit at once within the month
+		rewardsPerValidatorPer30Days.Div(totalRewardsSent30DaysWei, big.NewInt(0).SetUint64(totalValidatorsEarning))
+	}
+
 	totalDonationsWei := big.NewInt(0)
 	for _, donation := range m.oracle.State().Donations {
 		totalDonationsWei.Add(totalDonationsWei, donation.DonationAmount)
@@ -315,22 +351,24 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	}
 
 	m.respondOK(w, httpOkMemoryStatistics{
-		TotalSubscribed:            totalSubscribed,
-		TotalActive:                totalActive,
-		TotalYellowCard:            totalYellowCard,
-		TotalRedCard:               totalRedCard,
-		TotalBanned:                totalBanned,
-		TotalNotSubscribed:         totalNotSubscribed,
-		LatestCheckpointSlot:       m.oracle.State().LatestProcessedSlot,
-		NextCheckpointSlot:         m.oracle.State().LatestProcessedSlot + m.cfg.CheckPointSizeInSlots,
-		TotalAccumulatedRewardsWei: totalAccumulatedRewards.String(),
-		TotalPendingRewaradsWei:    totalPendingRewards.String(),
-		TotalRewardsSentWei:        totalRewardsSentWei.String(),
-		TotalDonationsWei:          totalDonationsWei.String(),
-		AvgBlockRewardWei:          avgBlockRewardWei.String(),
-		TotalProposedBlocks:        totalProposedBlocks,
-		TotalMissedBlocks:          uint64(len(m.oracle.State().MissedBlocks)),
-		TotalWrongFeeBlocks:        uint64(len(m.oracle.State().WrongFeeBlocks)),
+		TotalSubscribed:              totalSubscribed,
+		TotalActive:                  totalActive,
+		TotalYellowCard:              totalYellowCard,
+		TotalRedCard:                 totalRedCard,
+		TotalBanned:                  totalBanned,
+		TotalNotSubscribed:           totalNotSubscribed,
+		LatestCheckpointSlot:         m.oracle.State().LatestProcessedSlot,
+		NextCheckpointSlot:           m.oracle.State().LatestProcessedSlot + m.cfg.CheckPointSizeInSlots,
+		TotalAccumulatedRewardsWei:   totalAccumulatedRewards.String(),
+		TotalPendingRewaradsWei:      totalPendingRewards.String(),
+		TotalRewardsSentWei:          totalRewardsSentWei.String(),
+		TotalDonationsWei:            totalDonationsWei.String(),
+		AvgBlockRewardWei:            avgBlockRewardWei.String(),
+		TotalRewardsSent30DaysWei:    totalRewardsSent30DaysWei.String(),
+		RewardsPerValidatorPer30Days: rewardsPerValidatorPer30Days.String(),
+		TotalProposedBlocks:          totalProposedBlocks,
+		TotalMissedBlocks:            uint64(len(m.oracle.State().MissedBlocks)),
+		TotalWrongFeeBlocks:          uint64(len(m.oracle.State().WrongFeeBlocks)),
 	})
 }
 

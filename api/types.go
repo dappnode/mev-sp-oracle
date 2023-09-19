@@ -61,22 +61,24 @@ type httpOkMerkleRoot struct {
 }
 
 type httpOkMemoryStatistics struct {
-	TotalSubscribed            uint64 `json:"total_subscribed_validators"`
-	TotalActive                uint64 `json:"total_active_validators"`
-	TotalYellowCard            uint64 `json:"total_yellowcard_validators"`
-	TotalRedCard               uint64 `json:"total_redcard_validators"`
-	TotalBanned                uint64 `json:"total_banned_validators"`
-	TotalNotSubscribed         uint64 `json:"total_notsubscribed_validators"`
-	LatestCheckpointSlot       uint64 `json:"latest_checkpoint_slot"`
-	NextCheckpointSlot         uint64 `json:"next_checkpoint_slot"`
-	TotalAccumulatedRewardsWei string `json:"total_accumulated_rewards_wei"`
-	TotalPendingRewaradsWei    string `json:"total_pending_rewards_wei"`
-	TotalRewardsSentWei        string `json:"total_rewards_sent_wei"`
-	TotalDonationsWei          string `json:"total_donations_wei"`
-	AvgBlockRewardWei          string `json:"avg_block_reward_wei"`
-	TotalProposedBlocks        uint64 `json:"total_proposed_blocks"`
-	TotalMissedBlocks          uint64 `json:"total_missed_blocks"`
-	TotalWrongFeeBlocks        uint64 `json:"total_wrongfee_blocks"`
+	TotalSubscribed              uint64 `json:"total_subscribed_validators"`
+	TotalActive                  uint64 `json:"total_active_validators"`
+	TotalYellowCard              uint64 `json:"total_yellowcard_validators"`
+	TotalRedCard                 uint64 `json:"total_redcard_validators"`
+	TotalBanned                  uint64 `json:"total_banned_validators"`
+	TotalNotSubscribed           uint64 `json:"total_notsubscribed_validators"`
+	LatestCheckpointSlot         uint64 `json:"latest_checkpoint_slot"`
+	NextCheckpointSlot           uint64 `json:"next_checkpoint_slot"`
+	TotalAccumulatedRewardsWei   string `json:"total_accumulated_rewards_wei"`
+	TotalPendingRewaradsWei      string `json:"total_pending_rewards_wei"`
+	TotalRewardsSentWei          string `json:"total_rewards_sent_wei"`
+	TotalRewardsSent30DaysWei    string `json:"total_rewards_sent_30days_wei"`
+	RewardsPerValidatorPer30Days string `json:"rewards_per_validator_per_30days_wei"`
+	TotalDonationsWei            string `json:"total_donations_wei"`
+	AvgBlockRewardWei            string `json:"avg_block_reward_wei"`
+	TotalProposedBlocks          uint64 `json:"total_proposed_blocks"`
+	TotalMissedBlocks            uint64 `json:"total_missed_blocks"`
+	TotalWrongFeeBlocks          uint64 `json:"total_wrongfee_blocks"`
 }
 
 type httpOkProofs struct {
