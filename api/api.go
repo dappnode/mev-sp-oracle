@@ -304,7 +304,7 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		m.respondError(w, http.StatusInternalServerError, "could not get consensus sync progress: "+err.Error())
 	}
 
-	if consSync.SyncDistance > 2 {
+	if consSync.SyncDistance > 5 {
 		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("consensus client is out of sync, slot: %d ", consSync.SyncDistance))
 	}
 
