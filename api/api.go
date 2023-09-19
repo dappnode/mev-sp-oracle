@@ -907,7 +907,7 @@ func (m *ApiService) processSingleValidator(idx int, valPubKey string, resultsCh
 	relays := m.cliCfg.RelayersEndpoints
 
 	for _, relay := range relays {
-		url := fmt.Sprintf("https://%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
+		url := fmt.Sprintf("%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
 		resp, err := http.Get(url)
 		if err != nil {
 			resultsChan <- ValidatorRelayResult{
