@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"flag"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
@@ -21,32 +23,12 @@ type CliConfig struct {
 	ApiPort           int
 	MetricsPort       int
 	CheckPointSyncUrl string
+	RelayersEndpoints []string
 }
 
 // By default the release is a custom build. CI takes care of upgrading it with
 // go build -v -ldflags="-X 'github.com/dappnode/mev-sp-oracle/config.ReleaseVersion=x.y.z'"
 var ReleaseVersion = "custom-build-your-own-risk"
-
-var MainnetRelays = []string{
-	"boost-relay.flashbots.net",
-	"bloxroute.max-profit.blxrbdn.com",
-	"bloxroute.ethical.blxrbdn.com",
-	"bloxroute.regulated.blxrbdn.com",
-	"builder-relay-mainnet.blocknative.com",
-	"relay.edennetwork.io",
-	"mainnet-relay.securerpc.com",
-	"relayooor.wtf",
-	"relay.ultrasound.money",
-	"agnostic-relay.net",
-	"aestus.live",
-}
-var GoerliRelays = []string{
-	"builder-relay-goerli.flashbots.net",
-	"bloxroute.max-profit.builder.goerli.blxrbdn.com",
-	"builder-relay-goerli.blocknative.com/",
-	"relay-goerli.edennetwork.io",
-	"goerli-relay.securerpc.com",
-}
 
 func NewCliConfig() (*CliConfig, error) {
 	// Optional flags:
@@ -64,6 +46,7 @@ func NewCliConfig() (*CliConfig, error) {
 	var consensusEndpoint = flag.String("consensus-endpoint", "", "Ethereum consensus endpoint")
 	var executionEndpoint = flag.String("execution-endpoint", "", "Ethereum execution endpoint")
 	var poolAddress = flag.String("pool-address", "", "Address of the smoothing pool contract")
+	var relayersEndpointsStr = flag.String("relayers-endpoints", "", "Comma-separated list of relayers endpoints")
 
 	flag.Parse()
 
@@ -94,6 +77,26 @@ func NewCliConfig() (*CliConfig, error) {
 		return nil, errors.New("pool-address: " + *poolAddress + " is not a valid address")
 	}
 
+	// Post process the relayers endpoints, make it a slice
+	relayersEndpoints := strings.Split(*relayersEndpointsStr, ",")
+
+	if len(relayersEndpoints) == 0 || (len(relayersEndpoints) == 1 && relayersEndpoints[0] == "") {
+		return nil, errors.New("relayers-endpoints is a mandatory flag and cant be empty")
+	}
+
+	// Validate the relayers endpoints, they must be valid URLs, not empty and start with https://.
+	for _, endpoint := range relayersEndpoints {
+		if endpoint == "" {
+			return nil, errors.New("relayer endpoint URL cannot be empty")
+		}
+		if !strings.HasPrefix(endpoint, "https://") {
+			return nil, errors.New("relayer endpoint URL must start with 'https://'")
+		}
+		if _, err := url.Parse(endpoint); err != nil {
+			return nil, errors.New("invalid relayer endpoint URL: " + endpoint)
+		}
+	}
+
 	cliConf := &CliConfig{
 		DryRun:            *dryRun,
 		UpdaterKeyFile:    *updaterKeystoreFile,
@@ -106,6 +109,7 @@ func NewCliConfig() (*CliConfig, error) {
 		ApiPort:           *apiPort,
 		MetricsPort:       *metricsPort,
 		CheckPointSyncUrl: *checkPointSyncUrl,
+		RelayersEndpoints: relayersEndpoints,
 	}
 	logConfig(cliConf)
 	return cliConf, nil
@@ -124,5 +128,6 @@ func logConfig(cfg *CliConfig) {
 		"ApiPort":           cfg.ApiPort,
 		"MetricsPort":       cfg.MetricsPort,
 		"CheckPointSyncUrl": cfg.CheckPointSyncUrl,
+		"RelayersEndpoints": cfg.RelayersEndpoints,
 	}).Info("Cli Config:")
 }

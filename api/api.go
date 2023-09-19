@@ -77,6 +77,7 @@ const (
 type ApiService struct {
 	srv           *http.Server
 	cfg           *oracle.Config
+	cliCfg        *config.CliConfig
 	Onchain       *oracle.Onchain
 	oracle        *oracle.Oracle
 	ApiListenAddr string
@@ -92,6 +93,7 @@ func NewApiService(
 	return &ApiService{
 		ApiListenAddr: fmt.Sprintf("0.0.0.0:%d", cliCfg.ApiPort),
 		cfg:           cfg,
+		cliCfg:        cliCfg,
 		oracle:        oracle,
 		Onchain:       onchain,
 		Network:       cfg.Network,
@@ -839,19 +841,11 @@ func (m *ApiService) handleValidatorRelayers(w http.ResponseWriter, req *http.Re
 	var wrongFeeRelays []httpRelay
 	var unregisteredRelays []httpRelay
 	registeredCorrectFee := false
-	var relays []string
 
-	if m.Network == "mainnet" {
-		relays = config.MainnetRelays
-	} else if m.Network == "goerli" {
-		relays = config.GoerliRelays
-	} else {
-		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("invalid network: %s", m.Network))
-		return
-	}
+	relayers := m.cliCfg.RelayersEndpoints
 
-	for _, relay := range relays {
-		url := fmt.Sprintf("https://%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
+	for _, relay := range relayers {
+		url := fmt.Sprintf("%s/relay/v1/data/validator_registration?pubkey=%s", relay, valPubKey)
 		resp, err := http.Get(url)
 		if err != nil {
 			m.respondError(w, http.StatusInternalServerError, "could not call relayer endpoint: "+err.Error())
