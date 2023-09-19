@@ -246,7 +246,7 @@ func (or *Oracle) SaveToJson(saveSlot bool) error {
 		return errors.Wrap(err, "could not create folder")
 	}
 
-	log.Debug("Saving state to file:", fmt.Sprintf("%s", jsonData))
+	log.Trace("Saving state to file:", fmt.Sprintf("%s", jsonData))
 
 	err = ioutil.WriteFile(path, jsonData, 0644)
 	if err != nil {
@@ -336,7 +336,7 @@ func (or *Oracle) LoadFromBytes(rawBytes []byte) (bool, error) {
 		return false, errors.Wrap(err, "could not marshal state without hash")
 	}
 
-	log.Debug("Loaded state from file: ", fmt.Sprintf("%s", jsonNoHash))
+	log.Trace("Loaded state from file: ", fmt.Sprintf("%s", jsonNoHash))
 
 	// We calculate the hash of the state we read
 	calculatedHashByte := sha256.Sum256(jsonNoHash[:])
