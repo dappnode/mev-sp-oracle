@@ -51,6 +51,9 @@ const defaultMerkleRoot = "0x000000000000000000000000000000000000000000000000000
 var SlotsInEpoch = uint64(32)
 var SecondsInSlot = uint64(12)
 
+// 30 days/month * 24 hours/day * 3600 seconds/day / 12 seconds/slot
+var SlotsInOneMonth = uint64(216000)
+
 const (
 	// Available endpoints
 	pathStatus            = "/status"
@@ -220,8 +223,6 @@ func (m *ApiService) StartHTTPServer() {
 		log.Fatal("HTTP server already started")
 	}
 
-	//go m.startBidCacheCleanupTask()
-
 	m.srv = &http.Server{
 		Addr: m.ApiListenAddr,
 		//wrap handler with corsMiddleware, it passes execution to router handler when finished
@@ -265,6 +266,12 @@ func (m *ApiService) handleRoot(w http.ResponseWriter, req *http.Request) {
 }
 
 func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Request) {
+	// Ensure the oracle is ready
+	if !m.OracleReady(uint64(64)) {
+		m.respondError(w, http.StatusServiceUnavailable, "Oracle node is currently syncing and not serving requests")
+		return
+	}
+
 	totalSubscribed := uint64(0)
 	totalActive := uint64(0)
 	totalYellowCard := uint64(0)
@@ -294,36 +301,43 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	totalSubscribed = totalActive + totalYellowCard + totalRedCard
 
 	totalRewardsSentWei := big.NewInt(0)
-	for _, block := range m.oracle.State().ProposedBlocks {
-		totalRewardsSentWei.Add(totalRewardsSentWei, block.Reward)
-	}
-
-	// Get the latest slot of the blockchain
-	consSync, err := m.Onchain.ConsensusClient.NodeSyncing(context.Background())
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not get consensus sync progress: "+err.Error())
-	}
-
-	if consSync.SyncDistance > 5 {
-		m.respondError(w, http.StatusInternalServerError, fmt.Sprintf("consensus client is out of sync, slot: %d ", consSync.SyncDistance))
-	}
-
-	// 30 days/month * 24 hours/day * 3600 seconds/day / 12 seconds/slot
-	SlotsInOneMonth := uint64(216000)
+	totalRewardsSent30DaysWei := big.NewInt(0)
+	totalDonationsWei := big.NewInt(0)
 
 	// Prevent underflow
-	if uint64(consSync.HeadSlot) < SlotsInOneMonth {
+	if uint64(m.oracle.State().LatestProcessedSlot) < SlotsInOneMonth {
 		m.respondError(w, http.StatusInternalServerError, "head slot is lower than slots in a month, this should not happen")
 	}
 
-	// Only consider blocks in the last 30 days
-	limitSlot := uint64(consSync.HeadSlot) - SlotsInOneMonth
+	if uint64(m.oracle.State().LatestProcessedBlock) < SlotsInOneMonth {
+		m.respondError(w, http.StatusInternalServerError, "head block is lower than slots in a month, this should not happen")
+	}
 
-	totalRewardsSent30DaysWei := big.NewInt(0)
+	// Only consider blocks in the last 30 days
+	limitSlot := uint64(m.oracle.State().LatestProcessedSlot) - SlotsInOneMonth
+	limitBlock := uint64(m.oracle.State().LatestProcessedBlock) - SlotsInOneMonth
+
+	// Note that in a month we have SlotsInOneMonth slots, but not exactly that amount of blocks. If blocks
+	// are missed we can have less. If blocks are missed we will take into account a time window
+	// slightly higher than 30 days.
+
 	for _, block := range m.oracle.State().ProposedBlocks {
+		totalRewardsSentWei.Add(totalRewardsSentWei, block.Reward)
+
 		// Filter blocks in the last 30 days
 		if block.Slot > limitSlot {
 			totalRewardsSent30DaysWei.Add(totalRewardsSent30DaysWei, block.Reward)
+		}
+	}
+
+	for _, donation := range m.oracle.State().Donations {
+		totalDonationsWei.Add(totalDonationsWei, donation.DonationAmount)
+
+		// Note that rewards also take donations into account
+		totalRewardsSentWei.Add(totalRewardsSentWei, donation.DonationAmount)
+
+		if donation.Raw.BlockNumber > limitBlock {
+			totalRewardsSent30DaysWei.Add(totalRewardsSent30DaysWei, donation.DonationAmount)
 		}
 	}
 
@@ -332,14 +346,6 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	if totalSubscribed != 0 {
 		// This metric can be biased if multiple validators exit at once within the month
 		rewardsPerValidatorPer30Days.Div(totalRewardsSent30DaysWei, big.NewInt(0).SetUint64(totalValidatorsEarning))
-	}
-
-	totalDonationsWei := big.NewInt(0)
-	for _, donation := range m.oracle.State().Donations {
-		totalDonationsWei.Add(totalDonationsWei, donation.DonationAmount)
-
-		// Note that rewards also take donations into account
-		totalRewardsSentWei.Add(totalRewardsSentWei, donation.DonationAmount)
 	}
 
 	totalProposedBlocks := uint64(len(m.oracle.State().ProposedBlocks))
@@ -1115,7 +1121,6 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) bool {
 	// Allow 3 epochs 32*3 slots out of sync (behind latest finalized). This allows to always serve requests since
 	// otherwise the oracle wont be able to reply, since from time to time its normal that it fall behind sync
 	// since it has to process the new epochs that keep arriving.
-	SlotsInEpoch := uint64(32)
 
 	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), "finalized")
 	if err != nil {
