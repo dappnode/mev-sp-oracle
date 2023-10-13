@@ -104,6 +104,7 @@ func main() {
 			log.Fatal("Could not get whitelist status: " + err.Error())
 		}
 		if !isWhitelisted {
+			// these logs seem unclear, where should I run whitelist?
 			log.Fatal("Pool address is not whitelisted, please run the 'whitelist' command first")
 		}
 		log.Info("Ok ", updaterAddress.String(), " is whitelisted")
@@ -115,6 +116,7 @@ func main() {
 		}
 
 		// Ensure it has balance, otherwise it wont be able to pay tx fees
+		// should we establish a minimum balance?
 		if balance.Cmp(big.NewInt(0)) == 0 {
 			log.Fatal("Updater address: ", updaterAddress.String(), " has no balance, please send some Eth to it")
 		} else {
@@ -146,6 +148,7 @@ func main() {
 			log.Fatal("Could not read response body: ", err)
 		}
 
+		// why are we reading the body as bytes and not as json?
 		_, err = oracleInstance.LoadFromBytes(bodyBytes)
 		if err != nil {
 			log.Fatal("Critical error loading state from checkpoint: ", err)
@@ -163,7 +166,7 @@ func main() {
 		}
 	}
 
-	// Get onchain root and slot
+	// Get onchain latest root and slot
 	_, onchainSlot, err := onchain.GetOnchainSlotAndRoot()
 	if err != nil {
 		log.Fatal("Could not get onchain slot and root: ", err)

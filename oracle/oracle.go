@@ -35,6 +35,7 @@ type Oracle struct {
 
 func NewOracle(cfg *Config) *Oracle {
 	state := &OracleState{
+		// could this default stateHash be problematic?
 		StateHash:            "",
 		LatestProcessedBlock: 0,
 		LatestProcessedSlot:  cfg.DeployedSlot - 1,
@@ -413,6 +414,7 @@ func (or *Oracle) LoadGivenState(slotCheckpoint uint64) (bool, error) {
 	}
 
 	// If not found, attemp to load previous states up to "attempts" checkpoints before
+	// should "attemps" be in cliconfig?
 	attempts := 3
 	if !has {
 		for i := 1; i < attempts; i++ {

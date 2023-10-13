@@ -65,15 +65,19 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 	if err != nil {
 		return nil, errors.Wrap(err, "Error dialing execution client")
 	}
-
 	// Get chainid to ensure the endpoint is working
+	// We could add a timeout of 120 seconds to the dial, like we do for consensus client.
+	// A few retry could also be added here, would be useful if exec client is run at the same time as the oracle
+	// and takes a while to start its RPC API.
 	chainId, err := executionClient.ChainID(context.Background())
 	if err != nil {
 		return nil, errors.Wrap(err, "Error fetching chainid from execution client")
 	}
+	// we could throw an error if chainId is not ethereum mainnet or testnet, and do the same for consensus clients
 	log.Info("Connected succesfully to execution client. ChainId: ", chainId)
 
 	// Dial the consensus client
+	// here we do set the timeout
 	client, err := http.New(context.Background(),
 		http.WithTimeout(120*time.Second),
 		http.WithAddress(cliCfg.ConsensusEndpoint),
@@ -82,6 +86,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 	if err != nil {
 		return nil, errors.Wrap(err, "Error dialing consensus client")
 	}
+	// why this cast? doesnt http.New return client service already?
 	consensusClient := client.(*http.Service)
 
 	// Get deposit contract to ensure the endpoint is working
@@ -92,6 +97,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 	log.Info("Connected succesfully to consensus client. ChainId: ", depositContract.ChainID,
 		" DepositContract: ", "0x"+hex.EncodeToString(depositContract.Address[:]))
 
+	// we can omit this if we check chainID before
 	if depositContract.ChainID != uint64(chainId.Int64()) {
 		return nil, errors.Wrap(err, fmt.Sprintf("Consensus and execution clients are not connected to the same chain %d vs %d",
 			depositContract.ChainID, chainId))
@@ -103,6 +109,8 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		return nil, errors.Wrap(err, "Error fetching execution client sync progress")
 	}
 
+	// We already have a "AreNodesInSync" method in this file. We could use it here instead
+	// of manually checking if exec and consensus are synced
 	// nil means synced
 	if execSync == nil {
 		header, err := executionClient.HeaderByNumber(context.Background(), nil)
@@ -119,6 +127,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		return nil, errors.Wrap(err, "Error fetching consensus client sync progress")
 	}
 
+	// In "AreNodesInSync" we defined sync as distance < 5. We are too strict here
 	if consSync.SyncDistance == 0 {
 		log.Info("Consensus client is in sync, head slot: ", consSync.HeadSlot)
 	} else {
@@ -873,6 +882,7 @@ func (onchain *Onchain) GetConfigFromContract(
 	MainnetChainId := uint64(1)
 	GoerliChainId := uint64(5)
 
+	// we could make a helper method to get chainID of execution and consensus clients.
 	chainId, err := onchain.ExecutionClient.ChainID(context.Background())
 	if err != nil {
 		log.Fatal("Could not get chainid: " + err.Error())
@@ -897,6 +907,7 @@ func (onchain *Onchain) GetConfigFromContract(
 		log.Fatal("ChainID not supported: ", depositContract.ChainID)
 	}
 
+	//genesis and genesis time could be calculated later, right before we need it. We could also set up a util method to get genesis time.
 	genesis, err := onchain.ConsensusClient.Genesis(context.Background())
 	if err != nil {
 		log.Fatal("Could not get genesis: " + err.Error())
@@ -971,12 +982,14 @@ func (onchain *Onchain) GetConfigFromContract(
 	log.Info("[Loaded from contract] Required collateral to join the pool: ",
 		ethCollateralInWei, " wei (", utils.WeiToEther(ethCollateralInWei), " Eth)")
 
+	// These logs are not needed here, we can print them in main or when parsing the cliConfig at the beginning
 	if cliCfg.DryRun {
 		log.Warn("The pool contract WILL NOT be updated, running in dry-run mode")
 	} else {
 		log.Warn("The pool contract WILL BE updated, running in updater mode")
 	}
 
+	// We have a "IsAddressWhitelisted" method in  this file already, we could call it here.
 	whitelistedAddresses, err := onchain.GetAllOracleMembers()
 	if err != nil {
 		log.Fatal("Could not get whitelisted addresses: " + err.Error())

@@ -186,6 +186,7 @@ func Equals(a string, b string) bool {
 
 func DecryptKey(cfg *config.CliConfig) (*keystore.Key, error) {
 	// Only parse it not in dry run mode
+	// This check seems redundant, this method is already only called when !cfg.DryRun in main.go
 	if !cfg.DryRun {
 		jsonBytes, err := ioutil.ReadFile(cfg.UpdaterKeyFile)
 		if err != nil {
