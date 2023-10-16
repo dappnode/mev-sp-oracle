@@ -142,6 +142,9 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	or.state.UnsubscriptionEvents = append(or.state.UnsubscriptionEvents, fullBlock.Events.UnsubscribeValidator...)
 	or.state.EtherReceivedEvents = append(or.state.EtherReceivedEvents, fullBlock.Events.EtherReceived...)
 
+	// could we add a mutex lock to all state handling functions ensure no one calls "handleManualSubscriptions", "handleCorrectBlockProposal", etc in the
+	// same time as we are here in AdvanceStateToNextSlot?
+
 	// Handle subscriptions first thing
 	or.handleManualSubscriptions(fullBlock.Events.SubscribeValidator)
 
@@ -836,6 +839,8 @@ func (or *Oracle) handleManualSubscriptions(
 	if len(subsEvents) > 0 {
 		blockReference := subsEvents[0].Raw.BlockNumber
 		for _, donation := range subsEvents {
+			// we could pass the expected block number (or.state.NextSlotToProcess) as a parameter to this function
+			// and check that all "donation.Raw.BlockNumber" is equal to it. This would make a stronger assertion
 			if donation.Raw.BlockNumber != blockReference {
 				log.Fatal("Handling manual subscriptions from different blocks is not possible: ",
 					donation.Raw.BlockNumber, " vs ", blockReference)
@@ -930,6 +935,8 @@ func (or *Oracle) handleManualSubscriptions(
 				"ValidatorIndex": valIdx,
 			}).Warn("[Subscription]: for banned validator, skipping")
 			// Since we track this validator, give the collateral back
+			// could this be a vector of attack? Get a validator banned and then subscribe it to the pool nonstop.
+			// Is it worth it to return collateral to a banned validator?
 			or.increaseValidatorAccumulatedRewards(valIdx, collateral)
 			continue
 		}
@@ -1013,7 +1020,10 @@ func (or *Oracle) handleManualUnsubscriptions(
 	// Ensure the subscriptions events are from the same block
 	if len(unsubEvents) > 0 {
 		blockReference := unsubEvents[0].Raw.BlockNumber
+		// donation seems like a weird name for this variable
 		for _, donation := range unsubEvents {
+			// we could pass the expected block number (or.state.NextSlotToProcess) as a parameter to this function
+			// and check that all "donation.Raw.BlockNumber" is equal to it. This would make a stronger assertion
 			if donation.Raw.BlockNumber != blockReference {
 				log.Fatal("Handling manual unsubscriptions from different blocks is not possible: ",
 					donation.Raw.BlockNumber, " vs ", blockReference)

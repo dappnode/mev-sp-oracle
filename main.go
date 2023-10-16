@@ -29,6 +29,7 @@ import (
 var SlotsInEpoch = uint64(32)
 
 // How often onchain validators are reloaded: 600 slots is 2 hours
+// should this be a config parameter?
 var UpdateValidatorsIntervalSlots = uint64(600)
 
 // logs file and path

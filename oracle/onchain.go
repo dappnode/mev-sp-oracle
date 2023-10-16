@@ -305,6 +305,7 @@ func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*ty
 
 func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
 	// Hardcoded value, slots in an epoch
+	// All these hardcoded values could be global variables, easier to modify if it changes in the future
 	slotsInEpoch := uint64(32)
 	epoch := slot / slotsInEpoch
 	slotWithinEpoch := slot % slotsInEpoch
@@ -750,6 +751,10 @@ func (o *Onchain) GetAddressEthBalance(account common.Address, opts ...retry.Opt
 // goes to the pool. This allows to fetch less information on the blocks that are
 // not relevant to the pool. If fetchAll is enabled, the whole content of the block
 // is fetched no matter what, just for debugging purposes, will slow down sync
+
+// isnt it clearer to use a mandatory boolean to decide if we fetch all content of block? Here we
+// are using an optional array to decide this, seems weird to me. Also, this method is not called len(opt) == 1 anywhere,
+// we could maybe get rid of it
 func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *FullBlock {
 	var fetchAll bool
 	if len(opt) > 1 {
@@ -797,6 +802,7 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 			log.Fatal("slot does not match requested slot: ", fullBlock.GetSlotUint64(), " vs ", slot)
 		}
 
+		// we could make a helper method to check and add all the events that happened in one block to our fullblock
 		etherReceived, err := o.GetEtherReceivedEvents(fullBlock.GetBlockNumber())
 		if err != nil {
 			log.Fatal("failed getting ether received events: ", err)
@@ -860,6 +866,7 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 		isFromSubscriber := oracle.isSubscribed(fullBlock.GetProposerIndexUint64())
 
 		// Check if the reward was sent to the pool
+		// should this be reviewed after this block happened? https://beaconcha.in/block/18220525#overview
 		isPoolRewarded := fullBlock.isAddressRewarded(o.PoolAddress)
 
 		// This calculation is expensive, do it only if the reward went to the pool or
