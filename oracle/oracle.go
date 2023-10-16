@@ -490,6 +490,7 @@ func (or *Oracle) FreezeCheckpoint() bool {
 		Leafs:      leafs,
 	}
 
+	// important: we're saving the state in the comminted states map when it is not already commited. Errors could happen later
 	or.state.CommitedStates[state.Slot] = state
 	return true
 }
@@ -650,6 +651,8 @@ func (or *Oracle) RunOffchainReconciliation() error {
 	for _, etherRx := range or.state.EtherReceivedEvents {
 		assets.Add(assets, etherRx.DonationAmount)
 	}
+	// When an already subscribed validator subscribes again, we refund the collateral to him, adding it to its PendingRewardsWei.
+	// Arent we counting its collateral as an asset when it is a liability here? (we're counting all subs collateral as an asset)
 	for _, subs := range or.state.SubscriptionEvents {
 		assets.Add(assets, subs.SubscriptionCollateral)
 	}

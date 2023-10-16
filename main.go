@@ -359,6 +359,8 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			// In order to avoid txs being reverted (which costs gas), we add a random sleep between 0 and 15 minutes
 			// to avoid a collision. This is not perfect, but it should be good enough. Statistically, it would be
 			// very improbable that n+1 oracles will wait the same amount of time producing a collision.
+
+			// this could be done a few lines later, when we check if "!cfg.DryRun && enoughData" again and update the contract merkle root
 			if !cfg.DryRun && enoughData {
 				// Get onchain root and slot
 				_, onchainSlot, err := onchain.GetOnchainSlotAndRoot()
@@ -423,6 +425,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 							}).Info("The submitted state is now consolidated in the contract")
 							break
 						} else {
+							// what if we get to an infinite loop of no consolidation here? should we give a fatal error and stop the oracle?
 							log.Info("Submitted merkle root is not consolidated, waiting for other oracles to update it")
 							time.Sleep(1 * time.Minute)
 						}
