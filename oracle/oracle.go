@@ -1011,10 +1011,10 @@ func (or *Oracle) handleManualUnsubscriptions(
 	// Ensure the subscriptions events are from the same block
 	if len(unsubEvents) > 0 {
 		blockReference := unsubEvents[0].Raw.BlockNumber
-		for _, donation := range unsubEvents {
-			if donation.Raw.BlockNumber != blockReference {
+		for _, unsub := range unsubEvents {
+			if unsub.Raw.BlockNumber != blockReference {
 				log.Fatal("Handling manual unsubscriptions from different blocks is not possible: ",
-					donation.Raw.BlockNumber, " vs ", blockReference)
+					unsub.Raw.BlockNumber, " vs ", blockReference)
 			}
 		}
 	}
