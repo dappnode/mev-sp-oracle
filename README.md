@@ -98,3 +98,6 @@ docker compose convert
 ## License
 
 [GNU General Public License v3.0](https://github.com/dappnode/mev-sp-oracle/blob/main/LICENSE)
+
+## Legal Disclaimer
+[Terms Of Service](https://github.com/dappnode/mev-sp-oracle/blob/main/TERMS_OF_SERVICE.md)
