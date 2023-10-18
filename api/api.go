@@ -18,6 +18,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/constants"
 	"github.com/dappnode/mev-sp-oracle/metrics"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/dappnode/mev-sp-oracle/utils"
@@ -46,10 +47,6 @@ var apiRetryOpts = []retry.Option{
 }
 
 const defaultMerkleRoot = "0x0000000000000000000000000000000000000000000000000000000000000000"
-
-// Hardcoded for Ethereum
-var SlotsInEpoch = uint64(32)
-var SecondsInSlot = uint64(12)
 
 // 30 days/month * 24 hours/day * 3600 seconds/day / 12 seconds/slot
 var SlotsInOneMonth = uint64(216000)
@@ -417,7 +414,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	}
 
 	finalizedEpoch := uint64(finality.Finalized.Epoch)
-	finalizedSlot := finalizedEpoch * SlotsInEpoch
+	finalizedSlot := finalizedEpoch * constants.SlotsInEpoch
 
 	oracleSync := false
 	if m.oracle.State().LatestProcessedSlot-finalizedSlot == 0 {
@@ -447,12 +444,12 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		OracleHeadDistance:          finalizedSlot - m.oracle.State().LatestProcessedSlot,
 		NextCheckpointSlot:          onchainSlot + m.cfg.CheckPointSizeInSlots,
 		NextCheckpointTime:          "", // TODO:
-		NextCheckpointRemaining:     utils.SlotsToTime(nextCheckpointInSlots),
-		NextCheckpointRemainingUnix: nextCheckpointInSlots * SecondsInSlot,
+		NextCheckpointRemaining:     utils.SlotsToTime(nextCheckpointInSlots, constants.SecondsInSlot),
+		NextCheckpointRemainingUnix: nextCheckpointInSlots * constants.SecondsInSlot,
 		PreviousCheckpointSlot:      onchainSlot,
 		PreviousCheckpointTime:      "", // TODO:
-		PreviousCheckpointAge:       utils.SlotsToTime(finalizedSlot - onchainSlot),
-		PreviousCheckpointAgeUnix:   (finalizedSlot - onchainSlot) * SecondsInSlot,
+		PreviousCheckpointAge:       utils.SlotsToTime(finalizedSlot-onchainSlot, constants.SecondsInSlot),
+		PreviousCheckpointAgeUnix:   (finalizedSlot - onchainSlot) * constants.SecondsInSlot,
 		ExecutionChainId:            chainId.String(),
 		ConsensusChainId:            strconv.FormatUint(depositContract.ChainID, 10),
 		DepositContact:              hexutil.Encode(depositContract.Address[:]),
@@ -1127,7 +1124,7 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) bool {
 		return false
 	}
 
-	finalizedSlot := uint64(finality.Finalized.Epoch) * SlotsInEpoch
+	finalizedSlot := uint64(finality.Finalized.Epoch) * constants.SlotsInEpoch
 	slotsFromFinalized := finalizedSlot - m.oracle.State().LatestProcessedSlot
 
 	// Use this if we want full in sync to latest finalized

@@ -84,11 +84,8 @@ func ByteArrayToArray(arr [][]byte) []string {
 }
 
 // Converts from slots to readable time (eg 1 day 9 hours 20 minutes)
-func SlotsToTime(slots uint64) string {
-	// Hardcoded. Mainnet Ethereum configuration
-	SecondsInSlot := uint64(12)
-
-	timeduration := time.Duration(slots*SecondsInSlot) * time.Second
+func SlotsToTime(slots uint64, secondsInSlot uint64) string {
+	timeduration := time.Duration(slots*secondsInSlot) * time.Second
 	strDuration := durafmt.Parse(timeduration).String()
 
 	return strDuration

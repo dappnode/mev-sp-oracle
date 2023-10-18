@@ -17,6 +17,7 @@ import (
 
 	"github.com/dappnode/mev-sp-oracle/api"
 	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/constants"
 	"github.com/dappnode/mev-sp-oracle/metrics"
 	"github.com/dappnode/mev-sp-oracle/oracle"
 	"github.com/dappnode/mev-sp-oracle/utils"
@@ -24,9 +25,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
-
-// Hardcoded for Ethereum
-var SlotsInEpoch = uint64(32)
 
 // How often onchain validators are reloaded: 600 slots is 2 hours
 var UpdateValidatorsIntervalSlots = uint64(600)
@@ -248,7 +246,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 		}
 
 		finalizedEpoch := uint64(finality.Finalized.Epoch)
-		finalizedSlot := finalizedEpoch * SlotsInEpoch
+		finalizedSlot := finalizedEpoch * constants.SlotsInEpoch
 
 		if finalizedSlot >= oracleInstance.State().NextSlotToProcess {
 
@@ -268,7 +266,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			metrics.LatestProcessedBlock.Set(float64(oracleInstance.State().LatestProcessedBlock))
 
 			log.Debug("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
-				slotToLatestFinalized, " (", utils.SlotsToTime(slotToLatestFinalized), " ago)")
+				slotToLatestFinalized, " (", utils.SlotsToTime(slotToLatestFinalized, constants.SecondsInSlot), " ago)")
 
 		} else {
 			log.WithFields(log.Fields{

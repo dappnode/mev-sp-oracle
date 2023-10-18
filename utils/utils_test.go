@@ -7,6 +7,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/dappnode/mev-sp-oracle/constants"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,9 +135,9 @@ func Test_ByteArrayToArray(t *testing.T) {
 }
 
 func Test_SlotsToTime(t *testing.T) {
-	require.Equal(t, "12 seconds", SlotsToTime(1))
-	require.Equal(t, "2 minutes", SlotsToTime(10))
-	require.Equal(t, "1 day 9 hours 20 minutes", SlotsToTime(10000))
+	require.Equal(t, "12 seconds", SlotsToTime(1, constants.SecondsInSlot))
+	require.Equal(t, "2 minutes", SlotsToTime(10, constants.SecondsInSlot))
+	require.Equal(t, "1 day 9 hours 20 minutes", SlotsToTime(10000, constants.SecondsInSlot))
 }
 
 func Test_StringToBlsKey(t *testing.T) {

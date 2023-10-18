@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/constants"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/dappnode/mev-sp-oracle/utils"
 
@@ -295,16 +296,14 @@ func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*ty
 }
 
 func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
-	// Hardcoded value, slots in an epoch
-	slotsInEpoch := uint64(32)
-	epoch := slot / slotsInEpoch
-	slotWithinEpoch := slot % slotsInEpoch
+	epoch := slot / constants.SlotsInEpoch
+	slotWithinEpoch := slot % constants.SlotsInEpoch
 	slotStr := strconv.FormatUint(slot, 10)
 
 	// If cache hit, return the result
 	if ProposalDutyCache.Epoch == epoch {
 		// Sanity check that should never happen
-		if ProposalDutyCache.Epoch != uint64(ProposalDutyCache.Duties[slotWithinEpoch].Slot/phase0.Slot(slotsInEpoch)) {
+		if ProposalDutyCache.Epoch != uint64(ProposalDutyCache.Duties[slotWithinEpoch].Slot/phase0.Slot(constants.SlotsInEpoch)) {
 			return nil, errors.New("Proposal duty epoch does not match when converting slot to epoch")
 		}
 		return ProposalDutyCache.Duties[slotWithinEpoch], nil
@@ -950,7 +949,7 @@ func (onchain *Onchain) GetConfigFromContract(
 	if err != nil {
 		log.Fatal("Could not get slot checkpoint size: " + err.Error())
 	}
-	log.Info("[Loaded from contract] Checkpoints will be created every ", checkPointSizeInSlots, " slots (", utils.SlotsToTime(checkPointSizeInSlots), ")")
+	log.Info("[Loaded from contract] Checkpoints will be created every ", checkPointSizeInSlots, " slots (", utils.SlotsToTime(checkPointSizeInSlots, constants.SecondsInSlot), ")")
 
 	poolFeesPercentTwoDecimals, err := onchain.GetPoolFee()
 	if err != nil {
