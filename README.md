@@ -94,3 +94,7 @@ Use to check that all env variables were correctly replaced
 ```console
 docker compose convert
 ```
+
+## License
+
+[GNU General Public License v3.0](https://github.com/dappnode/mev-sp-oracle/blob/main/LICENSE)
