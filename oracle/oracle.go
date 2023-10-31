@@ -1336,7 +1336,13 @@ func GetWithdrawalAndType(validator *v1.Validator) (string, WithdrawalType) {
 	} else if utils.IsEth1Type(withdrawalCred) {
 		return "0x" + withdrawalCred[24:], Eth1Withdrawal
 	}
-	log.Fatal("withdrawal credentials are not a valid type: ", withdrawalCred)
+	// can happen if a validator sets wrong withdrawal credentials (not very likely)
+	// aka not respecting the 0x00 or 0x000000000000000000000000 prefixes
+	// only concerning if the validator is subscribed to the pool
+	log.WithFields(log.Fields{
+		"WithdrawalCredentials": withdrawalCred,
+		"ValidatorIndex":        validator.Index,
+	}).Warn("withdrawal credentials are not valid, leaving empty")
 	return "", 0
 }
 

@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -81,6 +82,29 @@ func Test_FetchFromExecution(t *testing.T) {
 	//expectedValue, ok := new(big.Int).SetString("25893180161173005034", 10)
 	//require.True(t, ok)
 	//require.Equal(t, expectedValue, balance)
+}
+
+func Test_GetValidator(t *testing.T) {
+	if skip {
+		t.Skip("Skipping test")
+	}
+
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:3500",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+	}
+	onChain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+
+	vals, err := onChain.GetFinalizedValidators()
+	require.NoError(t, err)
+
+	for _, valEl := range vals {
+		fmt.Println(valEl.Index)
+		fmt.Println("raw: ", hex.EncodeToString(valEl.Validator.WithdrawalCredentials[:]))
+		a, b := GetWithdrawalAndType(valEl)
+		fmt.Println(valEl.Index, " ", hex.EncodeToString(valEl.Validator.WithdrawalCredentials[:]), "  ", a, "  ", b)
+	}
 }
 
 func Test_IsAddressWhitelisted(t *testing.T) {
