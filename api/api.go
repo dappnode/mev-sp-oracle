@@ -12,7 +12,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	builderApiV1 "github.com/attestantio/go-builder-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -73,6 +76,65 @@ const (
 	// Onchain endpoints: what is submitted to the contract
 	pathOnchainMerkleProof = "/onchain/proof/{withdrawalAddress}"
 )
+
+type RateLimiter struct {
+	visitors map[string]*rate.Limiter
+	mtx      sync.Mutex
+	r        rate.Limit
+	b        int
+}
+
+func NewRateLimiter(r rate.Limit, b int) *RateLimiter {
+	return &RateLimiter{
+		visitors: make(map[string]*rate.Limiter),
+		r:        r,
+		b:        b,
+	}
+}
+
+func (l *RateLimiter) addVisitor(ip string) *rate.Limiter {
+	l.mtx.Lock()
+	defer l.mtx.Unlock()
+
+	limiter := rate.NewLimiter(l.r, l.b)
+	l.visitors[ip] = limiter
+	return limiter
+}
+
+func (l *RateLimiter) getVisitor(ip string) *rate.Limiter {
+	l.mtx.Lock()
+	limiter, exists := l.visitors[ip]
+	if !exists {
+		l.mtx.Unlock()
+		return l.addVisitor(ip)
+	}
+	l.mtx.Unlock()
+	return limiter
+}
+
+func (l *RateLimiter) middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := realClientIP(r)
+		limiter := l.getVisitor(ip)
+
+		if !limiter.Allow() {
+			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func realClientIP(req *http.Request) string {
+	if ip := req.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	if ip := req.Header.Get("X-Forwarded-For"); ip != "" {
+		return strings.Split(ip, ",")[0]
+	}
+	return strings.Split(req.RemoteAddr, ":")[0]
+}
 
 type ApiService struct {
 	srv           *http.Server
@@ -182,6 +244,9 @@ func prometheusMiddleware(next http.Handler) http.Handler {
 
 func (m *ApiService) getRouter() http.Handler {
 	r := mux.NewRouter()
+
+	limiter := NewRateLimiter(5, 15) // r = requests per second, b = burst size
+	r.Use(limiter.middleware)
 
 	// Map endpoints and their handlers
 	r.HandleFunc("/", m.handleRoot).Methods(http.MethodGet)
