@@ -85,4 +85,5 @@ require (
 	github.com/attestantio/go-eth2-client v0.18.3
 	github.com/ethereum/go-ethereum v1.13.4
 	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/time v0.4.0
 )
