@@ -2434,6 +2434,43 @@ func Test_getMerkleRootIfAny(t *testing.T) {
 	require.Equal(t, true, enough)
 }
 
+func Test_IsCheckpoint(t *testing.T) {
+	oracle := NewOracle(&Config{
+		DeployedSlot:          7750448,
+		CheckPointSizeInSlots: 28800,
+	})
+
+	// We are behind the checkpoint
+	oracle.state.LatestProcessedSlot = 7750448 + 100
+	isCheckpoint, err := oracle.IsCheckpoint()
+	require.NoError(t, err)
+	require.Equal(t, false, isCheckpoint)
+
+	// We are at the checkpoint
+	oracle.state.LatestProcessedSlot = 7750448 + 28800
+	isCheckpoint, err = oracle.IsCheckpoint()
+	require.NoError(t, err)
+	require.Equal(t, true, isCheckpoint)
+
+	// We are at the checkpoint way in the future
+	oracle.state.LatestProcessedSlot = 7750448 + 28800*10
+	isCheckpoint, err = oracle.IsCheckpoint()
+	require.NoError(t, err)
+	require.Equal(t, true, isCheckpoint)
+
+	// We are not at the checkpoint but way in the future
+	oracle.state.LatestProcessedSlot = 7750448 + 28800*10 + 7
+	isCheckpoint, err = oracle.IsCheckpoint()
+	require.NoError(t, err)
+	require.Equal(t, false, isCheckpoint)
+
+	// Errors if no last processed slot
+	oracle.state.LatestProcessedSlot = 0
+	isCheckpoint, err = oracle.IsCheckpoint()
+	require.Error(t, err)
+	require.Equal(t, false, isCheckpoint)
+}
+
 func Test_GetWithdrawalAndType(t *testing.T) {
 	// Test eth1 credentials
 	validator1 := &v1.Validator{

@@ -77,6 +77,30 @@ func (or *Oracle) State() *OracleState {
 	return or.state
 }
 
+// Returns wether a checkpoint has been reached or not. A checkpoint is reached
+// when CheckPointSizeInSlots have passed from the last checkpoint
+func (or *Oracle) IsCheckpoint() (bool, error) {
+	or.mutex.RLock()
+	defer or.mutex.RUnlock()
+	latestProcSlot := or.State().LatestProcessedSlot
+
+	if latestProcSlot == 0 {
+		return false, errors.New(
+			fmt.Sprintf("cannot determine if checkpoint has been reached, no slots have been processed yet. latest=%d",
+				latestProcSlot))
+	}
+
+	if or.cfg.DeployedSlot > latestProcSlot {
+		return false, errors.New(fmt.Sprintf("deployed slot can't be greater than latest slot. deployed=%d, latest=%d",
+			or.cfg.DeployedSlot, latestProcSlot))
+	}
+
+	if (latestProcSlot-or.cfg.DeployedSlot)%or.cfg.CheckPointSizeInSlots == 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
 // Returns the state of the oracle, recalculating the hash of the state for
 // verification purposes
 func (or *Oracle) StateWithHash() (*OracleState, error) {
