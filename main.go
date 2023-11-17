@@ -26,8 +26,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// How often onchain validators are reloaded: 600 slots is 2 hours
-var UpdateValidatorsIntervalSlots = uint64(600)
+// How often onchain validators are reloaded: 1200 slots is 4 hours
+var UpdateValidatorsIntervalSlots = uint64(1200)
 
 // logs file and path
 const LogsName = "logs.txt"
@@ -283,9 +283,18 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			oracleInstance.SetBeaconValidators(onchain.Validators())
 		}
 
-		// Every CheckPointSizeInSlots we commit the state given some conditions
-		if oracleInstance.State().LatestProcessedSlot%cfg.CheckPointSizeInSlots == 0 {
-			log.Info("Checkpoint reached, latest processed slot: ", oracleInstance.State().LatestProcessedSlot)
+		// Every CheckPointSizeInSlots we commit the state given some conditions, starting from
+		// when the contract was deployed.
+		isCheckpoint, err := oracleInstance.IsCheckpoint()
+		if err != nil {
+			log.Fatal("Could not check if we are at a checkpoint: ", err)
+		}
+		if isCheckpoint {
+			log.WithFields(log.Fields{
+				"LatestProcessedSlot":   oracleInstance.State().LatestProcessedSlot,
+				"CheckPointSizeInSlots": cfg.CheckPointSizeInSlots,
+				"DeployedSlot":          oracleInstance.State().DeployedSlot,
+			}).Info("Checkpoint reached")
 
 			// This wont work since we need an archival geth node to fetch balances at specific blocks that are not the last
 			// as it is it errors "missing trie node". Leaving here for reference
@@ -372,13 +381,20 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				log.Fatal("Could not get onchain slot and root: ", err)
 			}
 
+			log.WithFields(log.Fields{
+				"OnchainRoot": onchainRoot,
+				"OnchainSlot": onchainSlot,
+				"OracleRoot":  newState.MerkleRoot,
+				"OracleSlot":  newState.Slot,
+			}).Info("Local vs onchain roots and slots")
+
 			// If the oracle has permission to update the contract root (!dryRun), we have enough data
 			// to construct a merkle tree.
 			if !cfg.DryRun && enoughData {
 				// If the new state is the one onchain + checkpoint size then its time to update the root
 				// Then we can update the new merkle root. onchainSlot == 0 is an special case when the
 				// contract was just initialized and there is no root yet.
-				if (newState.Slot == onchainSlot+cfg.CheckPointSizeInSlots) || onchainSlot == 0 {
+				if newState.Slot == onchainSlot+cfg.CheckPointSizeInSlots {
 					log.WithFields(log.Fields{
 						"Root": newState.MerkleRoot,
 						"Slot": newState.Slot,
