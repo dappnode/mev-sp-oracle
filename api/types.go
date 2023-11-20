@@ -115,6 +115,7 @@ type httpOkDonation struct {
 	AmountWei string `json:"amount_wei"`
 	Block     uint64 `json:"block_number"`
 	TxHash    string `json:"tx_hash"`
+	Sender    string `json:"sender"`
 }
 
 type httpOkBlock struct {
