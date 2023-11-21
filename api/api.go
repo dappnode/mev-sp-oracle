@@ -779,6 +779,7 @@ func (m *ApiService) handleMemoryDonations(w http.ResponseWriter, req *http.Requ
 			AmountWei: donation.DonationAmount.String(),
 			Block:     donation.Raw.BlockNumber,
 			TxHash:    donation.Raw.TxHash.String(),
+			Sender:    donation.Sender.String(),
 		})
 	}
 	m.respondOK(w, donations)
