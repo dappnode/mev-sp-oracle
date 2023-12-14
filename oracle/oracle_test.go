@@ -1993,9 +1993,15 @@ func Test_handleMissedBlock(t *testing.T) {
 }
 
 func Test_handleBlsCorrectBlockProposal_NotSubscribed(t *testing.T) {
-	oracle := NewOracle(&Config{})
+	oracle := NewOracle(&Config{
+		PoolFeesPercentOver10000: 100, // 1%
+	})
 
-	missed := SummarizedBlock{
+	oracle.addSubscription(888, "0xa", "0xb")
+	oracle.addSubscription(999, "0xa", "0xb")
+
+	blsBlock := SummarizedBlock{
+		Block:             1,
 		Slot:              uint64(100),
 		ValidatorIndex:    uint64(1),
 		ValidatorKey:      "0x0123456789abcdef0123456789abcdef01234567",
@@ -2005,13 +2011,28 @@ func Test_handleBlsCorrectBlockProposal_NotSubscribed(t *testing.T) {
 		WithdrawalAddress: "0x0123456789abcdef0123456789abcdef01234567",
 	}
 
-	oracle.handleBlsCorrectBlockProposal(missed)
+	oracle.handleBlsCorrectBlockProposal(blsBlock)
 
-	// no automatic subscription is produced
-	require.Equal(t, 0, len(oracle.state.Validators))
+	// no automatic subscription is produced. The 2 validators are not the BLS ones.
+	require.Equal(t, 2, len(oracle.state.Validators))
 
 	// all rewards go to the pool
-	require.Equal(t, big.NewInt(100), oracle.state.PoolAccumulatedFees)
+	require.Equal(t, big.NewInt(2), oracle.state.PoolAccumulatedFees)
+
+	// Run reconciliation
+	err := oracle.RunOffchainReconciliation()
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(oracle.state.ProposedBlocks))
+	require.Equal(t, blsBlock, oracle.state.ProposedBlocks[0])
+
+	// check all validators rewards. Each one gets a share
+	require.Equal(t, big.NewInt(49), oracle.state.Validators[888].PendingRewardsWei)
+	require.Equal(t, big.NewInt(49), oracle.state.Validators[999].PendingRewardsWei)
+
+	// The proposer is not tracked
+	_, exists := oracle.state.Validators[1]
+	require.False(t, exists)
 }
 
 func Test_handleBlsCorrectBlockProposal_Subscribed(t *testing.T) {
@@ -2034,8 +2055,8 @@ func Test_handleBlsCorrectBlockProposal_Subscribed(t *testing.T) {
 	// no automatic subscription is produced
 	require.Equal(t, 1, len(oracle.state.Validators))
 
-	// all rewards go to the pool
-	require.Equal(t, big.NewInt(100), oracle.state.PoolAccumulatedFees)
+	// all rewards go to that validator. Again, weird case that should not happen
+	require.Equal(t, big.NewInt(100), oracle.state.Validators[1].PendingRewardsWei)
 }
 
 func Test_increaseAllPendingRewards_1(t *testing.T) {
