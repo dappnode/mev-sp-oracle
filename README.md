@@ -27,30 +27,12 @@ docker pull dappnode/mev-sp-oracle:1.0.4
 ## Roles
 
 The oracle can run in two modes:
-* Updater: Recreates the state of all validator balances and every `checkpoint-size` updates the onchain contract with the new merkle root. Note that this mode requires to be configured with a valid keystore (containing the encrypted key) and this address must be allowed to update the contract onchain. Said account requires gas to pay for gas fees.
-* Verifier: Recreates the state calculating all validator balances, and can be run by anyone, but does not update the onchain root.
+* **Updater**: Updates the Merkle root onchain. Only whitelisted addresses are allowed to update said root.
+* **Verifier**: Calculates all balances and generates proofs. To be used by anyone.
 
-## Goerli Example
-
-Running in `updater` mode:
+## Running Smooth Oracle
 
 ```
-./mev-sp-oracle \
---consensus-endpoint="http://127.0.0.1:5051" \
---execution-endpoint="http://127.0.0.1:8545" \
---pool-address=0xF21fbbA423f3a893A2402d68240B219308AbCA46 \
---updater-keystore-path=keystore-path \
---updater-keystore-pass=password-of-keystore
-```
-
-Running in `verifier` mode:
-
-```
-./mev-sp-oracle \
---consensus-endpoint="http://127.0.0.1:5051" \
---execution-endpoint="http://127.0.0.1:8545" \
---pool-address=0xF21fbbA423f3a893A2402d68240B219308AbCA46 \
---dry-run
 ```
 
 Note that syncing might take some time, but if you trust another oracle you can use it as a checkpoint sync with `--checkpoint-sync-url=http://ip_address:7300/state`. This will get the state from that oracle, and continue syncing from there. Not recommended to be used in `updater` mode.
