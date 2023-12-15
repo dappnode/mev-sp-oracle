@@ -2,6 +2,29 @@
 
 This repo contains not only the oracle software but also a docker-compose with all required components such as consensus, execution clients and prometheus/grafana to monitor the setup. Everything is provisioned, so you just need to do the following.
 
+## Goerli Example
+
+Running in `updater` mode:
+
+```
+./mev-sp-oracle \
+--consensus-endpoint="http://127.0.0.1:5051" \
+--execution-endpoint="http://127.0.0.1:8545" \
+--pool-address=0xF21fbbA423f3a893A2402d68240B219308AbCA46 \
+--updater-keystore-path=keystore-path \
+--updater-keystore-pass=password-of-keystore
+```
+
+Running in `verifier` mode:
+
+```
+./mev-sp-oracle \
+--consensus-endpoint="http://127.0.0.1:5051" \
+--execution-endpoint="http://127.0.0.1:8545" \
+--pool-address=0xF21fbbA423f3a893A2402d68240B219308AbCA46 \
+--dry-run
+```
+
 ### Goerli Testnet
 
 ```console
