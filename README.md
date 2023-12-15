@@ -1,10 +1,15 @@
 # mev-sp-oracle
 
-The dappnode **mev smoothing pool** is made of three repositories:
-* [mev-sp-contracts](https://github.com/dappnode/mev-sp-contracts): contains the smoothing pool contracts where validators must send their rewards to, used to subscribe/unsubscribe and claim their share.
-* [mev-sp-oracle](https://github.com/dappnode/mev-sp-oracle): contains the rewards calculation algorithm and utilities to both update the merkle root of the tree and create proofs to be used in the smart contract for claiming rewards.
-* [mev-sp-trees](https://github.com/dappnode/mev-sp-trees): contains all rewards calculations for all subscribed validators organised per checkpoint, with all the merkle proofs and each checkpoint's merkle root.
-* [specification](https://github.com/dappnode/mev-sp-oracle/blob/main/spec/README.md): contains a detailed version of how the oracle works and calculates the fees.
+
+[**Smooth**](https://smooth.dappnode.io/) is made of:
+
+- [mev-sp-contracts](https://github.com/dappnode/mev-sp-contracts): contains the smoothing pool contracts where validators must send their rewards to, used to subscribe/unsubscribe and claim their share.
+- [mev-sp-oracle](https://github.com/dappnode/mev-sp-oracle): contains the rewards calculation algorithm and utilities to both update the merkle root of the tree and create proofs to be used in the smart contract for claiming rewards.
+- [mev-sp-fe](https://github.com/dappnode/mev-sp-fe): contains a frontend that allows to interact with the oracle in a user friendly way.
+
+## Description
+
+This software allows anyone to reconstruct the same state as the one available in [smooth.dappnode.io](https://smooth.dappnode.io/), which is just provided for convenience. Using a consensus + execution client and this oracle, you will be able to calculate the rewards of all subscribed validators, generate your own Merkle proofs, and use them to claim your rewards, without relaying in any 3rd party hosted service. Technical details of the implementation can be found in the [specification](https://github.com/dappnode/mev-sp-oracle/blob/main/spec/README.md).
 
 ## Build from source
 
@@ -15,17 +20,8 @@ go build
 
 ## Docker images
 
-Latest master is available and identified by its first 7 commit digits. Example:
 ```
-dappnode/mev-sp-oracle:583e6e1
-```
-
-## Tests
-
-Note that some files used for testing are bigger than what Github allows, so you may have to fetch it with `git lfs`.
-```
-git lfs checkout
-go test ./... -v
+docker pull dappnode/mev-sp-oracle:1.0.4
 ```
 
 ## Roles
@@ -59,40 +55,12 @@ Running in `verifier` mode:
 
 Note that syncing might take some time, but if you trust another oracle you can use it as a checkpoint sync with `--checkpoint-sync-url=http://ip_address:7300/state`. This will get the state from that oracle, and continue syncing from there. Not recommended to be used in `updater` mode.
 
-## Deployments
+## Tests
 
-This repo contains not only the oracle software but also a docker-compose with all required components such as consensus, execution clients and prometheus/grafana to monitor the setup. Everything is provisioned, so you just need to do the following.
-
-### Goerli Testnet
-
-```console
-$ sudo openssl rand -hex 32 > jwtsecret
-$ chmod 777 teku
+Note that some files used for testing are bigger than what Github allows, so you may have to fetch it with `git lfs`.
 ```
-
-Store in `.env` so that it's picked up by `docker-compose`. Notice that REGISTERED_RELAYS should be a comma separated list of relays that 
-operate in the same network that the oracle is running on. The following is an example for goerli:
-
-```
-export NETWORK=goerli
-export POOL_ADDRESS=0xF21fbbA423f3a893A2402d68240B219308AbCA46
-export UPDATER_KEYSTORE_PASS=xxx
-export REGISTERED_RELAYS=https://builder-relay-goerli.flashbots.net,https://bloxroute.max-profit.builder.goerli.blxrbdn.com,https://relay-goerli.edennetwork.io,https://goerli-relay.securerpc.com
-```
-And manually modify the following placeholders in `deployments/monitoring/prometheus-config.yml`:
-* Change `OPERATOR_PLACEHOLDER` for your identifier eg `monitor: "oracle_someentity"`.
-* Replace the `URL_PLACEHOLDER` (or whole url) to the one you want to push metrics to.
-* Replace `USERNAME_PLACEHOLDER`.
-* And `PASSWORD_PLACEHOLDER`.
-
-
-```
-docker-compose up -d
-```
-
-Use to check that all env variables were correctly replaced
-```console
-docker compose convert
+git lfs checkout
+go test ./... -v
 ```
 
 ## License
