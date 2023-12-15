@@ -226,6 +226,29 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 		"NextSlotToProcess":   oracleInstance.State().NextSlotToProcess,
 	}).Info("Processing, see api for progress")
 
+	// TODO: Proof of concept. Use this instead of the current Finalized. This return the exact last finalized slot.
+	// The current approach is a bit behind the latest finalized.
+	// TODO: On top of this, run onchain reconciliation only when sync
+	lastFinalizedslotFromClient, err := onchain.ConsensusClient.BeaconBlockHeader(context.Background(), "finalized")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	finalizedBlock, err := onchain.GetConsensusBlockAtSlot(uint64(lastFinalizedslotFromClient.Header.Message.Slot))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	block := big.NewInt(0).SetUint64(finalizedBlock.Capella.Message.Body.ExecutionPayload.BlockNumber - 1)
+	log.Info("block is: ", block)
+
+	log.Info("lastFinalizedslotFromClient: ", lastFinalizedslotFromClient.Header.Message.Slot)
+	poolEthBalanceWei2, err := onchain.GetPoolEthBalance(block)
+	if err != nil {
+		log.Error("Could not get pool eth balance: ", err)
+	}
+	log.Info("Pool eth balance: ", poolEthBalanceWei2, " at block: ", block)
+
 	for {
 		// Ensure that the nodes we are using are in sync with the blockchain (consensus + execution)
 		inSync, err := onchain.AreNodesInSync()
@@ -268,6 +291,53 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			log.Debug("[", processedSlot, "/", finalizedSlot, "] Processed until slot, remaining: ",
 				slotToLatestFinalized, " (", utils.SlotsToTime(slotToLatestFinalized, constants.SecondsInSlot), " ago)")
 
+			log.Info("running onchain reconciliation")
+
+			//finality, err := onchain.ConsensusClient.Finality(context.Background(), "finalized")
+			//if err != nil {
+			//	log.Fatal(err)
+			//}
+			if finalizedSlot == oracleInstance.State().LatestProcessedSlot {
+
+				latestBlock, err := onchain.ExecutionClient.HeaderByNumber(context.Background(), nil) // TODO wrap for infinite retries
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				blockToUse := big.NewInt(0)
+				blockToUse.Sub(latestBlock.Number, big.NewInt(10))
+
+				log.Info("Latest known block is: ", latestBlock.Number.String())
+				log.Info("Usedblock is: ", blockToUse.String())
+				// COSAS:
+				// -con nil funciona
+				// - con finalized parece que no. trie error
+
+				//finalizedSlot := uint64(finality.Finalized.Epoch) * constants.SlotsInEpoch
+
+				// if we are in sync
+				//if uint64(header.Header.Message.Slot) == oracleInstance.State().LatestProcessedSlot {
+
+				// TODO: using nil by now but can try with a specific block. NO MORE THAN 20 OR 30 MINUTES.
+
+				// This wont work since we need an archival geth node to fetch balances at specific blocks that are not the last
+				// as it is it errors "missing trie node". Leaving here for reference
+				uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
+				poolEthBalanceWei, err := onchain.GetPoolEthBalance(blockToUse)
+				if err != nil {
+					log.Error("Could not get pool eth balance: ", err)
+				}
+				_ = uniqueAddresses
+				_ = poolEthBalanceWei
+
+				claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, blockToUse)
+				err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
+				if err != nil {
+					// TODO: Dont fatal.
+					log.Fatal("Reconciliation failed, state was not commited: ", err)
+				}
+			}
+
 		} else {
 			log.WithFields(log.Fields{
 				"ChainFinalizedSlot": finalizedSlot,
@@ -296,20 +366,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				"DeployedSlot":          oracleInstance.State().DeployedSlot,
 			}).Info("Checkpoint reached")
 
-			// This wont work since we need an archival geth node to fetch balances at specific blocks that are not the last
-			// as it is it errors "missing trie node". Leaving here for reference
-			//uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
-			//poolEthBalanceWei, err := onchain.GetPoolEthBalance(big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock))
-			//if err != nil {
-			//	log.Error("Could not get pool eth balance: ", err)
-			//}
-			//claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, oracleInstance.State().LatestProcessedBlock)
-			//err = oracleInstance.RunReconciliation(poolEthBalanceWei, claimedPerAccount)
-			//if err != nil {
-			//	log.Fatal("Reconciliation failed, state was not commited: ", err)
-			//}
-
-			err := oracleInstance.RunOffchainReconciliation()
+			err = oracleInstance.RunOffchainReconciliation()
 			if err != nil {
 				log.Fatal("Offchain reconciliation failed, cant freeze checkpoint: ", err)
 			}
