@@ -28,14 +28,35 @@ docker pull dappnode/mev-sp-oracle:1.0.4
 
 The oracle can run in two modes:
 * **Updater**: Updates the Merkle root onchain. Only whitelisted addresses are allowed to update said root.
-* **Verifier**: Calculates all balances and generates proofs. To be used by anyone.
+* **Verifier**: Calculates all balances and generates proofs. To be used by anyone. Optional.
 
-## Running Smooth Oracle
+## Running Your Smooth Oracle
+
+You need a consensus + execution client + point the oracle to Smooth mainnet contract`0xAdFb8D27671F14f297eE94135e266aAFf8752e35`. Note that the consensus client shall be running in archival mode, `slots-per-restore-point=512` is enough. It will take some time to sync.
+```
+./mev-sp-oracle \
+--consensus-endpoint="http://127.0.0.1:3500" \
+--execution-endpoint="http://127.0.0.1:8545" \
+--pool-address=0xAdFb8D27671F14f297eE94135e266aAFf8752e35 \
+--relayers-endpoints=https://NOTNEEDED \
+--log-level=debug \
+--dry-run
+```
+
+The oracle exposes a REST API documented [here](https://github.com/dappnode/mev-sp-oracle/tree/main/api) that you can use to monitor its health, check your rewards, and calculate your Merkle proofs to claim your rewards. Note that this is optional and [smooth.dappnode.io](smooth.dappnode.io) is provided for convenience, but not needed, since a local hosted oracle can provide the same data.
+
+You can check the sync status. The `oracle_sync_distance_slots` indicates how far the oracle is behind the latest finalized slot, where 0 means totally in sync.
 
 ```
+curl localhost:7300/status
 ```
 
-Note that syncing might take some time, but if you trust another oracle you can use it as a checkpoint sync with `--checkpoint-sync-url=http://ip_address:7300/state`. This will get the state from that oracle, and continue syncing from there. Not recommended to be used in `updater` mode.
+You can also get the Merkle proofs of your withdrawal address as follows. They can be submitted directly into the contract using the [claimRewards](https://etherscan.io/address/0xAdFb8D27671F14f297eE94135e266aAFf8752e35#writeProxyContract) call.
+```
+curl localhost:7300/onchain/proof/0X_YOUR_WITHDRAWAL_ADDRESS
+```
+
+If someone you trust runs an oracle you can use the `--checkpoint-sync-url=http://ip_address:7300/state` flag. This will get the state from that oracle, and continue syncing from there. Useful to avoid having to sync everything, but requires trust in the endpoint provider.
 
 ## Tests
 
