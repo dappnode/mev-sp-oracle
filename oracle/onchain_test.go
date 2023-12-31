@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
+	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/dappnode/mev-sp-oracle/config"
@@ -15,6 +15,51 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// UnmarshalJSON unmarshals a JSON string into a big.Int.
+func (c *Call) UnmarshalJSON(b []byte) error {
+	type Alias Call
+	var raw struct {
+		Value string `json:"value"`
+		*Alias
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+
+	c.Calls = raw.Calls
+	c.From = raw.From
+	c.Gas = raw.Gas
+	c.GasUsed = raw.GasUsed
+	c.Input = raw.Input
+	c.To = raw.To
+	c.Type = raw.Type
+
+	c.Value = new(big.Int)
+	val, success := c.Value.SetString(strings.Trim(raw.Value, `"`), 0)
+	if !success {
+		return fmt.Errorf("failed to parse big.Int from string: %s", raw.Value)
+	}
+	c.Value = val
+
+	return nil
+}
+
+// Take from: https://github.com/ethereum/go-ethereum/blob/v1.13.8/eth/tracers/native/call.go#L48-L63
+type Call struct {
+	Calls   []Call   `json:"calls"`
+	From    string   `json:"from"`
+	Gas     string   `json:"gas"`
+	GasUsed string   `json:"gasUsed"`
+	Input   string   `json:"input"`
+	To      string   `json:"to"`
+	Type    string   `json:"type"`
+	Value   *big.Int `json:"value"`
+}
+
+type Result struct {
+	Calls []Call `json:"calls"`
+}
+
 // None of this tests can be executed without a valid consensus and execution client
 // so they are disabled by default, only to be run manually.
 var skip = true
@@ -22,15 +67,15 @@ var skip = true
 // Not a test per se, just an util to fetch block and store them for mocking
 func Test_GetFullBlockAtSlot(t *testing.T) {
 	// Uncomment to run
-	t.Skip("Skipping test")
+	//t.Skip("Skipping test")
 
 	// Folder to store the result
-	folder := "../mock"
+	//folder := "../mock"
 
 	// Config params
-	slotToFetch := uint64(5864096)                              // slot to fetch
+	slotToFetch := uint64(8097330)                              // slot to fetch
 	fetchHeaderAndReceipts := true                              // fetch header and receipts to reconstruct tip
-	poolAddress := "0xF21fbbA423f3a893A2402d68240B219308AbCA46" // contract of address to detect events
+	poolAddress := "0xAdFb8D27671F14f297eE94135e266aAFf8752e35" // contract of address to detect events
 
 	var cfgOnchain = &config.CliConfig{
 		ConsensusEndpoint: "http://127.0.0.1:5051",
@@ -44,15 +89,33 @@ func Test_GetFullBlockAtSlot(t *testing.T) {
 	require.NoError(t, err)
 
 	// Fetch all information from the blockchain
-	fullBlock := onchain.FetchFullBlock(slotToFetch, oracle, fetchHeaderAndReceipts)
+	//fullBlock := onchain.FetchFullBlock(slotToFetch, oracle, fetchHeaderAndReceipts)
 
-	// Serialize to json and dump to file
-	jsonData, err := json.MarshalIndent(fullBlock, "", " ")
+	_ = chaindId
+
+	hash := "0x6c9adaa16946d1279e0db0fc9348201c48b2f70a62ac5edfe06dc0ba2b4f3e3c"
+	hashother := common.HexToHash(hash)
+
+	fmt.Println("getting blocks")
+	_ = oracle
+	_ = slotToFetch
+	_ = fetchHeaderAndReceipts
+
+	hash := "0x6c9adaa16946d1279e0db0fc9348201c48b2f70a62ac5edfe06dc0ba2b4f3e3c"
+	hashother := common.HexToHash(hash)
+
+	var result Result
+	tc := TraceConfig{
+		Tracer: "callTracer",
+	}
+
+	err = onchain.ExecutionClient.Client().CallContext(context.Background(), &result, "debug_traceTransaction", hashother.String(), tc)
 	require.NoError(t, err)
-	fileName := fmt.Sprintf("fullblock_slot_%d_chainid_%s%s.json", slotToFetch, chaindId.String(), HasHeader(fetchHeaderAndReceipts))
-	path := filepath.Join(folder, fileName)
-	err = ioutil.WriteFile(path, jsonData, 0644)
-	require.NoError(t, err)
+
+	for _, call := range result.Calls {
+		fmt.Println("Call: ", call.To, " ", call.From, " ", call.Value, " ", call.Input, " ", call.Type)
+	}
+
 }
 
 func HasHeader(has bool) string {
