@@ -296,6 +296,18 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 	// Mev rewards are sent in the last tx. This tx sender
 	// matches the fee recipient of the protocol
 	if utils.Equals(b.GetFeeRecipient(), sender.String()) {
+		// MEV reward can also be sent via a smart contract, in which case the
+		// receiver is the pool address. Example:
+		// https://etherscan.io/tx/0x6c9adaa16946d1279e0db0fc9348201c48b2f70a62ac5edfe06dc0ba2b4f3e3c
+		// Note that the sender is still the protocol fee recipient, which allows us to distinguish
+		// between a mev reward and a donation as the last tx of the block
+		if b.Events.EtherReceived != nil {
+			for _, event := range b.Events.EtherReceived {
+				if event.DonationAmount.Cmp(tx.Value()) == 0 {
+					return tx.Value(), true, strings.ToLower(event.Raw.Address.String())
+				}
+			}
+		}
 		return tx.Value(), true, strings.ToLower(tx.To().String())
 	}
 
