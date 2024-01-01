@@ -36,10 +36,6 @@ func Test_AdvanceStateToNextSlot(t *testing.T) {
 		DeployedSlot:             uint64(5840966), // same as first block
 	})
 
-	validators, err := LoadValidators()
-	require.NoError(t, err)
-	oracleInstance.SetBeaconValidators(validators)
-
 	slotsToProcess := []uint64{
 		5840966, //mev reward
 		5843638, //vanila reward (auto subs)
@@ -741,8 +737,8 @@ func Test_handleManualSubscriptions_Valid(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -763,7 +759,7 @@ func Test_handleManualSubscriptions_Valid(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 	require.Equal(t, oracle.state.Validators[33], &ValidatorInfo{
 		ValidatorStatus:       Active,
 		AccumulatedRewardsWei: big.NewInt(0),
@@ -785,8 +781,8 @@ func Test_handleManualSubscriptions_FromWrongAddress(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -808,7 +804,7 @@ func Test_handleManualSubscriptions_FromWrongAddress(t *testing.T) {
 	}
 
 	// No subscriptions are produced
-	oracle.handleManualSubscriptions(sub1)
+	oracle.handleManualSubscriptions(sub1, vals)
 	require.Equal(t, 0, len(oracle.state.Validators))
 }
 
@@ -819,8 +815,28 @@ func Test_handleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+		&v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -854,7 +870,7 @@ func Test_handleManualSubscriptions_AlreadySubscribed(t *testing.T) {
 	}
 
 	// Run 3 subscriptions, only one should be added
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 
 	require.Equal(t, oracle.state.Validators[33], &ValidatorInfo{
 		ValidatorStatus:       Active,
@@ -875,8 +891,8 @@ func Test_handleManualSubscriptions_ThenSendBlock(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -897,7 +913,7 @@ func Test_handleManualSubscriptions_ThenSendBlock(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
 
 	// Force auto block proposal
@@ -931,8 +947,8 @@ func Test_handleManualSubscriptions_AutoThenSubscribe(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -966,7 +982,7 @@ func Test_handleManualSubscriptions_AutoThenSubscribe(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 
 	// State is keps in auto, since the subscription was ignored
 	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
@@ -978,8 +994,8 @@ func Test_SubscribeUnsubscribe_Auto(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1001,7 +1017,7 @@ func Test_SubscribeUnsubscribe_Auto(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
 
 	unsubs := []*contract.ContractUnsubscribeValidator{
@@ -1012,7 +1028,7 @@ func Test_SubscribeUnsubscribe_Auto(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualUnsubscriptions(unsubs)
+	oracle.handleManualUnsubscriptions(unsubs, vals)
 	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
 
 	// Force auto block proposal
@@ -1036,8 +1052,8 @@ func Test_AutoUnsubscribeThenManual(t *testing.T) { // TODO: Missing Then auto
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1069,7 +1085,7 @@ func Test_AutoUnsubscribeThenManual(t *testing.T) { // TODO: Missing Then auto
 		},
 	}
 
-	oracle.handleManualUnsubscriptions(unsubs)
+	oracle.handleManualUnsubscriptions(unsubs, vals)
 	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
 
 	// Now subscribe (but it was already auto subscribed)
@@ -1082,7 +1098,7 @@ func Test_AutoUnsubscribeThenManual(t *testing.T) { // TODO: Missing Then auto
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
 
 }
@@ -1093,8 +1109,8 @@ func Test_AutoUnsubscribeThenAuto(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1126,7 +1142,7 @@ func Test_AutoUnsubscribeThenAuto(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualUnsubscriptions(unsubs)
+	oracle.handleManualUnsubscriptions(unsubs, vals)
 	require.Equal(t, Auto, oracle.state.Validators[33].SubscriptionType)
 
 	// Force auto block proposal again
@@ -1149,8 +1165,8 @@ func Test_BannedValidatorAutoSubs(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1172,7 +1188,7 @@ func Test_BannedValidatorAutoSubs(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 
 	require.Equal(t, Manual, oracle.state.Validators[33].SubscriptionType)
 
@@ -1213,16 +1229,14 @@ func Test_handleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
-			Index:  33,
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
-				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
+	val := &v1.Validator{
+		Index:  33,
+		Status: v1.ValidatorStateActiveOngoing,
+		Validator: &phase0.Validator{
+			// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+			WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+			PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 		},
 	}
 
@@ -1234,14 +1248,14 @@ func Test_handleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 	}
 
 	// Validator is subscribed
-	oracle.handleManualSubscriptions([]*contract.ContractSubscribeValidator{sub1})
+	oracle.handleManualSubscriptions([]*contract.ContractSubscribeValidator{sub1}, []*v1.Validator{val})
 
 	// And has some rewards
 	oracle.increaseValidatorAccumulatedRewards(33, big.NewInt(9000))
 	oracle.increaseValidatorPendingRewards(33, big.NewInt(44000))
 
 	// Due to some mistake, the user subscribes again and again
-	oracle.handleManualSubscriptions([]*contract.ContractSubscribeValidator{sub1, sub1})
+	oracle.handleManualSubscriptions([]*contract.ContractSubscribeValidator{sub1, sub1}, []*v1.Validator{val, val})
 
 	require.Equal(t, oracle.state.Validators[33], &ValidatorInfo{
 		ValidatorStatus:       Active,
@@ -1264,8 +1278,8 @@ func Test_handleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1284,7 +1298,7 @@ func Test_handleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 	require.Equal(t, 0, len(oracle.state.Validators))
 	require.Equal(t, big.NewInt(1000), oracle.state.PoolAccumulatedFees)
 }
@@ -1297,8 +1311,8 @@ func Test_handleManualSubscriptions_NonExistent(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		0: &v1.Validator{}, // dummuy validator
+	vals := []*v1.Validator{
+		nil, // dummuy validator
 	}
 
 	subs := []*contract.ContractSubscribeValidator{
@@ -1310,7 +1324,7 @@ func Test_handleManualSubscriptions_NonExistent(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 	require.Equal(t, 0, len(oracle.state.Validators))
 	require.Equal(t, big.NewInt(1000), oracle.state.PoolAccumulatedFees)
 }
@@ -1323,18 +1337,18 @@ func Test_handleManualSubscriptions_WrongStateValidator(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
-			Index:  33,
-			Status: v1.ValidatorStateExitedSlashed,
+	vals := []*v1.Validator{
+		&v1.Validator{
+			Index:  34,
+			Status: v1.ValidatorStateActiveExiting,
 			Validator: &phase0.Validator{
 				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
 				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			},
 		},
-		34: &v1.Validator{
-			Index:  34,
-			Status: v1.ValidatorStateActiveExiting,
+		&v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateExitedSlashed,
 			Validator: &phase0.Validator{
 				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
 				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
@@ -1359,7 +1373,7 @@ func Test_handleManualSubscriptions_WrongStateValidator(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 
 	require.Equal(t, 0, len(oracle.state.Validators))
 	require.Equal(t, big.NewInt(1000*2), oracle.state.PoolAccumulatedFees)
@@ -1376,8 +1390,8 @@ func Test_handleManualSubscriptions_BannedValidator(t *testing.T) {
 
 	bannedIndex := uint64(300000)
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		phase0.ValidatorIndex(bannedIndex): &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  phase0.ValidatorIndex(bannedIndex),
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1406,7 +1420,7 @@ func Test_handleManualSubscriptions_BannedValidator(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 
 	// Banned validator stays banned
 	require.Equal(t, 1, len(oracle.state.Validators))
@@ -1429,8 +1443,8 @@ func Test_handleManualSubscriptions(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		33: &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  33,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1441,7 +1455,7 @@ func Test_handleManualSubscriptions(t *testing.T) {
 			},
 		},
 
-		34: &v1.Validator{
+		&v1.Validator{
 			Index:  34,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1452,7 +1466,7 @@ func Test_handleManualSubscriptions(t *testing.T) {
 			},
 		},
 
-		35: &v1.Validator{
+		&v1.Validator{
 			Index:  35,
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1486,7 +1500,7 @@ func Test_handleManualSubscriptions(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 
 	// 3 validator tried to sub, 2 ok, 1 not enough collateral
 	require.Equal(t, 2, len(oracle.state.Validators))
@@ -1525,7 +1539,31 @@ func Test_handleManualSubscriptions(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualSubscriptions(subs2)
+	vals2 := []*v1.Validator{
+		&v1.Validator{
+			Index:  33,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+
+		&v1.Validator{
+			Index:  34,
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				// Valdator pubkey: 0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d
+				PublicKey: phase0.BLSPubKey{130, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
+	oracle.handleManualSubscriptions(subs2, vals2)
 
 	// [33] & [34] should still be active after trying to subscribe again
 	require.Equal(t, Active, oracle.state.Validators[33].ValidatorStatus)
@@ -1565,8 +1603,8 @@ func Test_handleManualUnsubscriptions_SubThenUnsubThenAuto(t *testing.T) {
 	// Subscribe a validator
 	valIdx := uint64(9000)
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		phase0.ValidatorIndex(valIdx): &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  phase0.ValidatorIndex(valIdx),
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1584,7 +1622,7 @@ func Test_handleManualUnsubscriptions_SubThenUnsubThenAuto(t *testing.T) {
 			Sender:                 common.Address{3, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 	}
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 
 	require.Equal(t, Manual, oracle.state.Validators[valIdx].SubscriptionType)
 
@@ -1601,7 +1639,7 @@ func Test_handleManualUnsubscriptions_SubThenUnsubThenAuto(t *testing.T) {
 		},
 	}
 
-	oracle.handleManualUnsubscriptions(unsubs)
+	oracle.handleManualUnsubscriptions(unsubs, vals)
 
 	// Check is no longer subscribed and balances are kept (pending is reset)
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[valIdx].PendingRewardsWei)
@@ -1635,18 +1673,6 @@ func Test_handleManualUnsubscriptions_ValidSubscription(t *testing.T) {
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(500000),
 	})
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{}
-	for _, valIdx := range []uint64{6, 9, 10, 15} {
-		oracle.beaconValidators[phase0.ValidatorIndex(valIdx)] = &v1.Validator{
-			Index:  phase0.ValidatorIndex(valIdx),
-			Status: v1.ValidatorStateActiveOngoing,
-			Validator: &phase0.Validator{
-				// byte(valIdx) just to have different key/withdrawal addresses
-				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
-			},
-		}
-	}
 
 	for _, valIdx := range []uint64{6, 9, 10, 15} {
 		subs := []*contract.ContractSubscribeValidator{
@@ -1657,7 +1683,18 @@ func Test_handleManualUnsubscriptions_ValidSubscription(t *testing.T) {
 				Sender:                 common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 			},
 		}
-		oracle.handleManualSubscriptions(subs)
+		vals := []*v1.Validator{
+			&v1.Validator{
+				Index:  phase0.ValidatorIndex(valIdx),
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					// byte(valIdx) just to have different key/withdrawal addresses
+					WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+					PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+				},
+			},
+		}
+		oracle.handleManualSubscriptions(subs, vals)
 
 		// Simulate some proposals increasing the rewards
 		oracle.increaseValidatorAccumulatedRewards(valIdx, big.NewInt(3000))
@@ -1675,7 +1712,18 @@ func Test_handleManualUnsubscriptions_ValidSubscription(t *testing.T) {
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
 	}
-	oracle.handleManualUnsubscriptions(unsubs)
+	vals := []*v1.Validator{
+		&v1.Validator{
+			Index:  phase0.ValidatorIndex(6),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key/withdrawal addresses
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(6), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(6), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+	oracle.handleManualUnsubscriptions(unsubs, vals)
 
 	require.Equal(t, oracle.state.Validators[6], &ValidatorInfo{
 		ValidatorStatus:       NotSubscribed,    // Validator is still tracked but not subscribed
@@ -1705,6 +1753,7 @@ func Test_handleManualUnsubscriptions_ValidSubscription(t *testing.T) {
 
 	// Unsubscribe all remaining validators
 	newUnsubs := make([]*contract.ContractUnsubscribeValidator, 0)
+	vals2 := make([]*v1.Validator, 0)
 	for _, valIdx := range []uint64{ /*6*/ 9, 10, 15} {
 		newUnsubs = append(newUnsubs,
 			&contract.ContractUnsubscribeValidator{
@@ -1713,10 +1762,19 @@ func Test_handleManualUnsubscriptions_ValidSubscription(t *testing.T) {
 				Sender: common.Address{byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 				Raw:    types.Log{TxHash: [32]byte{0x1}},
 			})
+		vals2 = append(vals2, &v1.Validator{
+			Index:  phase0.ValidatorIndex(valIdx),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key/withdrawal addresses
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIdx), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(valIdx), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		})
 	}
 
 	// Unsubscribe all at once
-	oracle.handleManualUnsubscriptions(newUnsubs)
+	oracle.handleManualUnsubscriptions(newUnsubs, vals2)
 
 	require.Equal(t, 4, len(oracle.state.Validators))
 	require.Equal(t, oracle.state.Validators[6].ValidatorStatus, NotSubscribed)
@@ -1738,8 +1796,8 @@ func Test_handleManualUnsubscriptions_NonExistentValidator(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		0: &v1.Validator{}, // dummy validator
+	vals := []*v1.Validator{
+		nil,
 	}
 
 	// Simulate subscription of validator 33
@@ -1762,7 +1820,7 @@ func Test_handleManualUnsubscriptions_NonExistentValidator(t *testing.T) {
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
 	}
-	oracle.handleManualUnsubscriptions(unsubs)
+	oracle.handleManualUnsubscriptions(unsubs, vals)
 
 	// Check that the existing validator is not affected
 	require.Equal(t, 1, len(oracle.state.Validators))
@@ -1785,10 +1843,6 @@ func Test_handleManualUnsubscriptions_NotSubscribedValidator(t *testing.T) {
 		CollateralInWei: big.NewInt(1000),
 	})
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		0: &v1.Validator{}, // dummy validator
-	}
-
 	// Unsubscribe event of a validator index that BUT is not subscribed
 	valIdx := uint64(730100)
 	unsubs := []*contract.ContractUnsubscribeValidator{
@@ -1799,7 +1853,17 @@ func Test_handleManualUnsubscriptions_NotSubscribedValidator(t *testing.T) {
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
 	}
-	oracle.handleManualUnsubscriptions(unsubs)
+	vals := []*v1.Validator{
+		&v1.Validator{
+			Index:  730100,
+			Status: v1.ValidatorStateActiveExiting,
+			Validator: &phase0.Validator{
+				// Valid eth1 address: 0x9427a30991170f917d7b83def6e44d26577871ed
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+			},
+		},
+	}
+	oracle.handleManualUnsubscriptions(unsubs, vals)
 	require.Equal(t, 0, len(oracle.state.Validators))
 }
 
@@ -1810,10 +1874,6 @@ func Test_handleManualUnsubscriptions_FromWrongAddress(t *testing.T) {
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
 	})
-
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		0: &v1.Validator{}, // dummy validator
-	}
 
 	// Simulate subscription of validator 750100
 	valIndex := uint64(750100)
@@ -1827,6 +1887,18 @@ func Test_handleManualUnsubscriptions_FromWrongAddress(t *testing.T) {
 		ValidatorKey:          "0x81aae709e6aee7ed49cd15b941d85b967afcc8b844ee20bc7e13962e8484572c1b43d4be75652119ec353c1a32443e0d",
 	}
 
+	vals := []*v1.Validator{
+		&v1.Validator{
+			Index:  phase0.ValidatorIndex(valIndex),
+			Status: v1.ValidatorStateActiveOngoing,
+			Validator: &phase0.Validator{
+				// byte(valIdx) just to have different key/withdrawal addresses
+				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(valIndex), 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+				PublicKey:             phase0.BLSPubKey{byte(valIndex + 1), 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+			},
+		},
+	}
+
 	unsubs := []*contract.ContractUnsubscribeValidator{
 		&contract.ContractUnsubscribeValidator{
 			ValidatorID: valIndex,
@@ -1835,7 +1907,7 @@ func Test_handleManualUnsubscriptions_FromWrongAddress(t *testing.T) {
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
 	}
-	oracle.handleManualUnsubscriptions(unsubs)
+	oracle.handleManualUnsubscriptions(unsubs, vals)
 
 	// Validator remains intact, since unsubscription event was wrong
 	require.Equal(t, &ValidatorInfo{
@@ -1859,8 +1931,8 @@ func Test_handleManualUnsubscriptions_AndRejoin(t *testing.T) {
 
 	valIndex := uint64(750100)
 
-	oracle.beaconValidators = map[phase0.ValidatorIndex]*v1.Validator{
-		phase0.ValidatorIndex(valIndex): &v1.Validator{
+	vals := []*v1.Validator{
+		&v1.Validator{
 			Index:  phase0.ValidatorIndex(valIndex),
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
@@ -1896,7 +1968,7 @@ func Test_handleManualUnsubscriptions_AndRejoin(t *testing.T) {
 			Raw:    types.Log{TxHash: [32]byte{0x1}},
 		},
 	}
-	oracle.handleManualUnsubscriptions(unsubs)
+	oracle.handleManualUnsubscriptions(unsubs, vals)
 
 	// Unsubscription is ok
 	require.Equal(t, &ValidatorInfo{
@@ -1918,7 +1990,7 @@ func Test_handleManualUnsubscriptions_AndRejoin(t *testing.T) {
 			Sender:                 common.Address{148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
 		},
 	}
-	oracle.handleManualSubscriptions(subs)
+	oracle.handleManualSubscriptions(subs, vals)
 
 	// Its subscribed again with its old accumulated rewards
 	require.Equal(t, &ValidatorInfo{

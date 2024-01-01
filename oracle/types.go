@@ -134,6 +134,10 @@ type FullBlock struct {
 
 	// execution data: events (optional, only when the block was not missed)
 	Events *Events `json:"events"`
+
+	// Populated with the validators if there are sub/unsub events
+	ValidatorsSubs   []*v1.Validator `json:"validators_subs"`
+	ValidatorsUnsubs []*v1.Validator `json:"validators_unsubs"`
 }
 
 // Represents a block with information relevant for the pool, uses Fullblock

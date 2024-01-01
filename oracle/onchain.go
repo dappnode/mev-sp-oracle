@@ -236,13 +236,13 @@ func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.Valid
 	return validators, err
 }
 
-func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, opts ...retry.Option) (*api.Validator, error) {
+func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, slot string, opts ...retry.Option) (*api.Validator, error) {
 	var validators map[phase0.ValidatorIndex]*api.Validator
 	var err error
 
 	err = retry.Do(func() error {
 		validatorIndices := []phase0.ValidatorIndex{valIndex}
-		validators, err = o.ConsensusClient.Validators(context.Background(), "finalized", validatorIndices)
+		validators, err = o.ConsensusClient.Validators(context.Background(), slot, validatorIndices)
 
 		if err != nil {
 			log.Warn("Failed attempt to fetch validator: ", err.Error(), " Retrying...")
@@ -253,14 +253,16 @@ func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, opts ...ret
 			return errors.New("Error fetching validator: Requested one but got many")
 		}
 
-		if len(validators) == 0 {
-			return errors.New("Error fetching validator: Requested one but got none")
-		}
 		return nil
 	}, o.GetRetryOpts(opts)...)
 
 	if err != nil {
 		return nil, errors.New("Could not fetch validator: " + err.Error())
+	}
+
+	// If empty, it means the validator doesnt exist
+	if len(validators) == 0 {
+		return nil, nil
 	}
 
 	// Some sanity checks
@@ -762,7 +764,8 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 	}
 
 	// Get the validator info that proposed (or should have proposed) the block
-	validator, err := o.GetSingleValidator(slotDuty.ValidatorIndex)
+	currentSlotStr := strconv.FormatUint(slot, 10)
+	validator, err := o.GetSingleValidator(slotDuty.ValidatorIndex, currentSlotStr)
 	if err != nil {
 		log.Fatal("could not get single validator: ", err)
 	}
@@ -845,6 +848,29 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 
 		// Add the events to the block
 		fullBlock.SetEvents(events)
+
+		// If we have subscriptions or unsubscriptions, we need the state of that validator(s) at the current slot
+		validatorsSubs := make([]*v1.Validator, 0)
+		validatorsUnsubs := make([]*v1.Validator, 0)
+
+		for _, sub := range fullBlock.Events.SubscribeValidator {
+			validatorSub, err := o.GetSingleValidator(phase0.ValidatorIndex(sub.ValidatorID), currentSlotStr)
+			if err != nil {
+				log.Fatal("could not get validator subscriptions: ", err)
+			}
+			validatorsSubs = append(validatorsSubs, validatorSub)
+		}
+
+		for _, unsub := range fullBlock.Events.UnsubscribeValidator {
+			validatorsUnsub, err := o.GetSingleValidator(phase0.ValidatorIndex(unsub.ValidatorID), currentSlotStr)
+			if err != nil {
+				log.Fatal("could not get validator unsubscriptions: ", err)
+			}
+			validatorsUnsubs = append(validatorsUnsubs, validatorsUnsub)
+		}
+
+		fullBlock.ValidatorsSubs = validatorsSubs
+		fullBlock.ValidatorsUnsubs = validatorsUnsubs
 
 		// Check if the proposal is from a subscribed validator
 		isFromSubscriber := oracle.isSubscribed(fullBlock.GetProposerIndexUint64())

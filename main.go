@@ -219,7 +219,6 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 
 	// Load all the validators from the beacon chain
 	onchain.RefreshBeaconValidators()
-	oracleInstance.SetBeaconValidators(onchain.Validators())
 
 	log.WithFields(log.Fields{
 		"LatestProcessedSlot": oracleInstance.State().LatestProcessedSlot,
@@ -280,7 +279,6 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 
 		if oracleInstance.State().LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
 			onchain.RefreshBeaconValidators()
-			oracleInstance.SetBeaconValidators(onchain.Validators())
 		}
 
 		// Every CheckPointSizeInSlots we commit the state given some conditions, starting from

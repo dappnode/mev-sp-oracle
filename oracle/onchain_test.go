@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
@@ -203,9 +204,6 @@ func Test_EndToEnd(t *testing.T) {
 
 	oracleInstance := NewOracle(cfg)
 
-	onchain.RefreshBeaconValidators()
-	oracleInstance.SetBeaconValidators(onchain.Validators())
-
 	// Uncomment to save validators
 	//path := filepath.Join("../mock", "validators.json")
 	//jsonData, err := json.MarshalIndent(onchain.Validators(), "", " ")
@@ -369,6 +367,36 @@ func Test_EndToEnd(t *testing.T) {
 	}
 }
 
+func Test_NonExistentValidator(t *testing.T) {
+	// This takes long, if timeout hits: go test -v -run Test_EndToEnd -timeout 30m
+	t.Skip("Skipping test")
+
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:3500",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
+	}
+
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+
+	// Does not exist
+	val, err := onchain.GetSingleValidator(phase0.ValidatorIndex(999999999999), "finalized")
+	require.NoError(t, err)
+	require.Nil(t, val)
+
+	// Exists
+	val, err = onchain.GetSingleValidator(phase0.ValidatorIndex(0), "finalized")
+	require.NoError(t, err)
+	require.NotNil(t, val)
+
+	// Works with arbitrary slots
+	val, err = onchain.GetSingleValidator(phase0.ValidatorIndex(0), "0")
+	require.NoError(t, err)
+	require.NotNil(t, val)
+	fmt.Println(val)
+}
+
 // Run this test to ensure no regressions are introduced
 func Test_EndToEnd_Mainnet(t *testing.T) {
 	// This takes long, if timeout hits: go test -v -run Test_EndToEnd -timeout 30m
@@ -386,10 +414,6 @@ func Test_EndToEnd_Mainnet(t *testing.T) {
 	cfg := onchain.GetConfigFromContract(cfgOnchain)
 
 	oracleInstance := NewOracle(cfg)
-	//oracleInstance.Onchain = onchain
-
-	onchain.RefreshBeaconValidators()
-	oracleInstance.SetBeaconValidators(onchain.Validators())
 
 	// Slots where something happened. This saves having to sync everything, which takes too long
 	slotsToProcess := []uint64{

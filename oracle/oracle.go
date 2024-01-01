@@ -27,10 +27,9 @@ var StateFolder = "oracle-data"
 var StateJsonName = "state.json"
 
 type Oracle struct {
-	cfg              *Config
-	state            *OracleState
-	beaconValidators map[phase0.ValidatorIndex]*v1.Validator
-	mutex            sync.RWMutex
+	cfg   *Config
+	state *OracleState
+	mutex sync.RWMutex
 }
 
 func NewOracle(cfg *Config) *Oracle {
@@ -115,12 +114,6 @@ func (or *Oracle) StateWithHash() (*OracleState, error) {
 	return or.State(), nil
 }
 
-// Sets the known validators from the beacon chain, must be updated regularly
-func (or *Oracle) SetBeaconValidators(
-	validators map[phase0.ValidatorIndex]*v1.Validator) {
-	or.beaconValidators = validators
-}
-
 // Given a previous or.state, this function applies the new block to it, updating the or.state
 // with the new subscriptions, unsubscriptions, donations, and rewards to the pool, updating
 // the balance of all participating validators. Returns the slot that was processed and if there
@@ -166,7 +159,7 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	or.state.EtherReceivedEvents = append(or.state.EtherReceivedEvents, fullBlock.Events.EtherReceived...)
 
 	// Handle subscriptions first thing
-	or.handleManualSubscriptions(fullBlock.Events.SubscribeValidator)
+	or.handleManualSubscriptions(fullBlock.Events.SubscribeValidator, fullBlock.ValidatorsSubs)
 
 	// If the validator was subscribed and missed proposed the block in this slot
 	if summarizedBlock.BlockType == MissedProposal && or.isSubscribed(summarizedBlock.ValidatorIndex) {
@@ -190,7 +183,7 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	}
 
 	// Handle unsubscriptions the last thing after distributing rewards
-	or.handleManualUnsubscriptions(fullBlock.Events.UnsubscribeValidator)
+	or.handleManualUnsubscriptions(fullBlock.Events.UnsubscribeValidator, fullBlock.ValidatorsUnsubs)
 
 	// Handle the donations from this block
 	or.handleDonations(blockDonations)
@@ -857,7 +850,8 @@ func (or *Oracle) handleBlsCorrectBlockProposal(block SummarizedBlock) {
 // was triggered. This function asserts if the subscription was valid and updates the state
 // of the validator accordingly
 func (or *Oracle) handleManualSubscriptions(
-	subsEvents []*contract.ContractSubscribeValidator) {
+	subsEvents []*contract.ContractSubscribeValidator,
+	vals []*v1.Validator) {
 
 	// Ensure the subscriptions events are from the same block
 	if len(subsEvents) > 0 {
@@ -870,24 +864,20 @@ func (or *Oracle) handleManualSubscriptions(
 		}
 	}
 
-	if or.beaconValidators == nil {
-		log.Fatal("Beacon validators cant be nil")
+	if len(subsEvents) != len(vals) {
+		log.Fatal("Number of subscriptions events and validators dont match: subs=",
+			len(subsEvents), " vs vals=", len(vals))
 	}
 
-	if len(or.beaconValidators) == 0 {
-		log.Fatal("Beacon validators cant be empty")
-	}
-
-	for _, sub := range subsEvents {
+	for i, sub := range subsEvents {
 
 		valIdx := sub.ValidatorID
 		collateral := sub.SubscriptionCollateral
 		sender := sub.Sender.String()
-
-		validator, found := or.beaconValidators[phase0.ValidatorIndex(valIdx)]
+		validator := vals[i]
 
 		// Subscription recevied for a validator index that doesnt exist
-		if !found {
+		if validator == nil {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Raw.BlockNumber,
 				"Collateral":     sub.SubscriptionCollateral,
@@ -1035,7 +1025,8 @@ func (or *Oracle) handleManualSubscriptions(
 // If the unsubscription matches some criteria, we update the state of the validator. Main criteria
 // is that the sender matches the withdrawal address of the validator
 func (or *Oracle) handleManualUnsubscriptions(
-	unsubEvents []*contract.ContractUnsubscribeValidator) {
+	unsubEvents []*contract.ContractUnsubscribeValidator,
+	vals []*v1.Validator) {
 
 	// Ensure the subscriptions events are from the same block
 	if len(unsubEvents) > 0 {
@@ -1048,23 +1039,19 @@ func (or *Oracle) handleManualUnsubscriptions(
 		}
 	}
 
-	if or.beaconValidators == nil {
-		log.Fatal("Beacon validators cant be nil")
+	if len(unsubEvents) != len(vals) {
+		log.Fatal("Number of unsubscriptions events and validators dont match: ",
+			len(unsubEvents), " vs ", len(vals))
 	}
 
-	if len(or.beaconValidators) == 0 {
-		log.Fatal("Beacon validators cant be empty")
-	}
-
-	for _, unsub := range unsubEvents {
+	for i, unsub := range unsubEvents {
 
 		valIdx := unsub.ValidatorID
 		sender := unsub.Sender.String()
-
-		validator, found := or.beaconValidators[phase0.ValidatorIndex(valIdx)]
+		validator := vals[i]
 
 		// Unsubscription but for a validator that doesnt exist
-		if !found {
+		if validator == nil {
 			log.WithFields(log.Fields{
 				"BlockNumber":    unsub.Raw.BlockNumber,
 				"TxHash":         unsub.Raw.TxHash,
