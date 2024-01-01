@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"path/filepath"
 	"testing"
 
@@ -82,6 +83,29 @@ func Test_FetchFromExecution(t *testing.T) {
 	//expectedValue, ok := new(big.Int).SetString("25893180161173005034", 10)
 	//require.True(t, ok)
 	//require.Equal(t, expectedValue, balance)
+}
+
+func Test_BlocksWithInternalTx(t *testing.T) {
+	t.Skip("Skipping test")
+
+	// https://etherscan.io/tx/0x6c9adaa16946d1279e0db0fc9348201c48b2f70a62ac5edfe06dc0ba2b4f3e3c
+	pool := "0xAdFb8D27671F14f297eE94135e266aAFf8752e35"
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:3500",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       pool,
+	}
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+	oracle := NewOracle(&Config{})
+
+	fullBlock := onchain.FetchFullBlock(8097330, oracle)
+	donations := fullBlock.GetDonations(pool)
+	mevReward, isMev, recipient := fullBlock.MevRewardInWei()
+	require.Equal(t, big.NewInt(0).SetUint64(31995314350342039), mevReward)
+	require.Equal(t, true, isMev)
+	require.Equal(t, "0xadfb8d27671f14f297ee94135e266aaff8752e35", recipient)
+	require.Equal(t, 0, len(donations))
 }
 
 func Test_GetValidator(t *testing.T) {
@@ -315,14 +339,65 @@ func Test_EndToEnd(t *testing.T) {
 			oracleInstance.FreezeCheckpoint()
 		}
 	}
+}
 
-	// TODO: Run asserts
-	//oracleInstance.SaveStateToFile()
-	//oracleInstance.SaveToJson()
+// Run this test to ensure no regressions are introduced
+func Test_EndToEnd_Mainnet(t *testing.T) {
+	// This takes long, if timeout hits: go test -v -run Test_EndToEnd -timeout 30m
+	t.Skip("Skipping test")
 
-	require.Equal(t, "0x3b256a0d99ea9b781fb55349146c21209fd05deb5f33f605aa8868e82fbd3b03", oracleInstance.State().CommitedStates[5910468].MerkleRoot)
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:3500",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
+	}
 
-	// root: 0xf0ecfb7afe96f7f7b570598c71aaac8fae3e6880e078227106e3a29446d5dbf8
-	//AccumulatedBalanceWei=131064623899584732 LeafHash=7c049ecd5a07fc5b7d39573db41a1faca70a798112583dce61b0c8761eaa2166 WithdrawalAddress=0xe46f9be81f9a3aca1808bb8c36d353436bb96091
-	//AccumulatedBalanceWei=177243009873641532 LeafHash=83303f7cf1e36186b6d97de80db49c77fca6fd2a4fcdac771b4139d46b9abd1c WithdrawalAddress=0xa111b576408b1ccdaca3ef26f22f082c49bcaa55
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+
+	cfg := onchain.GetConfigFromContract(cfgOnchain)
+
+	oracleInstance := NewOracle(cfg)
+	//oracleInstance.Onchain = onchain
+
+	onchain.RefreshBeaconValidators()
+	oracleInstance.SetBeaconValidators(onchain.Validators())
+
+	// Slots where something happened. This saves having to sync everything, which takes too long
+	slotsToProcess := []uint64{
+		7756830, 7756835, 7757361, 7766538, 7779248, 7781938, 7783745, 7808048, 7822033, 7822251, 7836848, 7865077, 7865648, 7878170, 7878274, 7878509, 7878647, 7878967, 7878971, 7878981, 7878990, 7878996, 7879002, 7879009, 7879419, 7879422, 7879679, 7879761, 7879769, 7879972, 7879978, 7879988, 7880772, 7880784, 7881085, 7881092, 7881854, 7882923, 7882992, 7883031, 7883059, 7885178, 7885600, 7885949, 7888639, 7888782, 7890244, 7890641, 7891577, 7892765, 7892772, 7892777, 7892782, 7892787, 7892797, 7892804, 7892810, 7892814, 7892818, 7892824, 7892829, 7892833, 7892838, 7892840, 7892842, 7892846, 7892851, 7892855, 7892860, 7892865, 7892869, 7892874, 7892878, 7892883, 7892889, 7892893, 7892896, 7892899, 7892902, 7892906, 7892910, 7892914, 7894448, 7898599, 7900936, 7900940, 7900950, 7900953, 7902224, 7902637, 7904360, 7905670, 7907674, 7907745, 7912471, 7912649, 7912796, 7914675, 7915066, 7915071, 7917929, 7917940, 7919272, 7921005, 7922358, 7923248, 7925550, 7932272, 7933255, 7936382, 7941715, 7943854, 7948661, 7951145, 7951150, 7951154, 7952048, 7954878, 7955358, 7956791, 7958749, 7958774, 7958785, 7958806, 7958824, 7958828, 7959118, 7959127, 7959131, 7959139, 7959143, 7959185, 7959191, 7959196, 7959201, 7959206, 7959760, 7961602, 7965768, 7966604, 7966915, 7968732, 7969310, 7969328, 7969438, 7969720, 7970468, 7971205, 7974054, 7974963, 7974968, 7974972, 7974976, 7974981, 7974985, 7974989, 7974994, 7974998, 7975011, 7976709, 7980512, 7980848, 7983787, 7984069, 7988918, 7990055, 7999656, 8002052, 8002528, 8002775, 8006554, 8008026, 8009257, 8009648, 8009923, 8013759, 8017944, 8020418, 8023885, 8024255, 8024356, 8024685, 8024714, 8025916, 8028899, 8030778, 8032965, 8034125, 8034676, 8034793, 8035857, 8036291, 8036870, 8036907, 8038448, 8038850, 8040421, 8041904, 8042367, 8043927, 8047006, 8049725, 8049786, 8049854, 8050190, 8051808, 8052584, 8052619, 8055689, 8060916, 8060938, 8064244, 8065575, 8066225, 8067248, 8067518, 8067523, 8067528, 8067533, 8067540, 8070066, 8073795, 8075703, 8076369, 8076540, 8079845, 8079861, 8081527, 8083977, 8083995, 8084303, 8084527, 8087197, 8087704, 8088182, 8089905, 8092838, 8093532, 8094008, 8095244, 8095482, 8095910, 8096048, 8097330, 8098322, 8099002, 8099815,
+	}
+
+	prevSlot := slotsToProcess[0]
+	for _, slot := range slotsToProcess {
+		if prevSlot > slot {
+			t.Fatal("Slots are not in order")
+		}
+
+		// we force to process the slots we want
+		oracleInstance.State().NextSlotToProcess = slot
+		oracleInstance.State().LatestProcessedSlot = slot - 1
+
+		// Fetch block information
+		fullBlock := onchain.FetchFullBlock(oracleInstance.State().NextSlotToProcess, oracleInstance)
+
+		// Advance state to next slot based on the information we got from the block
+		processedSlot, err := oracleInstance.AdvanceStateToNextSlot(fullBlock)
+		require.NoError(t, err)
+
+		log.Info("Processed slot: ", processedSlot)
+
+		if isInSlice(processedSlot, []uint64{7779248, 7808048, 7836848, 7865648, 7894448, 7923248, 7952048, 7980848, 8009648, 8038448, 8067248, 8096048}) {
+			oracleInstance.FreezeCheckpoint()
+		}
+	}
+}
+
+func isInSlice(element uint64, slice []uint64) bool {
+	for _, value := range slice {
+		if element == value {
+			return true
+		}
+	}
+	return false
 }
