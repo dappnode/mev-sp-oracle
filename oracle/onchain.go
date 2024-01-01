@@ -866,6 +866,52 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 	return fullBlock
 }
 
+// TODO: This function is not wrapped with retries
+// Given a block, returns the slot where that block was proposed
+func (onchain *Onchain) GetSlotByBlock(deployedBlock *big.Int, genesisTime uint64) (uint64, error) {
+	// Genesis can be fetched with
+	/*
+
+		genesis, err := onchain.ConsensusClient.Genesis(context.Background())
+		if err != nil {
+			log.Fatal("Could not get genesis: " + err.Error())
+		}
+
+		genesisTime := uint64(genesis.GenesisTime.Unix())
+	*/
+
+	// Get that block from the execution layer
+	block, err := onchain.ExecutionClient.HeaderByNumber(context.Background(), deployedBlock)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not get block by number: "+deployedBlock.String())
+	}
+
+	// Calculate the corresponding slot given the block time and genesis time
+	blockTime := block.Time
+	SecondsInSlot := uint64(12)
+	slot := (blockTime - genesisTime) / SecondsInSlot
+
+	// Now we get the info at that slot from the consensus client
+	blockAtSlot, err := onchain.GetConsensusBlockAtSlot(slot)
+	if err != nil {
+		return 0, errors.Wrap(err, fmt.Sprintf("could not get block at slot:%d", slot))
+	}
+
+	if blockAtSlot == nil {
+		return 0, errors.New(fmt.Sprintf("block at slot:%d is nil, probably a missed block", slot))
+	}
+
+	fullBlock := FullBlock{ConsensusBlock: blockAtSlot}
+
+	// And assert that indeed it matches
+	if fullBlock.GetBlockNumber() != deployedBlock.Uint64() {
+		return 0, errors.New(fmt.Sprintf("Block number from consensus and execution client dont match: %d != %d",
+			fullBlock.GetBlockNumber(), deployedBlock.Uint64()))
+	}
+
+	return fullBlock.GetSlotUint64(), nil
+}
+
 func (onchain *Onchain) GetConfigFromContract(
 	cliCfg *config.CliConfig) *Config {
 

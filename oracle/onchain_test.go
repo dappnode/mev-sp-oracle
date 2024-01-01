@@ -56,6 +56,34 @@ func Test_GetFullBlockAtSlot(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func Test_GetGetSlotByBlock(t *testing.T) {
+	// Uncomment to run
+	t.Skip("Skipping test")
+
+	// Folder to store the result
+
+	poolAddress := "0xF21fbbA423f3a893A2402d68240B219308AbCA46" // contract of address to detect events
+
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:3500",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       poolAddress,
+	}
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+
+	genesis, err := onchain.ConsensusClient.Genesis(context.Background())
+	if err != nil {
+		log.Fatal("Could not get genesis: " + err.Error())
+	}
+
+	genesisTime := uint64(genesis.GenesisTime.Unix())
+
+	slot, err := onchain.GetSlotByBlock(big.NewInt(18902677), genesisTime)
+	require.NoError(t, err)
+	require.Equal(t, uint64(8097330), slot)
+}
+
 func HasHeader(has bool) string {
 	if has {
 		return "_withheaders"
