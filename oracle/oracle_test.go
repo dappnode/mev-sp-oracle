@@ -2017,7 +2017,7 @@ func Test_handleBlsCorrectBlockProposal_NotSubscribed(t *testing.T) {
 	require.Equal(t, 2, len(oracle.state.Validators))
 
 	// all rewards go to the pool
-	require.Equal(t, big.NewInt(2), oracle.state.PoolAccumulatedFees)
+	require.Equal(t, big.NewInt(100), oracle.state.PoolAccumulatedFees)
 
 	// Run reconciliation
 	err := oracle.RunOffchainReconciliation()
@@ -2026,9 +2026,9 @@ func Test_handleBlsCorrectBlockProposal_NotSubscribed(t *testing.T) {
 	require.Equal(t, 1, len(oracle.state.ProposedBlocks))
 	require.Equal(t, blsBlock, oracle.state.ProposedBlocks[0])
 
-	// check all validators rewards. Each one gets a share
-	require.Equal(t, big.NewInt(49), oracle.state.Validators[888].PendingRewardsWei)
-	require.Equal(t, big.NewInt(49), oracle.state.Validators[999].PendingRewardsWei)
+	// check all validators rewards.
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[888].PendingRewardsWei)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[999].PendingRewardsWei)
 
 	// The proposer is not tracked
 	_, exists := oracle.state.Validators[1]
@@ -2055,8 +2055,11 @@ func Test_handleBlsCorrectBlockProposal_Subscribed(t *testing.T) {
 	// no automatic subscription is produced
 	require.Equal(t, 1, len(oracle.state.Validators))
 
-	// all rewards go to that validator. Again, weird case that should not happen
-	require.Equal(t, big.NewInt(100), oracle.state.Validators[1].PendingRewardsWei)
+	// validator gets no rewards
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[1].PendingRewardsWei)
+
+	// pool gets rewards
+	require.Equal(t, big.NewInt(100), oracle.state.PoolAccumulatedFees)
 }
 
 func Test_increaseAllPendingRewards_1(t *testing.T) {
