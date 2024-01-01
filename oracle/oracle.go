@@ -840,16 +840,12 @@ func (or *Oracle) handleBlsCorrectBlockProposal(block SummarizedBlock) {
 	if block.BlockType != OkPoolProposalBlsKeys {
 		log.Fatal("Block type is not OkPoolProposalBlsKeys, BlockType: ", block.BlockType)
 	}
-	or.increaseAllPendingRewards(block.Reward)
-	or.state.ProposedBlocks = append(or.state.ProposedBlocks, block)
-
 	log.WithFields(log.Fields{
-		"Slot":       block.Slot,
-		"Block":      block.Block,
-		"ValIndex":   block.ValidatorIndex,
-		"RewardWei":  block.Reward,
-		"RewardType": block.RewardType.String(),
-	}).Info("[Reward] From BLS validator. Not supported so just splitting the rewards among all validators")
+		"BlockNumber":    block.Block,
+		"Slot":           block.Slot,
+		"ValidatorIndex": block.ValidatorIndex,
+	}).Warn("Block proposal was ok but bls keys are not supported, sending rewards to pool")
+	or.sendRewardToPool(block.Reward)
 }
 
 // Handles a manual subscription to the pool, meaning that an event from the smart contract
