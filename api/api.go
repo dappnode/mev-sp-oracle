@@ -495,6 +495,7 @@ func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Req
 			WithdrawalAddress:     v.WithdrawalAddress,
 			ValidatorIndex:        v.ValidatorIndex,
 			ValidatorKey:          v.ValidatorKey,
+			SubscriptionType:      v.SubscriptionType.String(),
 		})
 	}
 
