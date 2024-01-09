@@ -318,12 +318,19 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	// are missed we can have less. If blocks are missed we will take into account a time window
 	// slightly higher than 30 days.
 
-	for _, block := range m.oracle.State().ProposedBlocks {
-		totalRewardsSentWei.Add(totalRewardsSentWei, block.Reward)
+	totalOkPoolProposalBlocks := uint64(0)
 
-		// Filter blocks in the last 30 days
-		if block.Slot > limitSlot {
-			totalRewardsSent30DaysWei.Add(totalRewardsSent30DaysWei, block.Reward)
+	for _, block := range m.oracle.State().ProposedBlocks {
+		// only consider ok pool proposals, since these are the only type of blocks that are shared
+		// across all validators
+		if block.BlockType == oracle.OkPoolProposal {
+			totalRewardsSentWei.Add(totalRewardsSentWei, block.Reward)
+			totalOkPoolProposalBlocks++
+
+			// Filter blocks in the last 30 days
+			if block.Slot > limitSlot {
+				totalRewardsSent30DaysWei.Add(totalRewardsSent30DaysWei, block.Reward)
+			}
 		}
 	}
 
@@ -349,8 +356,8 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	avgBlockRewardWei := big.NewInt(0)
 
 	// Avoid division by zero
-	if totalProposedBlocks != 0 {
-		avgBlockRewardWei = big.NewInt(0).Div(totalRewardsSentWei, big.NewInt(0).SetUint64(uint64(len(m.oracle.State().ProposedBlocks))))
+	if totalOkPoolProposalBlocks != 0 {
+		avgBlockRewardWei = big.NewInt(0).Div(totalRewardsSentWei, big.NewInt(0).SetUint64(totalOkPoolProposalBlocks))
 	}
 
 	m.respondOK(w, httpOkMemoryStatistics{
