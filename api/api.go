@@ -60,7 +60,7 @@ const (
 
 	// Memory endpoints: what the oracle knows
 	pathMemoryValidators             = "/memory/validators"
-	pathMemoryValidatorByIndex       = "/memory/validator/{valindex}"
+	pathMemoryValidatorByIndices     = "/memory/validator/{valindices}"
 	pathMemoryValidatorsByWithdrawal = "/memory/validators/{withdrawalAddress}"
 	pathMemoryFeesInfo               = "/memory/feesinfo"
 	pathMemoryAllBlocks              = "/memory/allblocks"
@@ -194,7 +194,7 @@ func (m *ApiService) getRouter() http.Handler {
 
 	// Memory endpoints
 	r.HandleFunc(pathMemoryValidators, m.handleMemoryValidators).Methods(http.MethodGet)
-	r.HandleFunc(pathMemoryValidatorByIndex, m.handleMemoryValidatorInfo).Methods(http.MethodGet)
+	r.HandleFunc(pathMemoryValidatorByIndices, m.handleMemoryValidatorInfo).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryValidatorsByWithdrawal, m.handleMemoryValidatorsByWithdrawal).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryFeesInfo, m.handleMemoryFeesInfo).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryPoolStatistics, m.handleMemoryStatistics).Methods(http.MethodGet)
@@ -509,6 +509,7 @@ func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Req
 	m.respondOK(w, validatorsResp)
 }
 
+// Returns 1 or more validators, defined by index
 func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.Request) {
 	if !m.OracleReady(MaxSlotsBehind) {
 		m.respondError(w, http.StatusServiceUnavailable, "Oracle node is currently syncing and not serving requests")
@@ -516,26 +517,58 @@ func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.
 	}
 
 	vars := mux.Vars(req)
-	valIndexStr := vars["valindex"]
-	valIndex, ok := IsValidIndex(valIndexStr)
+	valIndicesStr := vars["valindices"]
 
-	if !ok {
-		m.respondError(w, http.StatusBadRequest, "invalid validator index: "+valIndexStr)
+	// Validate the valIndicesStr format
+	if !isValidIndicesFormat(valIndicesStr) {
+		m.respondError(w, http.StatusBadRequest, "invalid format for validator indices: "+valIndicesStr)
 		return
 	}
 
-	validator, found := m.oracle.State().Validators[valIndex]
-	if !found {
-		m.respondError(w, http.StatusBadRequest, fmt.Sprint("could not find validator with index: ", valIndex))
-		return
+	valIndices := strings.Split(valIndicesStr, ",")
+
+	var validators []*oracle.ValidatorInfo
+	var notFoundIndices []string
+	for _, valIndexStr := range valIndices {
+		valIndex, ok := IsValidIndex(valIndexStr)
+		if !ok {
+			m.respondError(w, http.StatusBadRequest, "invalid validator index: "+valIndexStr)
+			return
+		}
+
+		validator, found := m.oracle.State().Validators[valIndex]
+		if found {
+			validators = append(validators, validator)
+		} else {
+			notFoundIndices = append(notFoundIndices, valIndexStr)
+		}
 	}
 
-	// TODO: Temporal, remove in production.
-	if validator.ValidatorIndex != valIndex {
-		validator.ValidatorIndex = valIndex
+	// Make bigNumber of the return array a string
+	validatorsResp := make([]httpOkValidatorInfo, 0)
+	for _, v := range validators {
+		validatorsResp = append(validatorsResp, httpOkValidatorInfo{
+			ValidatorStatus:       v.ValidatorStatus.String(),
+			AccumulatedRewardsWei: v.AccumulatedRewardsWei.String(),
+			PendingRewardsWei:     v.PendingRewardsWei.String(),
+			CollateralWei:         v.CollateralWei.String(),
+			WithdrawalAddress:     v.WithdrawalAddress,
+			ValidatorIndex:        v.ValidatorIndex,
+			ValidatorKey:          v.ValidatorKey,
+			SubscriptionType:      v.SubscriptionType.String(),
+		})
 	}
 
-	m.respondOK(w, validator)
+	// Respond with found validators and a list of not found indices
+	response := struct {
+		FoundValidators []httpOkValidatorInfo `json:"found_validators"`
+		NotFoundIndices []string              `json:"not_found_validators"`
+	}{
+		FoundValidators: validatorsResp,
+		NotFoundIndices: notFoundIndices,
+	}
+
+	m.respondOK(w, response)
 }
 
 func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, req *http.Request) {
@@ -967,6 +1000,11 @@ func IsValidIndex(v string) (uint64, bool) {
 		return 0, false
 	}
 	return val, true
+}
+
+func isValidIndicesFormat(valIndicesStr string) bool {
+	re := regexp.MustCompile(`^\d+(,\d+)*$`)
+	return re.MatchString(valIndicesStr)
 }
 
 func IsValidAddress(v string) bool {
