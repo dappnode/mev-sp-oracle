@@ -140,6 +140,11 @@ type httpOkValidatorInfo struct {
 	SubscriptionType      string `json:"subscription_type"`
 }
 
+type httpOkValidatorsByIndex struct {
+	Found    []httpOkValidatorInfo `json:"found_validators"`
+	NotFound []uint64              `json:"not_found_validators"`
+}
+
 // Subscription event and the associated validator (if any)
 // TODO: Perhaps remove, no longer need if refactored a bit
 type Subscription struct { //TODO: remove
