@@ -15,6 +15,7 @@ import (
 	"time"
 
 	builderApiV1 "github.com/attestantio/go-builder-client/api/v1"
+	eth2 "github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/config"
@@ -390,7 +391,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		m.respondError(w, http.StatusInternalServerError, "could not get exex chainid: "+err.Error())
 	}
 
-	depositContract, err := m.Onchain.ConsensusClient.DepositContract(context.Background())
+	depositContract, err := m.Onchain.ConsensusClient.DepositContract(context.Background(), &eth2.DepositContractOpts{})
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get deposit contract: "+err.Error())
 	}
@@ -406,23 +407,25 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		execInSync = true
 	}
 
-	consSync, err := m.Onchain.ConsensusClient.NodeSyncing(context.Background())
+	consSync, err := m.Onchain.ConsensusClient.NodeSyncing(context.Background(), &eth2.NodeSyncingOpts{})
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get consensus sync progress: "+err.Error())
 	}
 
 	// Allow some slots to avoid jitter
 	consInSync := false
-	if uint64(consSync.SyncDistance) < 2 {
+	if uint64(consSync.Data.SyncDistance) < 2 {
 		consInSync = true
 	}
 
-	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), "finalized")
+	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), &eth2.FinalityOpts{
+		State: "finalized",
+	})
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get consensus latest finalized slot: "+err.Error())
 	}
 
-	finalizedEpoch := uint64(finality.Finalized.Epoch)
+	finalizedEpoch := uint64(finality.Data.Finalized.Epoch)
 	finalizedSlot := finalizedEpoch * constants.SlotsInEpoch
 
 	oracleSync := false
@@ -460,8 +463,8 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		PreviousCheckpointAge:       utils.SlotsToTime(finalizedSlot-onchainSlot, constants.SecondsInSlot),
 		PreviousCheckpointAgeUnix:   (finalizedSlot - onchainSlot) * constants.SecondsInSlot,
 		ExecutionChainId:            chainId.String(),
-		ConsensusChainId:            strconv.FormatUint(depositContract.ChainID, 10),
-		DepositContact:              hexutil.Encode(depositContract.Address[:]),
+		ConsensusChainId:            strconv.FormatUint(depositContract.Data.ChainID, 10),
+		DepositContact:              hexutil.Encode(depositContract.Data.Address[:]),
 	}
 
 	m.respondOK(w, status)
@@ -1191,12 +1194,14 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) bool {
 	// otherwise the oracle wont be able to reply, since from time to time its normal that it fall behind sync
 	// since it has to process the new epochs that keep arriving.
 
-	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), "finalized")
+	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), &eth2.FinalityOpts{
+		State: "finalized",
+	})
 	if err != nil {
 		return false
 	}
 
-	finalizedSlot := uint64(finality.Finalized.Epoch) * constants.SlotsInEpoch
+	finalizedSlot := uint64(finality.Data.Finalized.Epoch) * constants.SlotsInEpoch
 	slotsFromFinalized := finalizedSlot - m.oracle.State().LatestProcessedSlot
 
 	// Use this if we want full in sync to latest finalized

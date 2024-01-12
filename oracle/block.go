@@ -86,6 +86,8 @@ func (b *FullBlock) SetConsensusBlock(consensusBlock *spec.VersionedSignedBeacon
 		proposerIndex = uint64(consensusBlock.Bellatrix.Message.ProposerIndex)
 	} else if consensusBlock.Capella != nil {
 		proposerIndex = uint64(consensusBlock.Capella.Message.ProposerIndex)
+	} else if consensusBlock.Deneb != nil {
+		proposerIndex = uint64(consensusBlock.Deneb.Message.ProposerIndex)
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
@@ -424,12 +426,12 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 			tipFee.Mul(gasPrice, gasUsed)
 		case 1:
 			tipFee.Mul(gasPrice, gasUsed)
-		case 2:
+		case 2, 3:
 			// Sum gastipcap and basefee or saturate to gasfeecap
 			usedGasPrice := utils.SumAndSaturate(tx.GasTipCap(), b.ExecutionHeader.BaseFee, tx.GasFeeCap())
 			tipFee = new(big.Int).Mul(usedGasPrice, gasUsed)
 		default:
-			return nil, errors.New(fmt.Sprintf("unknown tx type: %d", tx.Type()))
+			return nil, errors.New(fmt.Sprintf("unknown tx type: %d, hash: %s", tx.Type(), tx.Hash().String()))
 		}
 		tips = tips.Add(tips, tipFee)
 	}
@@ -572,6 +574,8 @@ func (b *FullBlock) GetFeeRecipient() string {
 		feeRecipient = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient.String()
 	} else if b.ConsensusBlock.Capella != nil {
 		feeRecipient = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.FeeRecipient.String()
+	} else if b.ConsensusBlock.Deneb != nil {
+		feeRecipient = b.ConsensusBlock.Deneb.Message.Body.ExecutionPayload.FeeRecipient.String()
 	} else {
 		log.Fatal("Block was empty, cant get fee recipient")
 	}
@@ -588,6 +592,8 @@ func (b *FullBlock) GetBlockTransactions() []bellatrix.Transaction {
 		transactions = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.Transactions
 	} else if b.ConsensusBlock.Capella != nil {
 		transactions = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.Transactions
+	} else if b.ConsensusBlock.Deneb != nil {
+		transactions = b.ConsensusBlock.Deneb.Message.Body.ExecutionPayload.Transactions
 	} else {
 		log.Fatal("Block was empty, cant get transactions")
 	}
@@ -604,6 +610,8 @@ func (b *FullBlock) GetBlockNumber() uint64 {
 		blockNumber = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.BlockNumber
 	} else if b.ConsensusBlock.Capella != nil {
 		blockNumber = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.BlockNumber
+	} else if b.ConsensusBlock.Deneb != nil {
+		blockNumber = b.ConsensusBlock.Deneb.Message.Body.ExecutionPayload.BlockNumber
 	} else {
 		log.Fatal("Block was empty, cant get block number")
 	}
@@ -625,6 +633,8 @@ func (b *FullBlock) GetSlot() phase0.Slot {
 		slot = b.ConsensusBlock.Bellatrix.Message.Slot
 	} else if b.ConsensusBlock.Capella != nil {
 		slot = b.ConsensusBlock.Capella.Message.Slot
+	} else if b.ConsensusBlock.Deneb != nil {
+		slot = b.ConsensusBlock.Deneb.Message.Slot
 	} else {
 		log.Fatal("Block was empty, cant get slot")
 	}
@@ -645,6 +655,8 @@ func (b *FullBlock) GetProposerIndex() phase0.ValidatorIndex {
 		proposerIndex = b.ConsensusBlock.Bellatrix.Message.ProposerIndex
 	} else if b.ConsensusBlock.Capella != nil {
 		proposerIndex = b.ConsensusBlock.Capella.Message.ProposerIndex
+	} else if b.ConsensusBlock.Deneb != nil {
+		proposerIndex = b.ConsensusBlock.Deneb.Message.ProposerIndex
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
@@ -665,6 +677,8 @@ func (b *FullBlock) GetGasUsed() uint64 {
 		gasUsed = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.GasUsed
 	} else if b.ConsensusBlock.Capella != nil {
 		gasUsed = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.GasUsed
+	} else if b.ConsensusBlock.Deneb != nil {
+		gasUsed = b.ConsensusBlock.Deneb.Message.Body.ExecutionPayload.GasUsed
 	} else {
 		log.Fatal("Block was empty, cant get gas used")
 	}
@@ -681,6 +695,17 @@ func (b *FullBlock) GetBaseFeePerGas() [32]byte {
 		baseFeePerGas = b.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.BaseFeePerGas
 	} else if b.ConsensusBlock.Capella != nil {
 		baseFeePerGas = b.ConsensusBlock.Capella.Message.Body.ExecutionPayload.BaseFeePerGas
+	} else if b.ConsensusBlock.Deneb != nil {
+		// Due to this change: https://github.com/attestantio/go-eth2-client/commit/acadd726168dac047ab3b13b4aceaf2a6103dab5
+		// the base fee is no longer stored as a [32]byte little endian, but as a big endian. To avoid considering is as an special
+		// case, we convert it to little endian, so that the interface is respected.
+		baseFeePerGasBigEndian := b.ConsensusBlock.Deneb.Message.Body.ExecutionPayload.BaseFeePerGas.Bytes32()
+
+		// big-endian to little-endian
+		for i := 0; i < 32; i++ {
+			baseFeePerGas[i] = baseFeePerGasBigEndian[32-1-i]
+		}
+
 	} else {
 		log.Fatal("Block was empty, cant get base fee per gas")
 	}

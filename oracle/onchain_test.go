@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	eth2 "github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/ethereum/go-ethereum/common"
@@ -73,12 +74,12 @@ func Test_GetGetSlotByBlock(t *testing.T) {
 	onchain, err := NewOnchain(cfgOnchain, nil)
 	require.NoError(t, err)
 
-	genesis, err := onchain.ConsensusClient.Genesis(context.Background())
+	genesis, err := onchain.ConsensusClient.Genesis(context.Background(), &eth2.GenesisOpts{})
 	if err != nil {
 		log.Fatal("Could not get genesis: " + err.Error())
 	}
 
-	genesisTime := uint64(genesis.GenesisTime.Unix())
+	genesisTime := uint64(genesis.Data.GenesisTime.Unix())
 
 	slot, err := onchain.GetSlotByBlock(big.NewInt(18902677), genesisTime)
 	require.NoError(t, err)
