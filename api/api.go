@@ -61,6 +61,7 @@ const (
 	// Memory endpoints: what the oracle knows
 	pathMemoryValidators             = "/memory/validators"
 	pathMemoryValidatorByIndex       = "/memory/validator/{valindex}"
+	pathMemoryValidatorsByIndex      = "/memory/validatorsbyindex/{valindices}"
 	pathMemoryValidatorsByWithdrawal = "/memory/validators/{withdrawalAddress}"
 	pathMemoryFeesInfo               = "/memory/feesinfo"
 	pathMemoryAllBlocks              = "/memory/allblocks"
@@ -195,6 +196,7 @@ func (m *ApiService) getRouter() http.Handler {
 	// Memory endpoints
 	r.HandleFunc(pathMemoryValidators, m.handleMemoryValidators).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryValidatorByIndex, m.handleMemoryValidatorInfo).Methods(http.MethodGet)
+	r.HandleFunc(pathMemoryValidatorsByIndex, m.handleMemoryValidatorsByIndex).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryValidatorsByWithdrawal, m.handleMemoryValidatorsByWithdrawal).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryFeesInfo, m.handleMemoryFeesInfo).Methods(http.MethodGet)
 	r.HandleFunc(pathMemoryPoolStatistics, m.handleMemoryStatistics).Methods(http.MethodGet)
@@ -536,6 +538,66 @@ func (m *ApiService) handleMemoryValidatorInfo(w http.ResponseWriter, req *http.
 	}
 
 	m.respondOK(w, validator)
+}
+
+func (m *ApiService) handleMemoryValidatorsByIndex(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	valIndicesStr := vars["valindices"]
+
+	// Check if the string is empty or ends with a comma
+	if valIndicesStr == "" || strings.HasSuffix(valIndicesStr, ",") {
+		m.respondError(w, http.StatusBadRequest, "Invalid format for validator indices")
+		return
+	}
+
+	// Split the valIndicesStr into a slice of strings
+	indicesStr := strings.Split(valIndicesStr, ",")
+	if len(indicesStr) > 100 {
+		m.respondError(w, http.StatusBadRequest, "Request exceeds maximum limit of 100 validators")
+		return
+	}
+
+	// Check each index format and convert it to uint64
+	var indices []uint64
+	for _, indexStr := range indicesStr {
+		index, valid := IsValidIndex(indexStr)
+		if !valid {
+			m.respondError(w, http.StatusBadRequest, "Invalid format for validator indices")
+			return
+		}
+		indices = append(indices, index)
+	}
+
+	// Initialize both response slices
+	var foundValidators []httpOkValidatorInfo
+	var notFoundValidators []uint64
+
+	// Check if each validator is in the oracle state. Append to foundValidators or notFoundValidators
+	for _, index := range indices {
+		if validator, found := m.oracle.State().Validators[index]; found {
+			// Convert ValidatorInfo to httpOkValidatorInfo. This is done to return strings instead of bigInts
+			foundValidator := httpOkValidatorInfo{
+				ValidatorStatus:       validator.ValidatorStatus.String(),
+				AccumulatedRewardsWei: validator.AccumulatedRewardsWei.String(),
+				PendingRewardsWei:     validator.PendingRewardsWei.String(),
+				CollateralWei:         validator.CollateralWei.String(),
+				WithdrawalAddress:     validator.WithdrawalAddress,
+				ValidatorIndex:        validator.ValidatorIndex,
+				ValidatorKey:          validator.ValidatorKey,
+				SubscriptionType:      validator.SubscriptionType.String(),
+			}
+			foundValidators = append(foundValidators, foundValidator)
+		} else {
+			notFoundValidators = append(notFoundValidators, index)
+		}
+	}
+
+	response := httpOkValidatorsByIndex{
+		Found:    foundValidators,
+		NotFound: notFoundValidators,
+	}
+
+	m.respondOK(w, response)
 }
 
 func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, req *http.Request) {
@@ -960,6 +1022,7 @@ func (m *ApiService) handleState(w http.ResponseWriter, req *http.Request) {
 	m.respondOK(w, state)
 }
 
+// Checks index and returns it as uint64 if valid
 func IsValidIndex(v string) (uint64, bool) {
 	//re := regexp.MustCompile("^[0-9]+$")
 	val, err := strconv.ParseUint(v, 10, 64)
