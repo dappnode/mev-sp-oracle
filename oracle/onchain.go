@@ -211,7 +211,9 @@ func (o *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 			// GET failed with status 404: {"code":404,"message":"NOT_FOUND: beacon block at slot 7408169","stacktraces":[]}
 			// To keep compatibility after go-eth2-client changes, we consider that a missed block is nil
 			if strings.Contains(err.Error(), "404") {
-				log.Info("error contains;: ", err.Error())
+				signedBeaconBlock = &api.Response[*spec.VersionedSignedBeaconBlock]{
+					Data: nil,
+				}
 				return nil
 			}
 			log.Warn("Failed attempt to fetch block at slot ", slotStr, ": ", err.Error(), " Retrying...")
