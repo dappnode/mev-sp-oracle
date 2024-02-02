@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"fmt"
 	"io"
@@ -32,6 +31,9 @@ var UpdateValidatorsIntervalSlots = uint64(1200)
 // logs file and path
 const LogsName = "logs.txt"
 const LogsFolder = "oracle-logs"
+
+// How often in hours we run onchain reconciliation
+const ReconciliationEveryHours = int64(3)
 
 func main() {
 	// Load config from cli
@@ -217,6 +219,8 @@ func main() {
 
 func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracle.Config) {
 
+	lastReconciliationTime := int64(0)
+
 	// Load all the validators from the beacon chain
 	onchain.RefreshBeaconValidators()
 
@@ -237,15 +241,14 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			continue
 		}
 
-		finality, err := onchain.ConsensusClient.Finality(context.Background(), "finalized")
+		finalizedBlockHeader, err := onchain.FinalizedBeaconBlockHeader()
 		if err != nil {
 			log.Error("Could not get finalized status, sleeping and retrying:", err)
 			time.Sleep(15 * time.Second)
 			continue
 		}
 
-		finalizedEpoch := uint64(finality.Finalized.Epoch)
-		finalizedSlot := finalizedEpoch * constants.SlotsInEpoch
+		finalizedSlot := uint64(finalizedBlockHeader.Header.Message.Slot)
 
 		if finalizedSlot >= oracleInstance.State().NextSlotToProcess {
 
@@ -268,11 +271,34 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				slotToLatestFinalized, " (", utils.SlotsToTime(slotToLatestFinalized, constants.SecondsInSlot), " ago)")
 
 		} else {
+			// We are in sync, no new finalized slot, wait a bit
 			log.WithFields(log.Fields{
 				"ChainFinalizedSlot": finalizedSlot,
 				"OracleStateSlot":    oracleInstance.State().LatestProcessedSlot,
 			}).Debug("Waiting for new finalized slot")
-			// No new finalized slot, wait a bit
+
+			// From time to time we do onchain reconciliation to ensure our assets match our liablities
+			if time.Now().Unix()-lastReconciliationTime > (ReconciliationEveryHours * 3600) {
+				log.Info("Running onchain reconciliation. Last one was: ", lastReconciliationTime)
+				lastReconciliationTime = time.Now().Unix()
+
+				// If we are up to date, this is the latest finalized block. Run this only in the last block, otherwise
+				// a non archival node will error "missing trie node". Non archival nodes don't store much before last
+				// finalized block.
+				finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
+				uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
+				poolEthBalanceWei, err := onchain.GetPoolEthBalance(finalizedBlock)
+				if err != nil {
+					log.Fatal("Could not get pool eth balance for reconciliation: ", err)
+				}
+
+				claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock)
+				err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
+				if err != nil {
+					log.Fatal("Reconciliation failed, state was not commited: ", err)
+				}
+			}
+
 			time.Sleep(1 * time.Minute)
 			continue
 		}
@@ -294,20 +320,26 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				"DeployedSlot":          oracleInstance.State().DeployedSlot,
 			}).Info("Checkpoint reached")
 
-			// This wont work since we need an archival geth node to fetch balances at specific blocks that are not the last
-			// as it is it errors "missing trie node". Leaving here for reference
-			//uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
-			//poolEthBalanceWei, err := onchain.GetPoolEthBalance(big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock))
-			//if err != nil {
-			//	log.Error("Could not get pool eth balance: ", err)
-			//}
-			//claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, oracleInstance.State().LatestProcessedBlock)
-			//err = oracleInstance.RunReconciliation(poolEthBalanceWei, claimedPerAccount)
-			//if err != nil {
-			//	log.Fatal("Reconciliation failed, state was not commited: ", err)
-			//}
+			log.Info("Running onchain reconciliation. Last one was: ", lastReconciliationTime)
+			lastReconciliationTime = time.Now().Unix()
 
-			err := oracleInstance.RunOffchainReconciliation()
+			// If we are up to date, this is the latest finalized block. Run this only in the last block, otherwise
+			// a non archival node will error "missing trie node". Non archival nodes don't store much before last
+			// finalized block.
+			finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
+			uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
+			poolEthBalanceWei, err := onchain.GetPoolEthBalance(finalizedBlock)
+			if err != nil {
+				log.Fatal("Could not get pool eth balance for reconciliation: ", err)
+			}
+
+			claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock)
+			err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
+			if err != nil {
+				log.Fatal("Reconciliation failed, state was not commited: ", err)
+			}
+
+			err = oracleInstance.RunOffchainReconciliation()
 			if err != nil {
 				log.Fatal("Offchain reconciliation failed, cant freeze checkpoint: ", err)
 			}

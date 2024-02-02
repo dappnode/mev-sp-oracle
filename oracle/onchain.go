@@ -236,6 +236,25 @@ func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.Valid
 	return validators, err
 }
 
+func (o *Onchain) FinalizedBeaconBlockHeader(opts ...retry.Option) (*api.BeaconBlockHeader, error) {
+	var beaconBlockHeader *api.BeaconBlockHeader
+	var err error
+
+	err = retry.Do(func() error {
+		beaconBlockHeader, err = o.ConsensusClient.BeaconBlockHeader(context.Background(), "finalized")
+		if err != nil {
+			log.Warn("Failed attempt to fetch finalized beacon block header: ", err.Error(), " Retrying...")
+			return errors.New("Error fetching finalized  beacon block header: " + err.Error())
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Could not fetch finalized beacon block header: " + err.Error())
+	}
+	return beaconBlockHeader, err
+}
+
 func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, slot string, opts ...retry.Option) (*api.Validator, error) {
 	var validators map[phase0.ValidatorIndex]*api.Validator
 	var err error
@@ -1415,12 +1434,12 @@ func (o *Onchain) GetAcceptGovernanceEvents(
 	return events, nil
 }
 
-func (o *Onchain) GetClaimedPerWithdrawalAddress(addresses []string, finalizedBlock uint64) map[string]*big.Int {
+func (o *Onchain) GetClaimedPerWithdrawalAddress(addresses []string, finalizedBlock *big.Int) map[string]*big.Int {
 	claimedMap := make(map[string]*big.Int)
 
 	for _, address := range addresses {
 		// Important to use finalized blocks. Otherwise our local oracle view and onchain view may differ
-		claimed, err := o.GetContractClaimedBalance(address, big.NewInt(0).SetUint64(finalizedBlock))
+		claimed, err := o.GetContractClaimedBalance(address, finalizedBlock)
 		if err != nil {
 			log.Fatal("Could not get claimed balance for deposit address ", address, ": ", err.Error())
 		}
