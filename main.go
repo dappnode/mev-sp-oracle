@@ -279,24 +279,25 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 
 			// From time to time we do onchain reconciliation to ensure our assets match our liablities
 			if time.Now().Unix()-lastReconciliationTime > (ReconciliationEveryHours * 3600) {
-				log.Info("Running onchain reconciliation. Last one was: ", lastReconciliationTime)
-				lastReconciliationTime = time.Now().Unix()
+				// TODO: Temporally commented. Doesn't work well with non archival node
+				//log.Info("Running onchain reconciliation. Last one was: ", lastReconciliationTime)
+				//lastReconciliationTime = time.Now().Unix()
 
 				// If we are up to date, this is the latest finalized block. Run this only in the last block, otherwise
 				// a non archival node will error "missing trie node". Non archival nodes don't store much before last
 				// finalized block.
-				finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
-				uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
-				poolEthBalanceWei, err := onchain.GetPoolEthBalance(finalizedBlock)
-				if err != nil {
-					log.Fatal("Could not get pool eth balance for reconciliation: ", err)
-				}
+				//finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
+				//uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
+				//poolEthBalanceWei, err := onchain.GetPoolEthBalance(finalizedBlock)
+				//if err != nil {
+				//	log.Fatal("Could not get pool eth balance for reconciliation: ", err)
+				//}
 
-				claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock)
-				err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
-				if err != nil {
-					log.Fatal("Reconciliation failed, state was not commited: ", err)
-				}
+				//claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock)
+				//err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
+				//if err != nil {
+				//	log.Fatal("Reconciliation failed, state was not commited: ", err)
+				//}
 			}
 
 			time.Sleep(1 * time.Minute)
@@ -320,24 +321,25 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				"DeployedSlot":          oracleInstance.State().DeployedSlot,
 			}).Info("Checkpoint reached")
 
-			log.Info("Running onchain reconciliation. Last one was: ", lastReconciliationTime)
-			lastReconciliationTime = time.Now().Unix()
+			// TODO: Temporally commented. Doesn't work well with non archival node
+			//log.Info("Running onchain reconciliation. Last one was: ", lastReconciliationTime)
+			//lastReconciliationTime = time.Now().Unix()
 
 			// If we are up to date, this is the latest finalized block. Run this only in the last block, otherwise
 			// a non archival node will error "missing trie node". Non archival nodes don't store much before last
 			// finalized block.
-			finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
-			uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
-			poolEthBalanceWei, err := onchain.GetPoolEthBalance(finalizedBlock)
-			if err != nil {
-				log.Fatal("Could not get pool eth balance for reconciliation: ", err)
-			}
+			//finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
+			//uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
+			//poolEthBalanceWei, err := onchain.GetPoolEthBalance(finalizedBlock)
+			//if err != nil {
+			//	log.Fatal("Could not get pool eth balance for reconciliation: ", err)
+			//}
 
-			claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock)
-			err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
-			if err != nil {
-				log.Fatal("Reconciliation failed, state was not commited: ", err)
-			}
+			//claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock)
+			//err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
+			//if err != nil {
+			//	log.Fatal("Reconciliation failed, state was not commited: ", err)
+			//}
 
 			err = oracleInstance.RunOffchainReconciliation()
 			if err != nil {

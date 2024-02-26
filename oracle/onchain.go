@@ -399,7 +399,7 @@ func (o *Onchain) GetExecHeaderAndReceipts(
 		return nil, nil, errors.New("Could not fetch header for block " + blockNumber.String() + ": " + err.Error())
 	}
 
-	var receipts []*types.Receipt
+	var receipts []*types.Receipt = make([]*types.Receipt, 0)
 	for _, rawTx := range rawTxs {
 		// This should never happen
 		tx, err := utils.DecodeTx(rawTx)
