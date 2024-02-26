@@ -12,18 +12,18 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/dappnode/mev-sp-oracle/config"
-	"github.com/dappnode/mev-sp-oracle/constants"
-	"github.com/dappnode/mev-sp-oracle/contract"
-	"github.com/dappnode/mev-sp-oracle/utils"
-
-	api "github.com/attestantio/go-eth2-client/api/v1"
+	api "github.com/attestantio/go-eth2-client/api"
+	eth2 "github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
+	"github.com/dappnode/mev-sp-oracle/config"
+	"github.com/dappnode/mev-sp-oracle/constants"
+	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -39,7 +39,7 @@ import (
 // execution layer and modifying the its state via smart contract calls.
 type EpochDuties struct {
 	Epoch  uint64
-	Duties []*api.ProposerDuty
+	Duties []*v1.ProposerDuty
 }
 
 // Simple cache storing epoch -> proposer duties
@@ -86,16 +86,16 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 	consensusClient := client.(*http.Service)
 
 	// Get deposit contract to ensure the endpoint is working
-	depositContract, err := consensusClient.DepositContract(context.Background())
+	depositContract, err := consensusClient.DepositContract(context.Background(), &api.DepositContractOpts{})
 	if err != nil {
 		return nil, errors.Wrap(err, "Error fetching deposit contract from consensus client")
 	}
-	log.Info("Connected succesfully to consensus client. ChainId: ", depositContract.ChainID,
-		" DepositContract: ", "0x"+hex.EncodeToString(depositContract.Address[:]))
+	log.Info("Connected succesfully to consensus client. ChainId: ", depositContract.Data.ChainID,
+		" DepositContract: ", "0x"+hex.EncodeToString(depositContract.Data.Address[:]))
 
-	if depositContract.ChainID != uint64(chainId.Int64()) {
+	if depositContract.Data.ChainID != uint64(chainId.Int64()) {
 		return nil, errors.Wrap(err, fmt.Sprintf("Consensus and execution clients are not connected to the same chain %d vs %d",
-			depositContract.ChainID, chainId))
+			depositContract.Data.ChainID, chainId))
 	}
 
 	// Print sync status of consensus and execution client
@@ -115,15 +115,15 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		log.Info("Execution client is NOT in sync, current block: ", execSync.CurrentBlock)
 	}
 
-	consSync, err := consensusClient.NodeSyncing(context.Background())
+	consSync, err := consensusClient.NodeSyncing(context.Background(), &api.NodeSyncingOpts{})
 	if err != nil {
 		return nil, errors.Wrap(err, "Error fetching consensus client sync progress")
 	}
 
-	if consSync.SyncDistance == 0 {
-		log.Info("Consensus client is in sync, head slot: ", consSync.HeadSlot)
+	if consSync.Data.SyncDistance == 0 {
+		log.Info("Consensus client is in sync, head slot: ", consSync.Data.HeadSlot)
 	} else {
-		log.Info("Consensus client is NOT in sync, slots behind: ", consSync.SyncDistance)
+		log.Info("Consensus client is NOT in sync, slots behind: ", consSync.Data.SyncDistance)
 	}
 
 	// Instantiate the smoothing pool contract to run get/set operations on it
@@ -152,7 +152,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	var err error
 	var execSync *ethereum.SyncProgress
-	var consSync *api.SyncState
+	var consSync *api.Response[*v1.SyncState]
 
 	err = retry.Do(func() error {
 		execSync, err = o.ExecutionClient.SyncProgress(context.Background())
@@ -168,7 +168,7 @@ func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	}
 
 	err = retry.Do(func() error {
-		consSync, err = o.ConsensusClient.NodeSyncing(context.Background())
+		consSync, err = o.ConsensusClient.NodeSyncing(context.Background(), &api.NodeSyncingOpts{})
 		if err != nil {
 			log.Warn("Failed attempt to fetch consensus client sync progress: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching execution client sync progress: " + err.Error())
@@ -188,7 +188,7 @@ func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	}
 
 	// If the sync distance is greater than 5, the consensus client is not in sync
-	if consSync.SyncDistance > 5 {
+	if consSync.Data.SyncDistance > 5 {
 		log.Info("Consensus client not in sync, Client is more than 5 slots behind")
 		return false, nil
 	}
@@ -199,12 +199,23 @@ func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 
 func (o *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*spec.VersionedSignedBeaconBlock, error) {
 	slotStr := strconv.FormatUint(slot, 10)
-	var signedBeaconBlock *spec.VersionedSignedBeaconBlock
+	var signedBeaconBlock *api.Response[*spec.VersionedSignedBeaconBlock]
 	var err error
 
 	err = retry.Do(func() error {
-		signedBeaconBlock, err = o.ConsensusClient.SignedBeaconBlock(context.Background(), slotStr)
+		signedBeaconBlock, err = o.ConsensusClient.SignedBeaconBlock(context.Background(), &api.SignedBeaconBlockOpts{
+			Block: slotStr, // TODO: Says block but its slot in reality
+		})
 		if err != nil {
+			// Its not possible to detect if the block was missed or if the block doesn't exist in the chain
+			// GET failed with status 404: {"code":404,"message":"NOT_FOUND: beacon block at slot 7408169","stacktraces":[]}
+			// To keep compatibility after go-eth2-client changes, we consider that a missed block is nil
+			if strings.Contains(err.Error(), "404") {
+				signedBeaconBlock = &api.Response[*spec.VersionedSignedBeaconBlock]{
+					Data: nil,
+				}
+				return nil
+			}
 			log.Warn("Failed attempt to fetch block at slot ", slotStr, ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching block at slot " + slotStr + ": " + err.Error())
 		}
@@ -214,15 +225,18 @@ func (o *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 	if err != nil {
 		return nil, errors.New("Could not fetch block at slot " + slotStr + ": " + err.Error())
 	}
-	return signedBeaconBlock, err
+	return signedBeaconBlock.Data, err
 }
 
-func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.ValidatorIndex]*api.Validator, error) {
-	var validators map[phase0.ValidatorIndex]*api.Validator
+func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+	var validators *api.Response[map[phase0.ValidatorIndex]*v1.Validator]
 	var err error
 
 	err = retry.Do(func() error {
-		validators, err = o.ConsensusClient.Validators(context.Background(), "finalized", nil)
+		validators, err = o.ConsensusClient.Validators(context.Background(), &api.ValidatorsOpts{
+			State: "finalized",
+			// Empty Indices means no filter = get all validators
+		})
 		if err != nil {
 			log.Warn("Failed attempt to fetch finalized validators: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching finalized validators: " + err.Error())
@@ -233,15 +247,17 @@ func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.Valid
 	if err != nil {
 		return nil, errors.New("Could not fetch finalized validators: " + err.Error())
 	}
-	return validators, err
+	return validators.Data, err
 }
 
-func (o *Onchain) FinalizedBeaconBlockHeader(opts ...retry.Option) (*api.BeaconBlockHeader, error) {
-	var beaconBlockHeader *api.BeaconBlockHeader
+func (o *Onchain) FinalizedBeaconBlockHeader(opts ...retry.Option) (*v1.BeaconBlockHeader, error) {
+	var beaconBlockHeader *api.Response[*v1.BeaconBlockHeader]
 	var err error
 
 	err = retry.Do(func() error {
-		beaconBlockHeader, err = o.ConsensusClient.BeaconBlockHeader(context.Background(), "finalized")
+		beaconBlockHeader, err = o.ConsensusClient.BeaconBlockHeader(context.Background(), &eth2.BeaconBlockHeaderOpts{
+			Block: "finalized",
+		})
 		if err != nil {
 			log.Warn("Failed attempt to fetch finalized beacon block header: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching finalized  beacon block header: " + err.Error())
@@ -252,23 +268,26 @@ func (o *Onchain) FinalizedBeaconBlockHeader(opts ...retry.Option) (*api.BeaconB
 	if err != nil {
 		return nil, errors.New("Could not fetch finalized beacon block header: " + err.Error())
 	}
-	return beaconBlockHeader, err
+	return beaconBlockHeader.Data, err
 }
 
-func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, slot string, opts ...retry.Option) (*api.Validator, error) {
-	var validators map[phase0.ValidatorIndex]*api.Validator
+func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, slot string, opts ...retry.Option) (*v1.Validator, error) {
+	var validators *api.Response[map[phase0.ValidatorIndex]*v1.Validator]
 	var err error
 
 	err = retry.Do(func() error {
 		validatorIndices := []phase0.ValidatorIndex{valIndex}
-		validators, err = o.ConsensusClient.Validators(context.Background(), slot, validatorIndices)
+		validators, err = o.ConsensusClient.Validators(context.Background(), &api.ValidatorsOpts{
+			State:   slot,
+			Indices: validatorIndices,
+		})
 
 		if err != nil {
 			log.Warn("Failed attempt to fetch validator: ", err.Error(), " Retrying...")
 			return errors.New("Error fetching validator: " + err.Error())
 		}
 
-		if len(validators) > 1 {
+		if len(validators.Data) > 1 {
 			return errors.New("Error fetching validator: Requested one but got many")
 		}
 
@@ -280,12 +299,12 @@ func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, slot string
 	}
 
 	// If empty, it means the validator doesnt exist
-	if len(validators) == 0 {
+	if len(validators.Data) == 0 {
 		return nil, nil
 	}
 
 	// Some sanity checks
-	validator, found := validators[valIndex]
+	validator, found := validators.Data[valIndex]
 	if !found {
 		return nil, errors.New(fmt.Sprintf("Error fetching validator: Could not find index in response: %d",
 			valIndex))
@@ -316,7 +335,7 @@ func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*ty
 	return block, err
 }
 
-func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.ProposerDuty, error) {
+func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*v1.ProposerDuty, error) {
 	epoch := slot / constants.SlotsInEpoch
 	slotWithinEpoch := slot % constants.SlotsInEpoch
 	slotStr := strconv.FormatUint(slot, 10)
@@ -332,12 +351,15 @@ func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.Propo
 
 	// Empty indexes to force fetching all duties
 	indexes := make([]phase0.ValidatorIndex, 0)
-	var duties []*api.ProposerDuty
+	var duties *api.Response[[]*v1.ProposerDuty]
 	var err error
 
 	err = retry.Do(func() error {
 		duties, err = o.ConsensusClient.ProposerDuties(
-			context.Background(), phase0.Epoch(epoch), indexes)
+			context.Background(), &api.ProposerDutiesOpts{
+				Epoch:   phase0.Epoch(epoch),
+				Indices: indexes,
+			})
 		if err != nil {
 			log.Warn("Failed attempt to fetch proposal duties at slot ", slotStr, ": ", err.Error(), " Retrying...")
 			return errors.New("Error fetching proposal duties at slot " + slotStr + ": " + err.Error())
@@ -350,9 +372,9 @@ func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*api.Propo
 	}
 
 	// If success, store result in cache
-	ProposalDutyCache = EpochDuties{epoch, duties}
+	ProposalDutyCache = EpochDuties{epoch, duties.Data}
 
-	return duties[slotWithinEpoch], nil
+	return duties.Data[slotWithinEpoch], nil
 }
 
 // This function is expensive as gets every tx receipt from the block. Use only if needed
@@ -968,31 +990,31 @@ func (onchain *Onchain) GetConfigFromContract(
 		log.Fatal("Could not get chainid: " + err.Error())
 	}
 
-	depositContract, err := onchain.ConsensusClient.DepositContract(context.Background())
+	depositContract, err := onchain.ConsensusClient.DepositContract(context.Background(), &api.DepositContractOpts{})
 	if err != nil {
 		log.Fatal("Could not get deposit contract: " + err.Error())
 	}
 
-	if depositContract.ChainID != uint64(chainId.Int64()) {
+	if depositContract.Data.ChainID != uint64(chainId.Int64()) {
 		log.Fatal("ChainID from consensus and execution client dont match: ",
-			depositContract.ChainID, " != ", chainId.Int64())
+			depositContract.Data.ChainID, " != ", chainId.Int64())
 	}
 
 	network := ""
-	if depositContract.ChainID == MainnetChainId {
+	if depositContract.Data.ChainID == MainnetChainId {
 		network = "mainnet"
-	} else if depositContract.ChainID == GoerliChainId {
+	} else if depositContract.Data.ChainID == GoerliChainId {
 		network = "goerli"
 	} else {
-		log.Fatal("ChainID not supported: ", depositContract.ChainID)
+		log.Fatal("ChainID not supported: ", depositContract.Data.ChainID)
 	}
 
-	genesis, err := onchain.ConsensusClient.Genesis(context.Background())
+	genesis, err := onchain.ConsensusClient.Genesis(context.Background(), &api.GenesisOpts{})
 	if err != nil {
 		log.Fatal("Could not get genesis: " + err.Error())
 	}
 
-	genesisTime := uint64(genesis.GenesisTime.Unix())
+	genesisTime := uint64(genesis.Data.GenesisTime.Unix())
 
 	log.Info("Configured smoothing pool address: ", cliCfg.PoolAddress, " in network: ", network)
 
