@@ -418,15 +418,12 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		consInSync = true
 	}
 
-	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), &eth2.FinalityOpts{
-		State: "finalized",
-	})
+	finality, err := m.Onchain.FinalizedBeaconBlockHeader(apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get consensus latest finalized slot: "+err.Error())
 	}
 
-	finalizedEpoch := uint64(finality.Data.Finalized.Epoch)
-	finalizedSlot := finalizedEpoch * constants.SlotsInEpoch
+	finalizedSlot := uint64(finality.Header.Message.Slot)
 
 	oracleSync := false
 	if m.oracle.State().LatestProcessedSlot-finalizedSlot == 0 {
@@ -451,7 +448,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		IsOracleInSync:              oracleSync,
 		LatestProcessedSlot:         m.oracle.State().LatestProcessedSlot,
 		LatestProcessedBlock:        m.oracle.State().LatestProcessedBlock,
-		LatestFinalizedEpoch:        finalizedEpoch,
+		LatestFinalizedEpoch:        finalizedSlot / 32,
 		LatestFinalizedSlot:         finalizedSlot,
 		OracleHeadDistance:          finalizedSlot - m.oracle.State().LatestProcessedSlot,
 		NextCheckpointSlot:          onchainSlot + m.cfg.CheckPointSizeInSlots,
@@ -1194,14 +1191,16 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) bool {
 	// otherwise the oracle wont be able to reply, since from time to time its normal that it fall behind sync
 	// since it has to process the new epochs that keep arriving.
 
-	finality, err := m.Onchain.ConsensusClient.Finality(context.Background(), &eth2.FinalityOpts{
-		State: "finalized",
-	})
+	finality, err := m.Onchain.FinalizedBeaconBlockHeader(apiRetryOpts...)
 	if err != nil {
 		return false
 	}
 
-	finalizedSlot := uint64(finality.Data.Finalized.Epoch) * constants.SlotsInEpoch
+	finalizedSlot := uint64(finality.Header.Message.Slot)
+	if err != nil {
+		return false
+	}
+
 	slotsFromFinalized := finalizedSlot - m.oracle.State().LatestProcessedSlot
 
 	// Use this if we want full in sync to latest finalized
