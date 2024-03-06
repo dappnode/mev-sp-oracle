@@ -307,10 +307,12 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	// Prevent underflow
 	if uint64(m.oracle.State().LatestProcessedSlot) < SlotsInOneMonth {
 		m.respondError(w, http.StatusInternalServerError, "head slot is lower than slots in a month, this should not happen")
+		return
 	}
 
 	if uint64(m.oracle.State().LatestProcessedBlock) < SlotsInOneMonth {
 		m.respondError(w, http.StatusInternalServerError, "head block is lower than slots in a month, this should not happen")
+		return
 	}
 
 	// Only consider blocks in the last 30 days
@@ -389,16 +391,19 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	chainId, err := m.Onchain.ExecutionClient.ChainID(context.Background())
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get exex chainid: "+err.Error())
+		return
 	}
 
 	depositContract, err := m.Onchain.ConsensusClient.DepositContract(context.Background(), &eth2.DepositContractOpts{})
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get deposit contract: "+err.Error())
+		return
 	}
 
 	execSync, err := m.Onchain.ExecutionClient.SyncProgress(context.Background())
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get exec sync progress: "+err.Error())
+		return
 	}
 
 	// Seems that if nil means its in sync
@@ -408,8 +413,14 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	}
 
 	consSync, err := m.Onchain.ConsensusClient.NodeSyncing(context.Background(), &eth2.NodeSyncingOpts{})
-	if err != nil {
-		m.respondError(w, http.StatusInternalServerError, "could not get consensus sync progress: "+err.Error())
+	if consSync == nil || err != nil {
+		m.respondError(w, http.StatusInternalServerError, "could not get consensus sync progress or result is nil: "+err.Error())
+		return
+	}
+
+	if consSync.Data == nil {
+		m.respondError(w, http.StatusInternalServerError, "consensus sync progress data is nil")
+		return
 	}
 
 	// Allow some slots to avoid jitter
@@ -421,6 +432,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	finality, err := m.Onchain.FinalizedBeaconBlockHeader(apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get consensus latest finalized slot: "+err.Error())
+		return
 	}
 
 	finalizedSlot := uint64(finality.Header.Message.Slot)
@@ -433,6 +445,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	_, onchainSlot, err := m.Onchain.GetOnchainSlotAndRoot(apiRetryOpts...)
 	if err != nil {
 		m.respondError(w, http.StatusInternalServerError, "could not get onchain slot and root: "+err.Error())
+		return
 	}
 
 	// If the oracle is not in sync, we cant really calculate the slots till the next checkpoint
