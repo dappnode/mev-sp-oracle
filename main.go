@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/api"
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/constants"
@@ -279,25 +280,28 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 
 			// From time to time we do onchain reconciliation to ensure our assets match our liablities
 			if time.Now().Unix()-lastReconciliationTime > (ReconciliationEveryHours * 3600) {
-				// TODO: Temporally commented. Doesn't work well with non archival node
-				//log.Info("Running onchain reconciliation. Last one was: ", lastReconciliationTime)
-				//lastReconciliationTime = time.Now().Unix()
+				log.Info("Running onchain reconciliation. Last one was: ", lastReconciliationTime)
 
 				// If we are up to date, this is the latest finalized block. Run this only in the last block, otherwise
 				// a non archival node will error "missing trie node". Non archival nodes don't store much before last
 				// finalized block.
-				//finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
-				//uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
-				//poolEthBalanceWei, err := onchain.GetPoolEthBalance(finalizedBlock)
-				//if err != nil {
-				//	log.Fatal("Could not get pool eth balance for reconciliation: ", err)
-				//}
+				finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
+				uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
 
-				//claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock)
-				//err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
-				//if err != nil {
-				//	log.Fatal("Reconciliation failed, state was not commited: ", err)
-				//}
+				// If EL is not in archival mode, this wont work in longs periods of non finality.
+				retryOption := retry.Attempts(1)
+				poolEthBalanceWei, err1 := onchain.GetPoolEthBalance(finalizedBlock, retryOption)
+				claimedPerAccount, err2 := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock, retryOption)
+				if err1 != nil || err2 != nil {
+					log.Warn("Could not get pool eth balance for reconciliation, normal when no finality: ", err1, err2)
+				} else {
+					// If we could fetch the data, run onchain reconciliation
+					err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
+					if err != nil {
+						log.Fatal("Reconciliation failed, state was not commited: ", err)
+					}
+				}
+				lastReconciliationTime = time.Now().Unix()
 			}
 
 			time.Sleep(1 * time.Minute)
