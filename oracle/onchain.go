@@ -1456,14 +1456,14 @@ func (o *Onchain) GetAcceptGovernanceEvents(
 	return events, nil
 }
 
-func (o *Onchain) GetClaimedPerWithdrawalAddress(addresses []string, finalizedBlock *big.Int) map[string]*big.Int {
+func (o *Onchain) GetClaimedPerWithdrawalAddress(addresses []string, finalizedBlock *big.Int, opts ...retry.Option) (map[string]*big.Int, error) {
 	claimedMap := make(map[string]*big.Int)
 
 	for _, address := range addresses {
 		// Important to use finalized blocks. Otherwise our local oracle view and onchain view may differ
-		claimed, err := o.GetContractClaimedBalance(address, finalizedBlock)
+		claimed, err := o.GetContractClaimedBalance(address, finalizedBlock, opts...)
 		if err != nil {
-			log.Fatal("Could not get claimed balance for deposit address ", address, ": ", err.Error())
+			return nil, errors.Wrap(err, "could not get claimed balance")
 		}
 		_, found := claimedMap[address]
 		if found {
@@ -1471,7 +1471,7 @@ func (o *Onchain) GetClaimedPerWithdrawalAddress(addresses []string, finalizedBl
 		}
 		claimedMap[address] = claimed
 	}
-	return claimedMap
+	return claimedMap, nil
 }
 
 func (o *Onchain) UpdateContractMerkleRoot(slot uint64, newMerkleRoot string) error {
