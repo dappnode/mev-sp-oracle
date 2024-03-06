@@ -3,7 +3,7 @@ module github.com/dappnode/mev-sp-oracle
 go 1.19
 
 require (
-	github.com/attestantio/go-builder-client v0.4.2
+	github.com/attestantio/go-builder-client v0.4.3
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/gorilla/mux v1.8.0
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
@@ -15,7 +15,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
 	github.com/txaty/go-merkletree v0.1.15
-	golang.org/x/crypto v0.17.0
+	golang.org/x/crypto v0.18.0
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 )
 
@@ -32,7 +32,7 @@ require (
 	github.com/deckarep/golang-set/v2 v2.3.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/ethereum/c-kzg-4844 v0.4.0 // indirect
-	github.com/fatih/color v1.15.0 // indirect
+	github.com/fatih/color v1.16.0 // indirect
 	github.com/ferranbt/fastssz v0.1.3 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
@@ -44,7 +44,7 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/holiman/uint256 v1.2.4 // indirect
 	github.com/huandu/go-clone v1.6.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
@@ -78,7 +78,7 @@ require (
 )
 
 require (
-	github.com/attestantio/go-eth2-client v0.19.8
-	github.com/ethereum/go-ethereum v1.13.10
-	golang.org/x/sys v0.15.0 // indirect
+	github.com/attestantio/go-eth2-client v0.19.10
+	github.com/ethereum/go-ethereum v1.13.14
+	golang.org/x/sys v0.16.0 // indirect
 )
