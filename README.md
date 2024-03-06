@@ -21,7 +21,7 @@ go build
 ## Docker images
 
 ```
-docker pull dappnode/mev-sp-oracle:1.0.4
+docker pull dappnode/mev-sp-oracle:1.0.8
 ```
 
 ## Roles
