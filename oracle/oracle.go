@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 
 	"fmt"
 	"io/ioutil"
@@ -31,6 +32,8 @@ type Oracle struct {
 	state *OracleState
 	mutex sync.RWMutex
 }
+
+const SlotChangeRewards_1 = uint64(8755000)
 
 func NewOracle(cfg *Config) *Oracle {
 	state := &OracleState{
@@ -1248,6 +1251,12 @@ func (or *Oracle) increaseAllPendingRewards(
 
 	// And remainder of above operation
 	remainder1 := big.NewInt(0).Mod(aux, over)
+
+	// Fixes minor change in rewards calculation from a given slot
+	if or.state.LatestProcessedSlot >= SlotChangeRewards_1 &&
+		or.state.LatestProcessedSlot != math.MaxUint64 {
+		remainder1.Div(remainder1, over)
+	}
 
 	// The amount to share is the reward minus the pool cut + remainder
 	toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
