@@ -2298,6 +2298,60 @@ func Test_increaseAllPendingRewards_4(t *testing.T) {
 	}
 }
 
+func Test_increaseAllPendingRewards_5(t *testing.T) {
+
+	type pendingRewardTest struct {
+		FeePercentX100   int
+		Reward           *big.Int
+		AmountValidators int
+		ValidatorReward  *big.Int
+		PoolReward       *big.Int
+		Slot             uint64
+	}
+
+	tests := []pendingRewardTest{
+		// FeePercentX100 (100 = 1%) | Reward | AmountValidators | ValidatorReward | PoolReward | Slot
+
+		// 0%
+		{0, big.NewInt(0), 1, big.NewInt(0), big.NewInt(0), 0},
+
+		// 7 %
+		{7 * 100, big.NewInt(30500333098045431), 1665, big.NewInt(17036222090799), big.NewInt(2135023316865096), 0},
+
+		// 7 %
+		{7 * 100, big.NewInt(200000000000000000), 2, big.NewInt(93000000000000000), big.NewInt(14000000000000000), 0},
+
+		// 7 %
+		{7 * 100, big.NewInt(43446233255383379), 503, big.NewInt(80328025700797), big.NewInt(3041236327882488), 0},
+
+		// 7 %
+		{7 * 100, big.NewInt(24448528911304907), 1034, big.NewInt(21989489252909), big.NewInt(1711397023797001), 0},
+
+		// 7 % (before change)
+		{7 * 100, big.NewInt(1), 1670, big.NewInt(-1), big.NewInt(1671), SlotChangeRewards_1 - 1},
+
+		// 7 % (after change)
+		{7 * 100, big.NewInt(1), 1670, big.NewInt(0), big.NewInt(1), SlotChangeRewards_1},
+	}
+
+	for _, test := range tests {
+		oracle := NewOracle(&Config{
+			PoolFeesPercentOver10000: test.FeePercentX100,
+			PoolFeesAddress:          "0x",
+		})
+		for i := 0; i < test.AmountValidators; i++ {
+			oracle.addSubscription(uint64(i), "0x", "0x")
+		}
+		oracle.state.LatestProcessedSlot = test.Slot
+		oracle.increaseAllPendingRewards(test.Reward)
+		for i := 0; i < test.AmountValidators; i++ {
+			require.Equal(t, test.ValidatorReward, oracle.state.Validators[uint64(i)].PendingRewardsWei)
+		}
+
+		require.Equal(t, test.PoolReward, oracle.state.PoolAccumulatedFees)
+	}
+}
+
 func Test_increaseValidatorPendingRewards(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[12] = &ValidatorInfo{
