@@ -984,6 +984,7 @@ func (onchain *Onchain) GetConfigFromContract(
 
 	MainnetChainId := uint64(1)
 	GoerliChainId := uint64(5)
+	HoleskyChainId := uint64(17000)
 
 	chainId, err := onchain.ExecutionClient.ChainID(context.Background())
 	if err != nil {
@@ -1005,6 +1006,8 @@ func (onchain *Onchain) GetConfigFromContract(
 		network = "mainnet"
 	} else if depositContract.Data.ChainID == GoerliChainId {
 		network = "goerli"
+	} else if depositContract.Data.ChainID == HoleskyChainId {
+		network = "holesky"
 	} else {
 		log.Fatal("ChainID not supported: ", depositContract.Data.ChainID)
 	}
