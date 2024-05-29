@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 
 	"fmt"
 	"io/ioutil"
@@ -30,6 +31,18 @@ type Oracle struct {
 	cfg   *Config
 	state *OracleState
 	mutex sync.RWMutex
+}
+
+// This soft fork controls a minor change the in rewards calculation that fixes a minor
+// bug in how rewards were distributed. The error is in the range of few weis, nothing major.
+// In mainnet we do the change at a given slot, to preserve backwards compatibility.
+// In holesky we start from scratch (slot=0) with the correct calculation.
+const MainnetRewardsSlotFork = uint64(8755000) // TODO: Set a slot in the future
+const HoleskyRewardsSlotFork = uint64(0)
+
+var RewardSlotFork = map[string]uint64{
+	"mainnet": MainnetRewardsSlotFork,
+	"holesky": HoleskyRewardsSlotFork,
 }
 
 func NewOracle(cfg *Config) *Oracle {
@@ -1243,27 +1256,69 @@ func (or *Oracle) increaseAllPendingRewards(
 	// The pool takes PoolFeesPercentOver10000 cut of the rewards
 	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(or.state.PoolFeesPercentOver10000)))
 
-	// Calculate the pool cut
+	// Calculate the pool cut (not taking into account the remainder)
 	poolCut := big.NewInt(0).Div(aux, over)
 
-	// And remainder of above operation
-	remainder1 := big.NewInt(0).Mod(aux, over)
+	totalFees := big.NewInt(0)
+	perValidatorReward := big.NewInt(0)
 
-	// The amount to share is the reward minus the pool cut + remainder
-	toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
-	toShareAllValidators.Sub(toShareAllValidators, remainder1)
+	if slotFork, found := RewardSlotFork[or.cfg.Network]; found {
+		// Fixes minor bug in rewards calculation from a given slot. It just affects a few wei nothing
+		// major, but this fixes the remainder1 not being scalled over 100.
+		if or.state.LatestProcessedSlot >= slotFork &&
+			or.state.LatestProcessedSlot != math.MaxUint64 {
 
-	// Each validator gets that divided by numEligibleValidators
-	perValidatorReward := big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
-	// And remainder of above operation
-	remainder2 := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
+			log.WithFields(log.Fields{
+				"SlotFork": slotFork,
+				"Slot":     or.state.LatestProcessedSlot,
+				"Network":  or.cfg.Network,
+				"Method":   "New",
+			}).Debug("Calculating rewards")
 
-	// Total fees for the pool are: the cut (%) + the remainders
-	totalFees := big.NewInt(0).Add(poolCut, remainder1)
-	totalFees.Add(totalFees, remainder2)
+			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
+			perValidatorReward = big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
+			remainder := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
+			totalFees = big.NewInt(0).Add(poolCut, remainder)
+		} else {
+
+			log.WithFields(log.Fields{
+				"SlotFork": slotFork,
+				"Slot":     or.state.LatestProcessedSlot,
+				"Network":  or.cfg.Network,
+				"Method":   "Old",
+			}).Debug("Calculating rewards")
+
+			// And remainder of above operation
+			remainder1 := big.NewInt(0).Mod(aux, over)
+
+			// The amount to share is the reward minus the pool cut + remainder
+			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
+			toShareAllValidators.Sub(toShareAllValidators, remainder1)
+
+			// Each validator gets that divided by numEligibleValidators
+			perValidatorReward = big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
+			// And remainder of above operation
+			remainder2 := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
+
+			// Total fees for the pool are: the cut (%) + the remainders
+			totalFees = big.NewInt(0).Add(poolCut, remainder1)
+			totalFees.Add(totalFees, remainder2)
+		}
+	} else {
+		log.Fatal("Network not found in forks list: ", or.cfg.Network)
+	}
 
 	// Increase pool rewards (fees)
 	or.state.PoolAccumulatedFees.Add(or.state.PoolAccumulatedFees, totalFees)
+
+	// Extra check to ensure what we split and what we have match
+	if big.NewInt(0).Add(big.NewInt(0).Mul(perValidatorReward, numEligibleValidators), totalFees).Cmp(reward) != 0 {
+		log.WithFields(log.Fields{
+			"perValidatorReward":    perValidatorReward,
+			"totalFees":             totalFees,
+			"numEligibleValidators": numEligibleValidators,
+		}).Fatal("Total rewards dont match the sum of the rewards per validator and the pool fees")
+	}
 
 	log.WithFields(log.Fields{
 		"AmountEligibleValidators": numEligibleValidators,

@@ -565,7 +565,7 @@ func Test_Oracle_CanValidatorSubscribeToPool(t *testing.T) {
 }
 
 func Test_addSubscription_1(t *testing.T) {
-	oracle := NewOracle(&Config{})
+	oracle := NewOracle(&Config{Network: "mainnet"})
 	oracle.addSubscription(10, "0x", "0x")
 	oracle.increaseAllPendingRewards(big.NewInt(100))
 	oracle.consolidateBalance(10)
@@ -607,7 +607,7 @@ func Test_addSubscription_2(t *testing.T) {
 }
 
 func Test_handleDonations_PoolGetsAll(t *testing.T) {
-	oracle := NewOracle(&Config{})
+	oracle := NewOracle(&Config{Network: "mainnet"})
 	donations := []*contract.ContractEtherReceived{
 		&contract.ContractEtherReceived{
 			DonationAmount: big.NewInt(765432),
@@ -641,6 +641,7 @@ func Test_handleDonations_PoolGetsAll(t *testing.T) {
 func Test_handleDonations_SharedEqual(t *testing.T) {
 	oracle := NewOracle(&Config{
 		PoolFeesPercentOver10000: 10 * 10, // 10%
+		Network:                  "mainnet",
 	})
 	donations := []*contract.ContractEtherReceived{
 		&contract.ContractEtherReceived{
@@ -679,6 +680,7 @@ func Test_handleCorrectBlockProposal_AutoSubs(t *testing.T) {
 		PoolFeesAddress:          "0xa",
 		PoolFeesPercentOver10000: 0,
 		CollateralInWei:          big.NewInt(1000000),
+		Network:                  "mainnet",
 	}
 
 	oracle := NewOracle(cfg)
@@ -705,6 +707,7 @@ func Test_handleCorrectBlockProposal_AlreadySub(t *testing.T) {
 		PoolFeesAddress:          "0xa",
 		PoolFeesPercentOver10000: 0,
 		CollateralInWei:          big.NewInt(1000000),
+		Network:                  "mainnet",
 	}
 
 	oracle := NewOracle(cfg)
@@ -735,6 +738,7 @@ func Test_handleManualSubscriptions_Valid(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -889,6 +893,7 @@ func Test_handleManualSubscriptions_ThenSendBlock(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -945,6 +950,7 @@ func Test_handleManualSubscriptions_AutoThenSubscribe(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -992,6 +998,7 @@ func Test_SubscribeUnsubscribe_Auto(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -1050,6 +1057,7 @@ func Test_AutoUnsubscribeThenManual(t *testing.T) { // TODO: Missing Then auto
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -1107,6 +1115,7 @@ func Test_AutoUnsubscribeThenAuto(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -1163,6 +1172,7 @@ func Test_BannedValidatorAutoSubs(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -1227,6 +1237,7 @@ func Test_handleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) 
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	val := &v1.Validator{
@@ -1276,6 +1287,7 @@ func Test_handleManualSubscriptions_Wrong_BlsCredentials(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -1309,6 +1321,7 @@ func Test_handleManualSubscriptions_NonExistent(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -1335,6 +1348,7 @@ func Test_handleManualSubscriptions_WrongStateValidator(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -1386,6 +1400,7 @@ func Test_handleManualSubscriptions_BannedValidator(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	bannedIndex := uint64(300000)
@@ -1441,6 +1456,7 @@ func Test_handleManualSubscriptions(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -1598,6 +1614,7 @@ func Test_handleManualUnsubscriptions_SubThenUnsubThenAuto(t *testing.T) {
 	oracle := NewOracle(&Config{
 		CollateralInWei:          big.NewInt(500000),
 		PoolFeesPercentOver10000: 0,
+		Network:                  "mainnet",
 	})
 
 	// Subscribe a validator
@@ -1672,6 +1689,7 @@ func Test_handleManualUnsubscriptions_ValidSubscription(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(500000),
+		Network:         "mainnet",
 	})
 
 	for _, valIdx := range []uint64{6, 9, 10, 15} {
@@ -1794,6 +1812,7 @@ func Test_handleManualUnsubscriptions_NonExistentValidator(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	vals := []*v1.Validator{
@@ -1841,6 +1860,7 @@ func Test_handleManualUnsubscriptions_NotSubscribedValidator(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	// Unsubscribe event of a validator index that BUT is not subscribed
@@ -1873,6 +1893,7 @@ func Test_handleManualUnsubscriptions_FromWrongAddress(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(1000),
+		Network:         "mainnet",
 	})
 
 	// Simulate subscription of validator 750100
@@ -1927,6 +1948,7 @@ func Test_handleManualUnsubscriptions_AndRejoin(t *testing.T) {
 
 	oracle := NewOracle(&Config{
 		CollateralInWei: big.NewInt(500000),
+		Network:         "mainnet",
 	})
 
 	valIndex := uint64(750100)
@@ -2005,7 +2027,7 @@ func Test_handleManualUnsubscriptions_AndRejoin(t *testing.T) {
 }
 
 func Test_handleBanValidator(t *testing.T) {
-	oracle := NewOracle(&Config{})
+	oracle := NewOracle(&Config{Network: "mainnet"})
 	oracle.addSubscription(1, "0xa", "0xb")
 	oracle.addSubscription(2, "0xa", "0xb")
 	oracle.addSubscription(3, "0xa", "0xb")
@@ -2031,7 +2053,7 @@ func Test_handleBanValidator(t *testing.T) {
 }
 
 func Test_handleMissedBlock(t *testing.T) {
-	oracle := NewOracle(&Config{})
+	oracle := NewOracle(&Config{Network: "mainnet"})
 	oracle.addSubscription(1, "0xa", "0xb")
 	oracle.addSubscription(2, "0xa", "0xb")
 
@@ -2139,6 +2161,7 @@ func Test_increaseAllPendingRewards_1(t *testing.T) {
 	oracle := NewOracle(&Config{
 		PoolFeesPercentOver10000: 0,
 		PoolFeesAddress:          "0x",
+		Network:                  "mainnet",
 	})
 
 	// Subscribe 3 validators with no balance
@@ -2160,6 +2183,7 @@ func Test_increaseAllPendingRewards_2(t *testing.T) {
 	oracle := NewOracle(&Config{
 		PoolFeesPercentOver10000: 10 * 100, // 10%
 		PoolFeesAddress:          "0x",
+		Network:                  "mainnet",
 	})
 
 	// Subscribe 3 validators with no balance
@@ -2204,6 +2228,7 @@ func Test_increaseAllPendingRewards_3(t *testing.T) {
 		oracle := NewOracle(&Config{
 			PoolFeesPercentOver10000: test.FeePercent,
 			PoolFeesAddress:          "0x",
+			Network:                  "mainnet",
 		})
 
 		for i := 0; i < test.AmountValidators; i++ {
@@ -2272,6 +2297,7 @@ func Test_increaseAllPendingRewards_4(t *testing.T) {
 		oracle := NewOracle(&Config{
 			PoolFeesPercentOver10000: test.FeePercentX100,
 			PoolFeesAddress:          "0x",
+			Network:                  "mainnet",
 		})
 		for i := 0; i < test.AmountValidators; i++ {
 			oracle.addSubscription(uint64(i), "0x", "0x")
@@ -2295,6 +2321,77 @@ func Test_increaseAllPendingRewards_4(t *testing.T) {
 		rewardsToValidators.Mul(rewardsToValidators, big.NewInt(int64(test.AmountValidators)))
 		totalDistributedRewards.Add(totalDistributedRewards, rewardsToValidators)
 		require.Equal(t, totalDistributedRewards, test.Reward)
+	}
+}
+
+func Test_increaseAllPendingRewards_5(t *testing.T) {
+
+	type pendingRewardTest struct {
+		FeePercentX100   int
+		Reward           *big.Int
+		AmountValidators int
+		ValidatorReward  *big.Int
+		PoolReward       *big.Int
+		Slot             uint64
+	}
+
+	tests := []pendingRewardTest{
+		// FeePercentX100 (100 = 1%) | Reward | AmountValidators | ValidatorReward | PoolReward | Slot
+
+		// 0%
+		{0, big.NewInt(0), 1, big.NewInt(0), big.NewInt(0), 0},
+
+		// 7 %
+		{7 * 100, big.NewInt(30500333098045431), 1665, big.NewInt(17036222090799), big.NewInt(2135023316865096), 0},
+
+		// 7 %
+		{7 * 100, big.NewInt(200000000000000000), 2, big.NewInt(93000000000000000), big.NewInt(14000000000000000), 0},
+
+		// 7 %
+		{7 * 100, big.NewInt(43446233255383379), 503, big.NewInt(80328025700797), big.NewInt(3041236327882488), 0},
+
+		// 7 %
+		{7 * 100, big.NewInt(24448528911304907), 1034, big.NewInt(21989489252909), big.NewInt(1711397023797001), 0},
+
+		// 7 % (before change, was wrong)
+		{7 * 100, big.NewInt(1), 1670, big.NewInt(-1), big.NewInt(1671), MainnetRewardsSlotFork - 1},
+
+		// 7 % (before change, was wrong)
+		{7 * 100, big.NewInt(751283351135293312), 1959, big.NewInt(356658252453197), big.NewInt(52589834579480389), MainnetRewardsSlotFork - 1},
+
+		// After fork (exact slot)
+		{7 * 100, big.NewInt(1), 1670, big.NewInt(0), big.NewInt(1), MainnetRewardsSlotFork},
+
+		// After fork (exact slot)
+		{7 * 100, big.NewInt(751283351135293312), 1959, big.NewInt(356658252453202), big.NewInt(52589834579470594), MainnetRewardsSlotFork},
+
+		// After fork (few slot later)
+		{7 * 100, big.NewInt(751283351135293312), 1959, big.NewInt(356658252453202), big.NewInt(52589834579470594), MainnetRewardsSlotFork + 3000},
+
+		// Some after fork tests (new reward algorithm)
+		{10 * 100, big.NewInt(100000000000001), 100, big.NewInt(900000000000), big.NewInt(10000000000001), MainnetRewardsSlotFork},
+		{123, big.NewInt(345432454323432), 3454, big.NewInt(98779280583), big.NewInt(4248819189750), MainnetRewardsSlotFork},
+		{123, big.NewInt(345432454323432), 3454, big.NewInt(98779280583), big.NewInt(4248819189750), MainnetRewardsSlotFork},
+		{999, big.NewInt(99999999999999), 5, big.NewInt(18002000000000), big.NewInt(9989999999999), MainnetRewardsSlotFork},
+		{9999, big.NewInt(99999999999999), 99999, big.NewInt(100001), big.NewInt(99990000000000), MainnetRewardsSlotFork},
+	}
+
+	for _, test := range tests {
+		oracle := NewOracle(&Config{
+			PoolFeesPercentOver10000: test.FeePercentX100,
+			PoolFeesAddress:          "0x",
+			Network:                  "mainnet",
+		})
+		for i := 0; i < test.AmountValidators; i++ {
+			oracle.addSubscription(uint64(i), "0x", "0x")
+		}
+		oracle.state.LatestProcessedSlot = test.Slot
+		oracle.increaseAllPendingRewards(test.Reward)
+		for i := 0; i < test.AmountValidators; i++ {
+			require.Equal(t, test.ValidatorReward, oracle.state.Validators[uint64(i)].PendingRewardsWei)
+		}
+
+		require.Equal(t, test.PoolReward, oracle.state.PoolAccumulatedFees)
 	}
 }
 
@@ -2353,7 +2450,7 @@ func Test_resetPendingRewards(t *testing.T) {
 }
 
 func Test_IncreasePendingRewards(t *testing.T) {
-	oracle := NewOracle(&Config{})
+	oracle := NewOracle(&Config{Network: "mainnet"})
 	oracle.state.Validators[12] = &ValidatorInfo{
 		WithdrawalAddress: "0xaa",
 		ValidatorStatus:   Active,
@@ -2369,7 +2466,7 @@ func Test_IncreasePendingRewards(t *testing.T) {
 func Test_IncreasePendingEmptyPool(t *testing.T) {
 	// Test a case where a new rewards adds to the pool but no validators are subscribed
 	// This can happen when a donation is recived to the pool but no validators are subscribed
-	oracle := NewOracle(&Config{})
+	oracle := NewOracle(&Config{Network: "mainnet"})
 
 	// This prevents division by zero
 	oracle.increaseAllPendingRewards(big.NewInt(10000))
@@ -2379,7 +2476,7 @@ func Test_IncreasePendingEmptyPool(t *testing.T) {
 }
 
 func Test_consolidateBalance_Eligible(t *testing.T) {
-	oracle := NewOracle(&Config{})
+	oracle := NewOracle(&Config{Network: "mainnet"})
 	oracle.state.Validators[10] = &ValidatorInfo{
 		AccumulatedRewardsWei: big.NewInt(77),
 		PendingRewardsWei:     big.NewInt(23),
@@ -2395,7 +2492,7 @@ func Test_consolidateBalance_Eligible(t *testing.T) {
 }
 
 func Test_StateMachine(t *testing.T) {
-	oracle := NewOracle(&Config{})
+	oracle := NewOracle(&Config{Network: "mainnet"})
 	valIndex1 := uint64(1000)
 	valIndex2 := uint64(2000)
 
