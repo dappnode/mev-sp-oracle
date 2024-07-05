@@ -322,7 +322,7 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 			log.WithFields(log.Fields{
 				"LastTxSender":       sender.String(),
 				"WhitelistedAddress": whitelistedBuilders,
-			}).Info("MEV reward from whitelisted builder")
+			}).Info("Last block tx was sent by whitelisted builder")
 		}
 		// MEV reward can also be sent via a smart contract, in which case the
 		// receiver is the pool address. Example:
