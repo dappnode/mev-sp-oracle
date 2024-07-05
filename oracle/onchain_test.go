@@ -446,6 +446,51 @@ func Test_EndToEnd_Mainnet(t *testing.T) {
 	}
 }
 
+func Test_Mainnet_BeaverIssue(t *testing.T) {
+	t.Skip("Skipping test")
+
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:3500",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
+	}
+
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+
+	cfg := onchain.GetConfigFromContract(cfgOnchain)
+
+	oracleInstance := NewOracle(cfg)
+
+	// Subscribe the proposer of slot 9444748
+	oracleInstance.addSubscription(12137, "", "")
+
+	// Slots where something happened. This saves having to sync everything, which takes too long
+	slotsToProcess := []uint64{
+		9444748,
+	}
+
+	prevSlot := slotsToProcess[0]
+	for _, slot := range slotsToProcess {
+		if prevSlot > slot {
+			t.Fatal("Slots are not in order")
+		}
+
+		// we force to process the slots we want
+		oracleInstance.State().NextSlotToProcess = slot
+		oracleInstance.State().LatestProcessedSlot = slot - 1
+
+		// Fetch block information
+		fullBlock := onchain.FetchFullBlock(oracleInstance.State().NextSlotToProcess, oracleInstance)
+
+		// Advance state to next slot based on the information we got from the block
+		processedSlot, err := oracleInstance.AdvanceStateToNextSlot(fullBlock)
+		require.NoError(t, err)
+
+		log.Info("Processed slot: ", processedSlot)
+	}
+}
+
 func isInSlice(element uint64, slice []uint64) bool {
 	for _, value := range slice {
 		if element == value {

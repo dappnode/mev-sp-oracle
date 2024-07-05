@@ -207,3 +207,11 @@ func Test_WeiToEther(t *testing.T) {
 	t3 := WeiToEther(big.NewInt(12987678998))
 	require.Equal(t, "0.000000012987678998", fmt.Sprintf("%.18f", t3))
 }
+
+func Test_IsIn(t *testing.T) {
+	require.Equal(t, true, IsIn("0x0000", []string{"0x0000", "0x0001"}))
+	require.Equal(t, false, IsIn("0x0002", []string{"0x0000", "0x0001"}))
+	require.Equal(t, true, IsIn("0x000A", []string{"0x000a", "0x0001"}))
+	require.Equal(t, true, IsIn("0x000A", []string{"0x000a"}))
+	require.Equal(t, false, IsIn("a", []string{"c", "d"}))
+}
