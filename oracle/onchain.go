@@ -35,6 +35,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var MainnetChainId = uint64(1)
+var GoerliChainId = uint64(5)
+var HoleskyChainId = uint64(17000)
+
 // This file provides different functions to access the blockchain state from both consensus and
 // execution layer and modifying the its state via smart contract calls.
 type EpochDuties struct {
@@ -56,6 +60,7 @@ type Onchain struct {
 	updaterKey      *ecdsa.PrivateKey
 	UpdaterAddress  common.Address
 	PoolAddress     string
+	ChainId         uint64
 	validators      map[phase0.ValidatorIndex]*v1.Validator
 }
 
@@ -144,6 +149,7 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		PoolAddress:     cliCfg.PoolAddress,
 		Contract:        contract,
 		NumRetries:      cliCfg.NumRetries,
+		ChainId:         uint64(chainId.Int64()),
 		updaterKey:      updaterKey,
 		UpdaterAddress:  updaterAddress,
 	}, nil
@@ -812,7 +818,7 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 	}
 
 	// Create the full block with the duty, which is the minimum info it can have
-	fullBlock := NewFullBlock(slotDuty, validator)
+	fullBlock := NewFullBlock(slotDuty, validator, o.ChainId)
 
 	// Fetch the whole consensus block
 	proposedBlock, err := o.GetConsensusBlockAtSlot(slot)
@@ -981,10 +987,6 @@ func (onchain *Onchain) GetSlotByBlock(deployedBlock *big.Int, genesisTime uint6
 
 func (onchain *Onchain) GetConfigFromContract(
 	cliCfg *config.CliConfig) *Config {
-
-	MainnetChainId := uint64(1)
-	GoerliChainId := uint64(5)
-	HoleskyChainId := uint64(17000)
 
 	chainId, err := onchain.ExecutionClient.ChainID(context.Background())
 	if err != nil {

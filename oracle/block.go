@@ -17,10 +17,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Whitelisted builders for each chain. A transactions that comes from any
+// of those AND if its last tx in the block, its considered MEV reward.
+var WhitelistedBuilders = map[uint64][]string{
+	MainnetChainId: {
+		"0xae0A3D884E746599BD6C893a674E556C36a47f1e",
+	},
+	HoleskyChainId: {},
+}
+
 // Create a new block with the bare minimum information
 func NewFullBlock(
 	consensusDuty *api.ProposerDuty,
-	validator *v1.Validator) *FullBlock {
+	validator *v1.Validator,
+	chainId uint64) *FullBlock {
 
 	if consensusDuty == nil {
 		log.Fatal("consensus duty can't be nil")
@@ -57,6 +67,7 @@ func NewFullBlock(
 			TransferGovernance:           make([]*contract.ContractTransferGovernance, 0),
 			AcceptGovernance:             make([]*contract.ContractAcceptGovernance, 0),
 		},
+		ChainId: chainId,
 	}
 
 	return fb
@@ -295,9 +306,24 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 		log.Fatal("could not get tx sender: ", err)
 	}
 
+	whitelistedBuilders, found := WhitelistedBuilders[b.ChainId]
+	if !found {
+		log.Fatal("Chain not found in whitelisted builders: ", b.ChainId)
+	}
+
 	// Mev rewards are sent in the last tx. This tx sender
-	// matches the fee recipient of the protocol
-	if utils.Equals(b.GetFeeRecipient(), sender.String()) {
+	// matches the fee recipient of the protocol.
+	// We also consider a MEV reward if the tx comes from a whitelisted builder. This
+	// is rare, but has happened: https://beaconcha.in/slot/9444748
+	if utils.Equals(b.GetFeeRecipient(), sender.String()) ||
+		utils.IsIn(sender.String(), whitelistedBuilders) {
+
+		if utils.IsIn(sender.String(), whitelistedBuilders) {
+			log.WithFields(log.Fields{
+				"LastTxSender":       sender.String(),
+				"WhitelistedAddress": whitelistedBuilders,
+			}).Info("Last block tx was sent by whitelisted builder")
+		}
 		// MEV reward can also be sent via a smart contract, in which case the
 		// receiver is the pool address. Example:
 		// https://etherscan.io/tx/0x6c9adaa16946d1279e0db0fc9348201c48b2f70a62ac5edfe06dc0ba2b4f3e3c

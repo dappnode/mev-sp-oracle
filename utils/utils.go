@@ -241,3 +241,12 @@ func GetActivationSlotOfLatestProcessedValidator(
 func WeiToEther(wei *big.Int) *big.Float {
 	return new(big.Float).Quo(new(big.Float).SetInt(wei), big.NewFloat(params.Ether))
 }
+
+func IsIn(a string, list []string) bool {
+	for _, b := range list {
+		if Equals(a, b) {
+			return true
+		}
+	}
+	return false
+}

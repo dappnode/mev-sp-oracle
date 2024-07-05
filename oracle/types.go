@@ -138,6 +138,8 @@ type FullBlock struct {
 	// Populated with the validators if there are sub/unsub events
 	ValidatorsSubs   []*v1.Validator `json:"validators_subs"`
 	ValidatorsUnsubs []*v1.Validator `json:"validators_unsubs"`
+
+	ChainId uint64 `json:"chain_id"`
 }
 
 // Represents a block with information relevant for the pool, uses Fullblock
