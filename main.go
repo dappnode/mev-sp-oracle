@@ -127,7 +127,7 @@ func main() {
 	cfg := onchain.GetConfigFromContract(cliCfg)
 
 	// Create the oracle instance
-	oracleInstance := oracle.NewOracle(cfg)
+	oracleInstance := oracle.NewOracle(cfg, onchain)
 
 	// If checkpoint sync url is provided, load state from it
 	if cliCfg.CheckPointSyncUrl != "" {

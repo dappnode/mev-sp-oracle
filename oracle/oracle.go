@@ -27,12 +27,13 @@ var StateFolder = "oracle-data"
 var StateJsonName = "state.json"
 
 type Oracle struct {
-	cfg   *Config
-	state *OracleState
-	mutex sync.RWMutex
+	cfg     *Config
+	state   *OracleState
+	onchain *Onchain
+	mutex   sync.RWMutex
 }
 
-func NewOracle(cfg *Config) *Oracle {
+func NewOracle(cfg *Config, onchain *Onchain) *Oracle {
 	state := &OracleState{
 		StateHash:            "",
 		LatestProcessedBlock: 0,
@@ -61,8 +62,9 @@ func NewOracle(cfg *Config) *Oracle {
 	}
 
 	oracle := &Oracle{
-		cfg:   cfg,
-		state: state,
+		cfg:     cfg,
+		state:   state,
+		onchain: onchain,
 	}
 
 	return oracle
@@ -1206,8 +1208,17 @@ func (or *Oracle) consolidateBalance(valIndex uint64) {
 // Returns a list of all the eligible validators for rewards.
 func (or *Oracle) getEligibleValidators() []uint64 {
 	eligibleValidators := make([]uint64, 0)
-
+	// Loop through the validators in state
 	for valIndex, validator := range or.state.Validators {
+		// Retrieve the on-chain validator by index from the or.onchain.validators map
+		onchainValidator, exists := or.onchain.validators[phase0.ValidatorIndex(valIndex)]
+
+		// Check if the validator exists in the onchain data and its status is not ActiveOngoing
+		if exists && onchainValidator.Status != v1.ValidatorStateActiveOngoing {
+			// Skip this validator if it's onchain status is not ActiveOngoing
+			continue
+		}
+		// Add to eligible list if the status is either Active or has a YellowCard and it is not excluded by the onchain status check
 		if validator.ValidatorStatus == Active || validator.ValidatorStatus == YellowCard {
 			eligibleValidators = append(eligibleValidators, valIndex)
 		}
