@@ -64,6 +64,11 @@ type Onchain struct {
 	validators      map[phase0.ValidatorIndex]*v1.Validator
 }
 
+// ValidatorAccessor is an interface to access only the validators map
+type ValidatorAccessor interface {
+	GetValidators() map[phase0.ValidatorIndex]*v1.Validator
+}
+
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
 
 	// Dial the execution client
@@ -155,6 +160,10 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 	}, nil
 }
 
+func (o *Onchain) GetValidators() map[phase0.ValidatorIndex]*v1.Validator {
+	return o.validators
+}
+
 func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
 	var err error
 	var execSync *ethereum.SyncProgress
@@ -234,6 +243,7 @@ func (o *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 	return signedBeaconBlock.Data, err
 }
 
+// Gets active validators by asking the chain. It does not get current Onchain object validators
 func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 	var validators *api.Response[map[phase0.ValidatorIndex]*v1.Validator]
 	var err error

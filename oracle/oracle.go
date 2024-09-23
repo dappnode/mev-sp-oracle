@@ -27,13 +27,13 @@ var StateFolder = "oracle-data"
 var StateJsonName = "state.json"
 
 type Oracle struct {
-	cfg     *Config
-	state   *OracleState
-	onchain *Onchain
-	mutex   sync.RWMutex
+	cfg        *Config
+	state      *OracleState
+	validators ValidatorAccessor
+	mutex      sync.RWMutex
 }
 
-func NewOracle(cfg *Config, onchain *Onchain) *Oracle {
+func NewOracle(cfg *Config, va ValidatorAccessor) *Oracle {
 	state := &OracleState{
 		StateHash:            "",
 		LatestProcessedBlock: 0,
@@ -62,9 +62,9 @@ func NewOracle(cfg *Config, onchain *Onchain) *Oracle {
 	}
 
 	oracle := &Oracle{
-		cfg:     cfg,
-		state:   state,
-		onchain: onchain,
+		cfg:        cfg,
+		state:      state,
+		validators: va,
 	}
 
 	return oracle
@@ -197,6 +197,36 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 		or.state.LatestProcessedBlock = summarizedBlock.Block
 	}
 	return processedSlot, nil
+}
+
+// Unsubscribes validators that are not active in ethereum. Shares their pending rewards to the pool
+// TODO: there are multiple validator statuses that should be considered as "not active" and should be unsubscribed.
+func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
+	or.mutex.Lock()
+	defer or.mutex.Unlock()
+
+	// Only cleanup if we're past the cleanup slot fork
+	if uint64(blockHeader.Header.Message.Slot) >= MainnetCleanupValidatorsSlot {
+		// Get the latest validator information
+		validatorInfo := or.validators.GetValidators()
+
+		// Iterate over all validators. If two or more  validators exit or get slashed in the same slot,
+		// this cleanup will eventually set both of their pending rewards to 0 and share them among the pool
+		for _, validator := range validatorInfo {
+			// If a validator is subscribed but not active onchain, we have to unsubscribe it and treat it as a ban:
+			// this means setting the validator rewards to 0 and sharing them among the pool
+			if !validator.Status.IsActive() && or.isSubscribed(uint64(validator.Index)) {
+				or.advanceStateMachine(uint64(validator.Index), Unsubscribe)
+				or.increaseAllPendingRewards(or.state.Validators[uint64(validator.Index)].PendingRewardsWei)
+				or.resetPendingRewards(uint64(validator.Index))
+
+			}
+		}
+	}
+
+	//TODO: store a proof of the cleanup? Reason of why we unsubscribed and cleaned the pending rewards of the validators
+
+	return nil
 }
 
 // We use the following events to validate that the config has not changed. Dynamic
@@ -1208,17 +1238,8 @@ func (or *Oracle) consolidateBalance(valIndex uint64) {
 // Returns a list of all the eligible validators for rewards.
 func (or *Oracle) getEligibleValidators() []uint64 {
 	eligibleValidators := make([]uint64, 0)
-	// Loop through the validators in state
-	for valIndex, validator := range or.state.Validators {
-		// Retrieve the on-chain validator by index from the or.onchain.validators map
-		onchainValidator, exists := or.onchain.validators[phase0.ValidatorIndex(valIndex)]
 
-		// Check if the validator exists in the onchain data and its status is not ActiveOngoing
-		if exists && onchainValidator.Status != v1.ValidatorStateActiveOngoing {
-			// Skip this validator if it's onchain status is not ActiveOngoing
-			continue
-		}
-		// Add to eligible list if the status is either Active or has a YellowCard and it is not excluded by the onchain status check
+	for valIndex, validator := range or.state.Validators {
 		if validator.ValidatorStatus == Active || validator.ValidatorStatus == YellowCard {
 			eligibleValidators = append(eligibleValidators, valIndex)
 		}
