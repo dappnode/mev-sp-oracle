@@ -66,7 +66,7 @@ type Onchain struct {
 
 // ValidatorAccessor is an interface to access only the validators map
 type ValidatorAccessor interface {
-	GetValidators() map[phase0.ValidatorIndex]*v1.Validator
+	GetSetOfValidators(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error)
 }
 
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
@@ -158,10 +158,6 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		updaterKey:      updaterKey,
 		UpdaterAddress:  updaterAddress,
 	}, nil
-}
-
-func (o *Onchain) GetValidators() map[phase0.ValidatorIndex]*v1.Validator {
-	return o.validators
 }
 
 func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
@@ -330,6 +326,43 @@ func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, slot string
 			valIndex, validator.Index))
 	}
 	return validator, err
+}
+
+func (o *Onchain) GetSetOfValidators(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+	var validators *api.Response[map[phase0.ValidatorIndex]*v1.Validator]
+	var err error
+
+	err = retry.Do(func() error {
+		validators, err = o.ConsensusClient.Validators(context.Background(), &api.ValidatorsOpts{
+			State:   slot,
+			Indices: valIndices,
+		})
+
+		if err != nil {
+			log.Warn("Failed attempt to fetch validators: ", err.Error(), " Retrying...")
+			return errors.New("Error fetching validators: " + err.Error())
+		}
+
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.New("Could not fetch validators: " + err.Error())
+	}
+
+	if len(validators.Data) == 0 {
+		return nil, nil // No validators found
+	}
+
+	// Sanity checks - Ensure all requested validators are found
+	for _, idx := range valIndices {
+		if _, found := validators.Data[idx]; !found {
+			return nil, errors.New(fmt.Sprintf("Error fetching validators: Could not find index in response: %d",
+				idx))
+		}
+	}
+
+	return validators.Data, err
 }
 
 func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*types.Block, error) {

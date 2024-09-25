@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
 
 	"fmt"
 	"io/ioutil"
@@ -207,8 +208,17 @@ func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
 
 	// Only cleanup if we're past the cleanup slot fork
 	if uint64(blockHeader.Header.Message.Slot) >= MainnetCleanupValidatorsSlot {
-		// Get the latest validator information
-		validatorInfo := or.validators.GetValidators()
+
+		// Extract all validator indices from the oracle state
+		indices := make([]phase0.ValidatorIndex, 0)
+		for idx := range or.state.Validators {
+			indices = append(indices, phase0.ValidatorIndex(idx))
+		}
+		// Get the latest validator information for subscribed validators
+		validatorInfo, err := or.validators.GetSetOfValidators(indices, strconv.FormatUint(uint64(blockHeader.Header.Message.Slot), 10))
+		if err != nil {
+			return err // Handle the error appropriately
+		}
 
 		// Iterate over all validators. If two or more  validators exit or get slashed in the same slot,
 		// this cleanup will eventually set both of their pending rewards to 0 and share them among the pool
@@ -219,7 +229,6 @@ func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
 				or.advanceStateMachine(uint64(validator.Index), Unsubscribe)
 				or.increaseAllPendingRewards(or.state.Validators[uint64(validator.Index)].PendingRewardsWei)
 				or.resetPendingRewards(uint64(validator.Index))
-
 			}
 		}
 	}

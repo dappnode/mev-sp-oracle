@@ -224,7 +224,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 
 	// Load all the validators from the beacon chain
 	// TODO: see what API endpoints are affected by commenting this
-	// onchain.RefreshBeaconValidators()
+	onchain.RefreshBeaconValidators()
 
 	log.WithFields(log.Fields{
 		"LatestProcessedSlot": oracleInstance.State().LatestProcessedSlot,
@@ -312,6 +312,8 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 		// Every X slots we update the onchain validators and cleanup any stranded oracle validators
 		if oracleInstance.State().LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
 			onchain.RefreshBeaconValidators()
+
+			// This doesnt depend on the validators loaded in the onchain object
 			oracleInstance.ValidatorCleanup(finalizedBlockHeader)
 		}
 
