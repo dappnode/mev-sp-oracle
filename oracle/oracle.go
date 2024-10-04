@@ -30,11 +30,11 @@ var StateJsonName = "state.json"
 type Oracle struct {
 	cfg        *Config
 	state      *OracleState
-	validators ValidatorAccessor
 	mutex      sync.RWMutex
+	onchain    *Onchain
 }
 
-func NewOracle(cfg *Config, va ValidatorAccessor) *Oracle {
+func NewOracle(cfg *Config) *Oracle {
 	state := &OracleState{
 		StateHash:            "",
 		LatestProcessedBlock: 0,
@@ -65,10 +65,18 @@ func NewOracle(cfg *Config, va ValidatorAccessor) *Oracle {
 	oracle := &Oracle{
 		cfg:        cfg,
 		state:      state,
-		validators: va,
+		onchain: nil,
 	}
 
 	return oracle
+}
+
+func (or *Oracle) SetOnchain(oc *Onchain) {
+	or.onchain = oc
+}
+
+func (or *Oracle) GetOnchain() *Onchain {
+	return or.onchain
 }
 
 // Returns the state of the oracle, containing all the information about the
@@ -215,22 +223,30 @@ func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
 			indices = append(indices, phase0.ValidatorIndex(idx))
 		}
 		// Get the latest validator information for subscribed validators
-		validatorInfo, err := or.validators.GetSetOfValidators(indices, strconv.FormatUint(uint64(blockHeader.Header.Message.Slot), 10))
+		validatorInfo, err := or.onchain.GetSetOfValidators(indices, strconv.FormatUint(uint64(blockHeader.Header.Message.Slot), 10))
 		if err != nil {
 			return err // Handle the error appropriately
 		}
 
 		// Iterate over all validators. If two or more  validators exit or get slashed in the same slot,
 		// this cleanup will eventually set both of their pending rewards to 0 and share them among the pool
+		
+		rewardsToDistrbitute := big.NewInt(0)
 		for _, validator := range validatorInfo {
 			// If a validator is subscribed but not active onchain, we have to unsubscribe it and treat it as a ban:
 			// this means setting the validator rewards to 0 and sharing them among the pool
 			if !validator.Status.IsActive() && or.isSubscribed(uint64(validator.Index)) {
+				
 				or.advanceStateMachine(uint64(validator.Index), Unsubscribe)
-				or.increaseAllPendingRewards(or.state.Validators[uint64(validator.Index)].PendingRewardsWei)
 				or.resetPendingRewards(uint64(validator.Index))
+				rewardsToDistrbitute.Add(rewardsToDistrbitute, or.state.Validators[uint64(validator.Index)].PendingRewardsWei)
 			}
 		}
+
+		// Distribute the rewards among the pool
+		or.increaseAllPendingRewards(rewardsToDistrbitute)
+		//todo add logs
+		// reset
 	}
 
 	//TODO: store a proof of the cleanup? Reason of why we unsubscribed and cleaned the pending rewards of the validators
@@ -796,6 +812,7 @@ func (or *Oracle) isSubscribed(validatorIndex uint64) bool {
 			validator.ValidatorStatus != NotSubscribed &&
 			validator.ValidatorStatus != UnknownState {
 			return true
+			//todo fix this shit.
 		}
 	}
 	return false
