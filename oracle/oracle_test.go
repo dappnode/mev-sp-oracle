@@ -2326,6 +2326,8 @@ func Test_increaseAllPendingRewards_4(t *testing.T) {
 
 func Test_increaseAllPendingRewards_5(t *testing.T) {
 
+	MainnetRewardsSlotFork := SlotFork1["mainnet"]
+
 	type pendingRewardTest struct {
 		FeePercentX100   int
 		Reward           *big.Int

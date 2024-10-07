@@ -32,16 +32,12 @@ type Oracle struct {
 	mutex sync.RWMutex
 }
 
-// This soft fork controls a minor change the in rewards calculation that fixes a minor
-// bug in how rewards were distributed. The error is in the range of few weis, nothing major.
-// In mainnet we do the change at a given slot, to preserve backwards compatibility.
-// In holesky we start from scratch (slot=0) with the correct calculation.
-const MainnetRewardsSlotFork = uint64(8755000) // TODO: Set a slot in the future
-const HoleskyRewardsSlotFork = uint64(0)
-
-var RewardSlotFork = map[string]uint64{
-	"mainnet": MainnetRewardsSlotFork,
-	"holesky": HoleskyRewardsSlotFork,
+// Fork 1 changes two things:
+// - minor fix in rewards calculation (some wei rouding)
+// - exited and slahed validators no longer get fees
+var SlotFork1 = map[string]uint64{
+	"mainnet": uint64(8755000),
+	"holesky": uint64(0),
 }
 
 func NewOracle(cfg *Config) *Oracle {
@@ -1260,7 +1256,7 @@ func (or *Oracle) increaseAllPendingRewards(
 
 	totalFees := big.NewInt(0)
 	perValidatorReward := big.NewInt(0)
-	if slotFork, found := RewardSlotFork[or.cfg.Network]; found {
+	if slotFork, found := SlotFork1[or.cfg.Network]; found {
 		// Fixes minor bug in rewards calculation from a given slot. It just affects a few wei nothing
 		// major, but this fixes the remainder1 not being scalled over 100.
 		if or.state.NextSlotToProcess >= slotFork {
@@ -1270,7 +1266,7 @@ func (or *Oracle) increaseAllPendingRewards(
 				"Slot":               or.state.NextSlotToProcess,
 				"Network":            or.cfg.Network,
 				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
-				"Method":             "New",
+				"Method":             "PreFork1",
 			}).Debug("Calculating rewards")
 
 			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
@@ -1284,7 +1280,7 @@ func (or *Oracle) increaseAllPendingRewards(
 				"Slot":               or.state.NextSlotToProcess,
 				"Network":            or.cfg.Network,
 				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
-				"Method":             "Old",
+				"Method":             "PostFork1",
 			}).Debug("Calculating rewards")
 
 			// And remainder of above operation
