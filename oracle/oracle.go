@@ -36,8 +36,8 @@ type Oracle struct {
 // - minor fix in rewards calculation (some wei rouding)
 // - exited and slahed validators no longer get fees
 var SlotFork1 = map[string]uint64{
-	"mainnet": uint64(8755000),
-	"holesky": uint64(0),
+	"mainnet": uint64(10188220),
+	"holesky": uint64(2720632),
 }
 
 func NewOracle(cfg *Config) *Oracle {
@@ -1266,7 +1266,7 @@ func (or *Oracle) increaseAllPendingRewards(
 				"Slot":               or.state.NextSlotToProcess,
 				"Network":            or.cfg.Network,
 				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
-				"Method":             "PreFork1",
+				"Method":             "PostFork1",
 			}).Debug("Calculating rewards")
 
 			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
@@ -1280,7 +1280,7 @@ func (or *Oracle) increaseAllPendingRewards(
 				"Slot":               or.state.NextSlotToProcess,
 				"Network":            or.cfg.Network,
 				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
-				"Method":             "PostFork1",
+				"Method":             "PreFork1",
 			}).Debug("Calculating rewards")
 
 			// And remainder of above operation
