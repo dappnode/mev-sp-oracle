@@ -112,6 +112,38 @@ For each reward (see types of rewards) that is sent to the pool on a finalized b
 
 Note that the pool gets the remainders from two different divisions, but this is done for simplicity and since the calculations are in wei, the value of it is neglectable. Doing this makes the oracle fair with all validators, since each one of them gets the exact same amount of rewards. So in practice, `POOL_FEES_ADDRESS` just gets `POOL_FEES_PERCENT`.
 
+Test vectors for reward calculations can be generated with the following Python script. Note that a minor adjustment has been made in the reward calculation.
+This fixes a minor bug causing an incorrect rewards distribution, but in the order of a few `wei`, totally neglectable.
+See `MainnetRewardsSlotFork` for when this new calculation applies.
+
+```python
+# Given a fee (over 10000 eg  700 is 7%) a reward and an amount of validators, calculates
+# the taken fee and the reward for each validator. All calculations are done as integers with
+# no decimals being used.
+def calculate_val_rewards_and_fee(fee_percent_over1000, total_reward, eligible_validators):
+    pool_fee_no_remainder = (total_reward * fee_percent_over1000) // 10000
+    to_share_validators = total_reward - pool_fee_no_remainder
+    per_validator_reward = to_share_validators // eligible_validators
+    remainder = to_share_validators % eligible_validators
+    final_pool_fee = pool_fee_no_remainder + remainder
+
+    print(f"final_pool_fee: {final_pool_fee}, per_validator_reward: {per_validator_reward}")
+
+    print("remainder: ", remainder)
+
+    # After distribution rewards, adding them all shall match the total_reward
+    assert (per_validator_reward*eligible_validators+final_pool_fee) == total_reward
+
+    return final_pool_fee, per_validator_reward
+
+# Examples
+# 7% over 1959 validators
+calculate_val_rewards_and_fee(700, 751283351135293312, 1959)
+
+# 99.9% over 99999 validators
+calculate_val_rewards_and_fee(9999, 99999999999999, 99999)
+```
+
 ## Merkle trees and proofs
 
 Since storing all rewards calculations on-chain would be almost impossible and very expensive, merkle trees are used to summarize the state of all validators tracked by the oracle in a given value called **merkle root*. All the computation of the rewards is done off-chain by the oracle, and on every `CHECKPOINT_SIZE_SLOTS` all rewards all calculated and summarized in a new merkle root that is stored on-chain in Ethereum.

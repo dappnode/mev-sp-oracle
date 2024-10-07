@@ -32,6 +32,14 @@ type Oracle struct {
 	mutex sync.RWMutex
 }
 
+// Fork 1 changes two things:
+// - minor fix in rewards calculation (some wei rouding)
+// - exited and slahed validators no longer get fees
+var SlotFork1 = map[string]uint64{
+	"mainnet": uint64(10188220),
+	"holesky": uint64(2720632),
+}
+
 func NewOracle(cfg *Config) *Oracle {
 	state := &OracleState{
 		StateHash:            "",
@@ -1243,27 +1251,69 @@ func (or *Oracle) increaseAllPendingRewards(
 	// The pool takes PoolFeesPercentOver10000 cut of the rewards
 	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(or.state.PoolFeesPercentOver10000)))
 
-	// Calculate the pool cut
+	// Calculate the pool cut (not taking into account the remainder)
 	poolCut := big.NewInt(0).Div(aux, over)
 
-	// And remainder of above operation
-	remainder1 := big.NewInt(0).Mod(aux, over)
+	totalFees := big.NewInt(0)
+	perValidatorReward := big.NewInt(0)
+	if slotFork, found := SlotFork1[or.cfg.Network]; found {
+		// Fixes minor bug in rewards calculation from a given slot. It just affects a few wei nothing
+		// major, but this fixes the remainder1 not being scalled over 100.
+		if or.state.NextSlotToProcess >= slotFork {
 
-	// The amount to share is the reward minus the pool cut + remainder
-	toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
-	toShareAllValidators.Sub(toShareAllValidators, remainder1)
+			log.WithFields(log.Fields{
+				"SlotFork":           slotFork,
+				"Slot":               or.state.NextSlotToProcess,
+				"Network":            or.cfg.Network,
+				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
+				"Method":             "PostFork1",
+			}).Debug("Calculating rewards")
 
-	// Each validator gets that divided by numEligibleValidators
-	perValidatorReward := big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
-	// And remainder of above operation
-	remainder2 := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
+			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
+			perValidatorReward = big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
+			remainder := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
+			totalFees = big.NewInt(0).Add(poolCut, remainder)
+		} else {
 
-	// Total fees for the pool are: the cut (%) + the remainders
-	totalFees := big.NewInt(0).Add(poolCut, remainder1)
-	totalFees.Add(totalFees, remainder2)
+			log.WithFields(log.Fields{
+				"SlotFork":           slotFork,
+				"Slot":               or.state.NextSlotToProcess,
+				"Network":            or.cfg.Network,
+				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
+				"Method":             "PreFork1",
+			}).Debug("Calculating rewards")
+
+			// And remainder of above operation
+			remainder1 := big.NewInt(0).Mod(aux, over)
+
+			// The amount to share is the reward minus the pool cut + remainder
+			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
+			toShareAllValidators.Sub(toShareAllValidators, remainder1)
+
+			// Each validator gets that divided by numEligibleValidators
+			perValidatorReward = big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
+			// And remainder of above operation
+			remainder2 := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
+
+			// Total fees for the pool are: the cut (%) + the remainders
+			totalFees = big.NewInt(0).Add(poolCut, remainder1)
+			totalFees.Add(totalFees, remainder2)
+		}
+	} else {
+		log.Fatal("Network not found in forks list: ", or.cfg.Network)
+	}
 
 	// Increase pool rewards (fees)
 	or.state.PoolAccumulatedFees.Add(or.state.PoolAccumulatedFees, totalFees)
+
+	// Extra check to ensure what we split and what we have match
+	if big.NewInt(0).Add(big.NewInt(0).Mul(perValidatorReward, numEligibleValidators), totalFees).Cmp(reward) != 0 {
+		log.WithFields(log.Fields{
+			"perValidatorReward":    perValidatorReward,
+			"totalFees":             totalFees,
+			"numEligibleValidators": numEligibleValidators,
+		}).Fatal("Total rewards dont match the sum of the rewards per validator and the pool fees")
+	}
 
 	log.WithFields(log.Fields{
 		"AmountEligibleValidators": numEligibleValidators,
