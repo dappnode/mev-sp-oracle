@@ -2369,11 +2369,11 @@ func Test_increaseAllPendingRewards_5(t *testing.T) {
 		{7 * 100, big.NewInt(751283351135293312), 1959, big.NewInt(356658252453202), big.NewInt(52589834579470594), MainnetRewardsSlotFork + 3000},
 
 		// Some after fork tests (new reward algorithm)
-		{10 * 100, big.NewInt(100000000000001), 100, big.NewInt(900000000000), big.NewInt(10000000000001), MainnetRewardsSlotFork},
-		{123, big.NewInt(345432454323432), 3454, big.NewInt(98779280583), big.NewInt(4248819189750), MainnetRewardsSlotFork},
-		{123, big.NewInt(345432454323432), 3454, big.NewInt(98779280583), big.NewInt(4248819189750), MainnetRewardsSlotFork},
-		{999, big.NewInt(99999999999999), 5, big.NewInt(18002000000000), big.NewInt(9989999999999), MainnetRewardsSlotFork},
-		{9999, big.NewInt(99999999999999), 99999, big.NewInt(100001), big.NewInt(99990000000000), MainnetRewardsSlotFork},
+		{10 * 100, big.NewInt(100000000000001), 100, big.NewInt(900000000000), big.NewInt(10000000000001), MainnetRewardsSlotFork + 1},
+		{123, big.NewInt(345432454323432), 3454, big.NewInt(98779280583), big.NewInt(4248819189750), MainnetRewardsSlotFork + 2},
+		{123, big.NewInt(345432454323432), 3454, big.NewInt(98779280583), big.NewInt(4248819189750), MainnetRewardsSlotFork + 3},
+		{999, big.NewInt(99999999999999), 5, big.NewInt(18002000000000), big.NewInt(9989999999999), MainnetRewardsSlotFork + 1000},
+		{9999, big.NewInt(99999999999999), 99999, big.NewInt(100001), big.NewInt(99990000000000), MainnetRewardsSlotFork + 30000},
 	}
 
 	for _, test := range tests {
@@ -2385,7 +2385,7 @@ func Test_increaseAllPendingRewards_5(t *testing.T) {
 		for i := 0; i < test.AmountValidators; i++ {
 			oracle.addSubscription(uint64(i), "0x", "0x")
 		}
-		oracle.state.LatestProcessedSlot = test.Slot
+		oracle.state.NextSlotToProcess = test.Slot
 		oracle.increaseAllPendingRewards(test.Reward)
 		for i := 0; i < test.AmountValidators; i++ {
 			require.Equal(t, test.ValidatorReward, oracle.state.Validators[uint64(i)].PendingRewardsWei)

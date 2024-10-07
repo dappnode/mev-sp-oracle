@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"math"
 
 	"fmt"
 	"io/ioutil"
@@ -1261,16 +1260,14 @@ func (or *Oracle) increaseAllPendingRewards(
 
 	totalFees := big.NewInt(0)
 	perValidatorReward := big.NewInt(0)
-
 	if slotFork, found := RewardSlotFork[or.cfg.Network]; found {
 		// Fixes minor bug in rewards calculation from a given slot. It just affects a few wei nothing
 		// major, but this fixes the remainder1 not being scalled over 100.
-		if or.state.LatestProcessedSlot >= slotFork &&
-			or.state.LatestProcessedSlot != math.MaxUint64 {
+		if or.state.NextSlotToProcess >= slotFork {
 
 			log.WithFields(log.Fields{
 				"SlotFork": slotFork,
-				"Slot":     or.state.LatestProcessedSlot,
+				"Slot":     or.state.NextSlotToProcess,
 				"Network":  or.cfg.Network,
 				"Method":   "New",
 			}).Debug("Calculating rewards")
@@ -1283,7 +1280,7 @@ func (or *Oracle) increaseAllPendingRewards(
 
 			log.WithFields(log.Fields{
 				"SlotFork": slotFork,
-				"Slot":     or.state.LatestProcessedSlot,
+				"Slot":     or.state.NextSlotToProcess,
 				"Network":  or.cfg.Network,
 				"Method":   "Old",
 			}).Debug("Calculating rewards")
