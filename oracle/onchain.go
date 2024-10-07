@@ -64,11 +64,6 @@ type Onchain struct {
 	validators      map[phase0.ValidatorIndex]*v1.Validator
 }
 
-// ValidatorAccessor is an interface to access only the validators map
-type ValidatorAccessor interface {
-	GetSetOfValidators(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error)
-}
-
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
 
 	// Dial the execution client
