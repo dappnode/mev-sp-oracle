@@ -2359,6 +2359,22 @@ func Test_increaseAllPendingRewards_5(t *testing.T) {
 		// 7 % (before change, was wrong)
 		{7 * 100, big.NewInt(751283351135293312), 1959, big.NewInt(356658252453197), big.NewInt(52589834579480389), MainnetRewardsSlotFork - 1},
 
+		// Examples taken from mainnet
+		{700, big.NewInt(48913644130771431), 1975, big.NewInt(23032753945121), big.NewInt(3423955089157456), MainnetRewardsSlotFork - 1},
+		{700, big.NewInt(1511244003192947), 1975, big.NewInt(711623758464), big.NewInt(105787080226547), MainnetRewardsSlotFork - 1},
+		{700, big.NewInt(24117725873436208), 1976, big.NewInt(11350953978891), big.NewInt(1688240811147592), MainnetRewardsSlotFork - 10000},
+		{700, big.NewInt(91043549594056858), 1975, big.NewInt(42871139808846), big.NewInt(6373048471586008), MainnetRewardsSlotFork - 1},
+
+		// Wrong but legacy
+		{700, big.NewInt(1), 1987, big.NewInt(-1), big.NewInt(1988), MainnetRewardsSlotFork - 100000},
+
+		// New fixed
+		{700, big.NewInt(1), 1987, big.NewInt(0), big.NewInt(1), MainnetRewardsSlotFork + 100000},
+
+		// Reward of 0 does not break
+		{700, big.NewInt(0), 1987, big.NewInt(0), big.NewInt(0), MainnetRewardsSlotFork + 100000},
+		{700, big.NewInt(0), 1987, big.NewInt(0), big.NewInt(0), MainnetRewardsSlotFork - 100000},
+
 		// After fork (exact slot)
 		{7 * 100, big.NewInt(1), 1670, big.NewInt(0), big.NewInt(1), MainnetRewardsSlotFork},
 

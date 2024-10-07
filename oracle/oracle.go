@@ -1266,10 +1266,11 @@ func (or *Oracle) increaseAllPendingRewards(
 		if or.state.NextSlotToProcess >= slotFork {
 
 			log.WithFields(log.Fields{
-				"SlotFork": slotFork,
-				"Slot":     or.state.NextSlotToProcess,
-				"Network":  or.cfg.Network,
-				"Method":   "New",
+				"SlotFork":           slotFork,
+				"Slot":               or.state.NextSlotToProcess,
+				"Network":            or.cfg.Network,
+				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
+				"Method":             "New",
 			}).Debug("Calculating rewards")
 
 			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
@@ -1279,10 +1280,11 @@ func (or *Oracle) increaseAllPendingRewards(
 		} else {
 
 			log.WithFields(log.Fields{
-				"SlotFork": slotFork,
-				"Slot":     or.state.NextSlotToProcess,
-				"Network":  or.cfg.Network,
-				"Method":   "Old",
+				"SlotFork":           slotFork,
+				"Slot":               or.state.NextSlotToProcess,
+				"Network":            or.cfg.Network,
+				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
+				"Method":             "Old",
 			}).Debug("Calculating rewards")
 
 			// And remainder of above operation
