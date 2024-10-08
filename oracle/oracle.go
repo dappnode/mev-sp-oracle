@@ -216,48 +216,51 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	return processedSlot, nil
 }
 
-// Unsubscribes validators that are not active in ethereum. Shares their pending rewards to the pool
-// TODO: there are multiple validator statuses that should be considered as "not active" and should be unsubscribed.
+// Unsubscribes validators that are not active. Shares their pending rewards to the pool
 func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
 
 	// Only cleanup if we're past the cleanup slot fork
-	if uint64(blockHeader.Header.Message.Slot) >= MainnetCleanupValidatorsSlot {
+	if uint64(blockHeader.Header.Message.Slot) >= SlotFork1[or.cfg.Network] {
 
 		// Extract all validator indices from the oracle state
 		indices := make([]phase0.ValidatorIndex, 0)
 		for idx := range or.state.Validators {
 			indices = append(indices, phase0.ValidatorIndex(idx))
 		}
-		// Get the latest validator information for subscribed validators
-		validatorInfo, err := or.onchain.GetSetOfValidators(indices, strconv.FormatUint(uint64(blockHeader.Header.Message.Slot), 10))
-		if err != nil {
-			return err // Handle the error appropriately
+
+		// if oracle isnt tracking any validator, it means that nobody ever subscribed, nothing to cleanup
+		if len(indices) == 0 {
+			log.Info("No validators to cleanup, state has no validators")
+			return nil
 		}
 
-		// Iterate over all validators. If two or more  validators exit or get slashed in the same slot,
+		// Get the latest validator information for subscribed validators. We assume there are validators to track here
+		validatorInfo, err := or.onchain.GetSetOfValidators(indices, strconv.FormatUint(uint64(blockHeader.Header.Message.Slot), 10))
+		if err != nil {
+			return err 
+		}
+
+		// Iterate over all validators. If two or more validators exit or get slashed in the same slot,
 		// this cleanup will eventually set both of their pending rewards to 0 and share them among the pool
-		
 		rewardsToDistrbitute := big.NewInt(0)
 		for _, validator := range validatorInfo {
 			// If a validator is subscribed but not active onchain, we have to unsubscribe it and treat it as a ban:
 			// this means setting the validator rewards to 0 and sharing them among the pool
 			if !validator.Status.IsActive() && or.isSubscribed(uint64(validator.Index)) {
-				
+				log.Info("Validator ", validator.Index, " is not active onchain & is subscribed to the pool. Unsubscribing it and sharig its ", or.state.Validators[uint64(validator.Index)].PendingRewardsWei, " wei among the pool")
 				or.advanceStateMachine(uint64(validator.Index), Unsubscribe)
 				or.resetPendingRewards(uint64(validator.Index))
 				rewardsToDistrbitute.Add(rewardsToDistrbitute, or.state.Validators[uint64(validator.Index)].PendingRewardsWei)
 			}
 		}
 
-		// Distribute the rewards among the pool
+		// Distribute the rewards among the pool. Majority of times this will be 0
 		or.increaseAllPendingRewards(rewardsToDistrbitute)
-		//todo add logs
+		log.Info("Validator cleanup done! Distributed a total of ", rewardsToDistrbitute, " wei among the pool")
 		// reset
 	}
-
-	//TODO: store a proof of the cleanup? Reason of why we unsubscribed and cleaned the pending rewards of the validators
 
 	return nil
 }

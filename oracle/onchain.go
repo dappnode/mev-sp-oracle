@@ -322,43 +322,70 @@ func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, slot string
 	}
 	return validator, err
 }
-
 func (o *Onchain) GetSetOfValidators(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
-	var validators *api.Response[map[phase0.ValidatorIndex]*v1.Validator]
-	var err error
+	// Chunk size for validator indices. TODO: move this elsewhere?
+	const chunkSize = 500
 
-	err = retry.Do(func() error {
-		validators, err = o.ConsensusClient.Validators(context.Background(), &api.ValidatorsOpts{
-			State:   slot,
-			Indices: valIndices,
-		})
+	// This will hold the accumulated validators from all chunks
+	allValidators := make(map[phase0.ValidatorIndex]*v1.Validator)
 
+	// If empty, return an error. We do this to avoid fetching all validators. GetSetOfValidators should be used with a set of indices
+	if len(valIndices) == 0 {
+		return nil, errors.New("Error: validator indices are empty")
+	}
+
+	// Iterate over the validator indices in chunks of chunkSize. We avoid fetching all
+	// validators at once to avoid hitting the max URL length when calling o.ConsensusClient.Validators
+	for i := 0; i < len(valIndices); i += chunkSize {
+		end := i + chunkSize
+		if end > len(valIndices) {
+			end = len(valIndices)
+		}
+		indicesChunk := valIndices[i:end]
+
+		var validators *api.Response[map[phase0.ValidatorIndex]*v1.Validator]
+		var err error
+
+		err = retry.Do(func() error {
+			validators, err = o.ConsensusClient.Validators(context.Background(), &api.ValidatorsOpts{
+				State:   slot,
+				Indices: indicesChunk,
+			})
+
+			if err != nil {
+				log.Warn("Failed attempt to fetch validators: ", err.Error(), " Retrying...")
+				return errors.New("Error fetching validators: " + err.Error())
+			}
+
+			return nil
+		}, o.GetRetryOpts(opts)...)
+
+		// If there was an error fetching the validators, return it.
 		if err != nil {
-			log.Warn("Failed attempt to fetch validators: ", err.Error(), " Retrying...")
-			return errors.New("Error fetching validators: " + err.Error())
+			return nil, errors.New("Could not fetch validators: " + err.Error())
 		}
 
-		return nil
-	}, o.GetRetryOpts(opts)...)
+		// If the data is empty, return an error. This should never happen.
+		if len(validators.Data) == 0 {
+			return nil, errors.New("Error: validator indices are empty") // No validators found
+		}
 
-	if err != nil {
-		return nil, errors.New("Could not fetch validators: " + err.Error())
-	}
+		// Add the fetched validators to the allValidators map
+		for idx, validator := range validators.Data {
+			allValidators[idx] = validator
+		}
 
-	if len(validators.Data) == 0 {
-		return nil, nil // No validators found
-	}
-
-	// Sanity checks - Ensure all requested validators are found
-	for _, idx := range valIndices {
-		if _, found := validators.Data[idx]; !found {
-			return nil, errors.New(fmt.Sprintf("Error fetching validators: Could not find index in response: %d",
-				idx))
+		// Sanity checks - Ensure all requested validators are found
+		for _, idx := range indicesChunk {
+			if _, found := validators.Data[idx]; !found {
+				return nil, errors.New(fmt.Sprintf("Error fetching validators: Could not find index in response: %d", idx))
+			}
 		}
 	}
 
-	return validators.Data, err
+	return allValidators, nil
 }
+
 
 func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*types.Block, error) {
 	var err error

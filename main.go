@@ -313,8 +313,13 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 		if oracleInstance.State().LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
 			onchain.RefreshBeaconValidators()
 
-			// This doesnt depend on the validators loaded in the onchain object
-			oracleInstance.ValidatorCleanup(finalizedBlockHeader)
+			// Do the validator cleanup: redisitribute the pending rewards of validators subscribed to the pool
+			// that are not in the beacon chain anymore (e.g. slashed)
+			err := oracleInstance.ValidatorCleanup(finalizedBlockHeader)
+			// As precaution, we stop the oracle if anything happened during the cleanup
+			if err != nil {
+				log.Fatal("Could not cleanup validators: ", err)
+			}
 		}
 
 		// Every CheckPointSizeInSlots we commit the state given some conditions, starting from
