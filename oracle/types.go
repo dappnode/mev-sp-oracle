@@ -37,8 +37,6 @@ const (
 	Untracked     ValidatorStatus = 6
 )
 
-const MainnetCleanupValidatorsSlot = uint64(10023371) // TODO: Define a slot
-
 // Events in the state machine that trigger transition
 type Event uint8
 

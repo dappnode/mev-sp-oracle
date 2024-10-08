@@ -224,7 +224,6 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 	lastReconciliationTime := int64(0)
 
 	// Load all the validators from the beacon chain
-	// TODO: see what API endpoints are affected by commenting this
 	onchain.RefreshBeaconValidators()
 
 	log.WithFields(log.Fields{
