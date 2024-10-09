@@ -73,7 +73,7 @@ func NewOracle(cfg *Config) *Oracle {
 	oracle := &Oracle{
 		cfg:        cfg,
 		state:      state,
-		onchain: nil,
+		onchain: 	nil,
 	}
 
 	return oracle
@@ -225,18 +225,18 @@ func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
 	if uint64(blockHeader.Header.Message.Slot) >= SlotFork1[or.cfg.Network] {
 
 		// Extract all validator indices from the oracle state
-		indices := make([]phase0.ValidatorIndex, 0)
+		indices := make([]phase0.ValidatorIndex, len(or.state.Validators))
 		for idx := range or.state.Validators {
-			indices = append(indices, phase0.ValidatorIndex(idx))
+			indices[idx] = phase0.ValidatorIndex(idx)
 		}
 
-		// if oracle isnt tracking any validator, it means that nobody ever subscribed, nothing to cleanup
+		// if oracle isn't tracking any validator, it means that nobody ever subscribed, nothing to cleanup
 		if len(indices) == 0 {
 			log.Info("No validators to cleanup, state has no validators")
 			return nil
 		}
 
-		// Get the latest validator information for subscribed validators. We assume there are validators to track here
+		// Get the latest validator information for all subscribed validators at once
 		validatorInfo, err := or.onchain.GetSetOfValidators(indices, strconv.FormatUint(uint64(blockHeader.Header.Message.Slot), 10))
 		if err != nil {
 			return err 
@@ -244,26 +244,27 @@ func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
 
 		// Iterate over all validators. If two or more validators exit or get slashed in the same slot,
 		// this cleanup will eventually set both of their pending rewards to 0 and share them among the pool
-		rewardsToDistrbitute := big.NewInt(0)
+		rewardsToDistribute := big.NewInt(0)
 		for _, validator := range validatorInfo {
 			// If a validator is subscribed but not active onchain, we have to unsubscribe it and treat it as a ban:
 			// this means setting the validator rewards to 0 and sharing them among the pool
 			if !validator.Status.IsActive() && or.isSubscribed(uint64(validator.Index)) {
-				log.Info("Validator ", validator.Index, " is not active onchain & is subscribed to the pool. Unsubscribing it and sharig its ", or.state.Validators[uint64(validator.Index)].PendingRewardsWei, " wei among the pool")
+				log.Info("Validator ", validator.Index, " is not active onchain & is subscribed to the pool. Unsubscribing it and sharing its ", or.state.Validators[uint64(validator.Index)].PendingRewardsWei, " wei among the pool")
 				or.advanceStateMachine(uint64(validator.Index), Unsubscribe)
 				or.resetPendingRewards(uint64(validator.Index))
-				rewardsToDistrbitute.Add(rewardsToDistrbitute, or.state.Validators[uint64(validator.Index)].PendingRewardsWei)
+				rewardsToDistribute.Add(rewardsToDistribute, or.state.Validators[uint64(validator.Index)].PendingRewardsWei)
 			}
 		}
 
 		// Distribute the rewards among the pool. Majority of times this will be 0
-		or.increaseAllPendingRewards(rewardsToDistrbitute)
-		log.Info("Validator cleanup done! Distributed a total of ", rewardsToDistrbitute, " wei among the pool")
+		or.increaseAllPendingRewards(rewardsToDistribute)
+		log.Info("Validator cleanup done! Distributed a total of ", rewardsToDistribute, " wei among the pool")
 		// reset
 	}
 
 	return nil
 }
+
 
 // We use the following events to validate that the config has not changed. Dynamic
 // parameters are not supported.
