@@ -234,6 +234,7 @@ func (o *Onchain) GetConsensusBlockAtSlot(slot uint64, opts ...retry.Option) (*s
 	return signedBeaconBlock.Data, err
 }
 
+// Gets active validators by asking the chain. It does not get current Onchain object validators
 func (o *Onchain) GetFinalizedValidators(opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 	var validators *api.Response[map[phase0.ValidatorIndex]*v1.Validator]
 	var err error
@@ -321,6 +322,52 @@ func (o *Onchain) GetSingleValidator(valIndex phase0.ValidatorIndex, slot string
 	}
 	return validator, err
 }
+func (o *Onchain) GetSetOfValidators(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+	// If empty, return an error. We do this to avoid fetching all validators. GetSetOfValidators should be used with a set of indices
+	if len(valIndices) == 0 {
+		return nil, errors.New("Error: validator indices are empty")
+	}
+
+	// Fetch all validators at once
+	var validators *api.Response[map[phase0.ValidatorIndex]*v1.Validator]
+	var err error
+
+	err = retry.Do(func() error {
+		// Fetch all validators at once. Library will automatically batch the requests
+		validators, err = o.ConsensusClient.Validators(context.Background(), &api.ValidatorsOpts{
+			State:   slot,
+			Indices: valIndices,
+		})
+
+		if err != nil {
+			log.Warn("Failed attempt to fetch validators: ", err.Error(), " Retrying...")
+			return errors.New("Error fetching validators: " + err.Error())
+		}
+
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	// If there was an error fetching the validators, return it.
+	if err != nil {
+		return nil, errors.New("Could not fetch validators: " + err.Error())
+	}
+
+	// If the data is empty, return an error. This should never happen.
+	if len(validators.Data) == 0 {
+		return nil, errors.New("Error: no validators found onchain for the given indices")
+	}
+
+
+	// Sanity checks - Ensure all requested validators are found
+	for _, idx := range valIndices {
+		if _, found := validators.Data[idx]; !found {
+			return nil, errors.New(fmt.Sprintf("Error fetching validators: Could not find index in response: %d", idx))
+		}
+	}
+
+	return validators.Data, nil
+}
+
 
 func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*types.Block, error) {
 	var err error
