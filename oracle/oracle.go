@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/pkg/errors"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -27,11 +28,13 @@ import (
 var StateFolder = "oracle-data"
 var StateJsonName = "state.json"
 
+type GetSetOfValidatorsFunc func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error)
+
 type Oracle struct {
-	cfg        *Config
-	state      *OracleState
-	mutex      sync.RWMutex
-	onchain    *Onchain
+	cfg                *Config
+	state              *OracleState
+	mutex              sync.RWMutex
+	getSetOfValidators GetSetOfValidatorsFunc
 }
 
 // Fork 1 changes two things:
@@ -71,20 +74,16 @@ func NewOracle(cfg *Config) *Oracle {
 	}
 
 	oracle := &Oracle{
-		cfg:        cfg,
-		state:      state,
-		onchain: 	nil,
+		cfg:                cfg,
+		state:              state,
+		getSetOfValidators: nil,
 	}
 
 	return oracle
 }
 
-func (or *Oracle) SetOnchain(oc *Onchain) {
-	or.onchain = oc
-}
-
-func (or *Oracle) GetOnchain() *Onchain {
-	return or.onchain
+func (or *Oracle) SetGetSetOfValidatorsFunc(oc GetSetOfValidatorsFunc) {
+	or.getSetOfValidators = oc
 }
 
 // Returns the state of the oracle, containing all the information about the
@@ -217,17 +216,17 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 }
 
 // Unsubscribes validators that are not active. Shares their pending rewards to the pool
-func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
+func (or *Oracle) ValidatorCleanup(slot uint64) error {
 	or.mutex.Lock()
 	defer or.mutex.Unlock()
 
 	// Only cleanup if we're past the cleanup slot fork
-	if uint64(blockHeader.Header.Message.Slot) >= SlotFork1[or.cfg.Network] {
+	if slot >= SlotFork1[or.cfg.Network] {
 
 		// Extract all validator indices from the oracle state
-		indices := make([]phase0.ValidatorIndex, len(or.state.Validators))
+		indices := make([]phase0.ValidatorIndex, 0)
 		for idx := range or.state.Validators {
-			indices[idx] = phase0.ValidatorIndex(idx)
+			indices = append(indices, phase0.ValidatorIndex(idx))
 		}
 
 		// if oracle isn't tracking any validator, it means that nobody ever subscribed, nothing to cleanup
@@ -237,9 +236,9 @@ func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
 		}
 
 		// Get the latest validator information for all subscribed validators at once
-		validatorInfo, err := or.onchain.GetSetOfValidators(indices, strconv.FormatUint(uint64(blockHeader.Header.Message.Slot), 10))
+		validatorInfo, err := or.getSetOfValidators(indices, strconv.FormatUint(slot, 10))
 		if err != nil {
-			return err 
+			return errors.Wrap(err, "could not get validators info")
 		}
 
 		// Iterate over all validators. If two or more validators exit or get slashed in the same slot,
@@ -249,22 +248,29 @@ func (or *Oracle) ValidatorCleanup(blockHeader *v1.BeaconBlockHeader) error {
 			// If a validator is subscribed but not active onchain, we have to unsubscribe it and treat it as a ban:
 			// this means setting the validator rewards to 0 and sharing them among the pool
 			if !validator.Status.IsActive() && or.isSubscribed(uint64(validator.Index)) {
-				log.Info("Validator ", validator.Index, " is not active onchain & is subscribed to the pool. Unsubscribing it and sharing its ", or.state.Validators[uint64(validator.Index)].PendingRewardsWei, " wei among the pool")
+				log.WithFields(log.Fields{
+					"PendingRewardsWei":     or.state.Validators[uint64(validator.Index)].PendingRewardsWei,
+					"BeaconValidatorState":  or.state.Validators[uint64(validator.Index)].ValidatorStatus,
+					"ValidatorIndex":        validator.Index,
+					"OracleValidatorStatus": validator.Status,
+					"Slot":                  slot,
+					"Network":               or.cfg.Network,
+				}).Info("Cleaning up validator")
 				or.advanceStateMachine(uint64(validator.Index), Unsubscribe)
-				or.resetPendingRewards(uint64(validator.Index))
 				rewardsToDistribute.Add(rewardsToDistribute, or.state.Validators[uint64(validator.Index)].PendingRewardsWei)
+				or.resetPendingRewards(uint64(validator.Index))
 			}
 		}
 
 		// Distribute the rewards among the pool. Majority of times this will be 0
-		or.increaseAllPendingRewards(rewardsToDistribute)
-		log.Info("Validator cleanup done! Distributed a total of ", rewardsToDistribute, " wei among the pool")
-		// reset
+		if rewardsToDistribute.Cmp(big.NewInt(0)) != 0 {
+			or.increaseAllPendingRewards(rewardsToDistribute)
+		}
+		log.Info("Validator cleanup done! Redistributed a total of ", rewardsToDistribute, " wei in pending among the pool in slot ", slot)
 	}
 
 	return nil
 }
-
 
 // We use the following events to validate that the config has not changed. Dynamic
 // parameters are not supported.
@@ -824,7 +830,6 @@ func (or *Oracle) isSubscribed(validatorIndex uint64) bool {
 			validator.ValidatorStatus != NotSubscribed &&
 			validator.ValidatorStatus != UnknownState {
 			return true
-			//todo fix this shit.
 		}
 	}
 	return false

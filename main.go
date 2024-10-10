@@ -128,7 +128,7 @@ func main() {
 
 	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)
-	oracleInstance.SetOnchain(onchain)
+	oracleInstance.SetGetSetOfValidatorsFunc(onchain.GetSetOfValidators)
 
 	// If checkpoint sync url is provided, load state from it
 	if cliCfg.CheckPointSyncUrl != "" {
@@ -315,7 +315,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 
 			// Do the validator cleanup: redisitribute the pending rewards of validators subscribed to the pool
 			// that are not in the beacon chain anymore (e.g. slashed)
-			err := oracleInstance.ValidatorCleanup(finalizedBlockHeader)
+			err := oracleInstance.ValidatorCleanup(oracleInstance.State().LatestProcessedSlot)
 			// As precaution, we stop the oracle if anything happened during the cleanup
 			if err != nil {
 				log.Fatal("Could not cleanup validators: ", err)

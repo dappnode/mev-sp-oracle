@@ -10,6 +10,7 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/avast/retry-go/v4"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -2411,6 +2412,491 @@ func Test_increaseAllPendingRewards_5(t *testing.T) {
 
 		require.Equal(t, test.PoolReward, oracle.state.PoolAccumulatedFees)
 	}
+}
+
+func Test_ValidatorCleanup_1(t *testing.T) {
+
+	// TODO: This can be improved with some refactor to reduce the boilerplate
+
+	mainnetFork1 := SlotFork1["mainnet"]
+
+	// Test1:
+	log.Info("Test1: No validators")
+	oracle := NewOracle(&Config{
+		Network: "mainnet",
+	})
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return nil, nil
+	})
+
+	err := oracle.ValidatorCleanup(uint64(mainnetFork1 - 1))
+	require.NoError(t, err)
+
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+
+	// Test2:
+	log.Info("Test2: Active and subcribed validator is not modified")
+	oracle = NewOracle(&Config{
+		Network: "mainnet",
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(765432345),
+		AccumulatedRewardsWei: big.NewInt(543245),
+		ValidatorStatus:       Active,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(765432345), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(543245), oracle.state.Validators[20].AccumulatedRewardsWei)
+
+	// Test3:
+	log.Info("Test3: Exiting but not exited is not modified")
+	oracle = NewOracle(&Config{
+		Network: "mainnet",
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(765432345),
+		AccumulatedRewardsWei: big.NewInt(543245),
+		ValidatorStatus:       Active,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateActiveExiting,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(765432345), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(543245), oracle.state.Validators[20].AccumulatedRewardsWei)
+
+	// Test4:
+	log.Info("Test4: Exited validator rewards are reset and go to the rest")
+	oracle = NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 10 * 100,
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(765432345),
+		AccumulatedRewardsWei: big.NewInt(543245),
+		ValidatorStatus:       Active,
+	}
+	oracle.state.Validators[21] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       Active,
+	}
+	oracle.state.Validators[22] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       Active,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateExitedUnslashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(543245), oracle.state.Validators[20].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[20].ValidatorStatus)
+	require.Equal(t, big.NewInt(344442055), oracle.state.Validators[21].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[21].AccumulatedRewardsWei)
+	require.Equal(t, Active, oracle.state.Validators[21].ValidatorStatus)
+	require.Equal(t, big.NewInt(344442055), oracle.state.Validators[22].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[22].AccumulatedRewardsWei)
+	require.Equal(t, Active, oracle.state.Validators[22].ValidatorStatus)
+	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
+	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
+
+	// Test5:
+	log.Info("Test5: Exited validator rewards are reset and go to the rest (including yellow)")
+	oracle = NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 10 * 100,
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(765432345),
+		AccumulatedRewardsWei: big.NewInt(543245),
+		ValidatorStatus:       Active,
+	}
+	oracle.state.Validators[21] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       YellowCard,
+	}
+	oracle.state.Validators[22] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       Active,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateExitedUnslashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(543245), oracle.state.Validators[20].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[20].ValidatorStatus)
+	require.Equal(t, big.NewInt(344442055), oracle.state.Validators[21].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[21].AccumulatedRewardsWei)
+	require.Equal(t, YellowCard, oracle.state.Validators[21].ValidatorStatus)
+	require.Equal(t, big.NewInt(344442055), oracle.state.Validators[22].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[22].AccumulatedRewardsWei)
+	require.Equal(t, Active, oracle.state.Validators[22].ValidatorStatus)
+	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
+	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
+
+	// Test6:
+	log.Info("Test6: Slashed validator in the beacon chain. Pending goes to the rest")
+	oracle = NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 10 * 100,
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(765432345),
+		AccumulatedRewardsWei: big.NewInt(543245),
+		ValidatorStatus:       Active,
+	}
+	oracle.state.Validators[21] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       YellowCard,
+	}
+	oracle.state.Validators[22] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       Active,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateExitedSlashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(543245), oracle.state.Validators[20].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[20].ValidatorStatus)
+	require.Equal(t, big.NewInt(344442055), oracle.state.Validators[21].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[21].AccumulatedRewardsWei)
+	require.Equal(t, YellowCard, oracle.state.Validators[21].ValidatorStatus)
+	require.Equal(t, big.NewInt(344442055), oracle.state.Validators[22].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[22].AccumulatedRewardsWei)
+	require.Equal(t, Active, oracle.state.Validators[22].ValidatorStatus)
+	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
+	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
+
+	// Test7:
+	log.Info("Test7: Exited validator rewards are reset and go to the rest (not red)")
+	oracle = NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 10 * 100,
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(765432345),
+		AccumulatedRewardsWei: big.NewInt(543245),
+		ValidatorStatus:       Active,
+	}
+	oracle.state.Validators[21] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       RedCard,
+	}
+	oracle.state.Validators[22] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       Active,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateExitedUnslashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(543245), oracle.state.Validators[20].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[20].ValidatorStatus)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[21].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[21].AccumulatedRewardsWei)
+	require.Equal(t, RedCard, oracle.state.Validators[21].ValidatorStatus)
+	require.Equal(t, big.NewInt(688884111), oracle.state.Validators[22].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[22].AccumulatedRewardsWei)
+	require.Equal(t, Active, oracle.state.Validators[22].ValidatorStatus)
+	require.Equal(t, big.NewInt(76548234), oracle.state.PoolAccumulatedFees)
+
+	// Test8:
+	log.Info("Test8: Multiple events (exit + slash) are handled correctly")
+	oracle = NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 10 * 100,
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(1000),
+		AccumulatedRewardsWei: big.NewInt(543245),
+		ValidatorStatus:       Active,
+	}
+	oracle.state.Validators[21] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(1000),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       Active,
+	}
+	oracle.state.Validators[22] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       Active,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateExitedUnslashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+			21: {
+				Index:  21,
+				Status: v1.ValidatorStateExitedSlashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(543245), oracle.state.Validators[20].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[20].ValidatorStatus)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[21].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[21].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[21].ValidatorStatus)
+	require.Equal(t, big.NewInt(1800), oracle.state.Validators[22].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[22].AccumulatedRewardsWei)
+	require.Equal(t, Active, oracle.state.Validators[22].ValidatorStatus)
+	require.Equal(t, big.NewInt(200), oracle.state.PoolAccumulatedFees)
+
+	// Test9:
+	log.Info("Test9: All existing validators exit")
+	oracle = NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 10 * 100,
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(1000),
+		AccumulatedRewardsWei: big.NewInt(543245),
+		ValidatorStatus:       Active,
+	}
+	oracle.state.Validators[21] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(1000),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       Active,
+	}
+	oracle.state.Validators[22] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(3000),
+		AccumulatedRewardsWei: big.NewInt(99),
+		ValidatorStatus:       Active,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateExitedUnslashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+			21: {
+				Index:  21,
+				Status: v1.ValidatorStateExitedSlashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+			22: {
+				Index:  22,
+				Status: v1.ValidatorStateExitedUnslashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(543245), oracle.state.Validators[20].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[20].ValidatorStatus)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[21].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[21].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[21].ValidatorStatus)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[22].PendingRewardsWei)
+	require.Equal(t, big.NewInt(99), oracle.state.Validators[22].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[22].ValidatorStatus)
+	require.Equal(t, big.NewInt(5000), oracle.state.PoolAccumulatedFees)
+
+	// Test10:
+	log.Info("Test10: Test a banned validator that exists")
+	oracle = NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 10 * 100,
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(0),
+		AccumulatedRewardsWei: big.NewInt(543245),
+		ValidatorStatus:       Banned,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateExitedUnslashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(543245), oracle.state.Validators[20].AccumulatedRewardsWei)
+	require.Equal(t, Banned, oracle.state.Validators[20].ValidatorStatus)
+	require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
+
+	// Test11:
+	log.Info("Test11: Yellow and Red go to NoSubscribed after being slashed/exited")
+	oracle = NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 10 * 100,
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(10),
+		AccumulatedRewardsWei: big.NewInt(20),
+		ValidatorStatus:       YellowCard,
+	}
+	oracle.state.Validators[21] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(30),
+		AccumulatedRewardsWei: big.NewInt(40),
+		ValidatorStatus:       RedCard,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateExitedUnslashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+			21: {
+				Index:  21,
+				Status: v1.ValidatorStateExitedSlashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 + 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(20), oracle.state.Validators[20].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[20].ValidatorStatus)
+	require.Equal(t, big.NewInt(0), oracle.state.Validators[21].PendingRewardsWei)
+	require.Equal(t, big.NewInt(40), oracle.state.Validators[21].AccumulatedRewardsWei)
+	require.Equal(t, NotSubscribed, oracle.state.Validators[21].ValidatorStatus)
+	require.Equal(t, big.NewInt(40), oracle.state.PoolAccumulatedFees)
+
+	// Test12:
+	log.Info("Test12: Nothing happens before the fork")
+	oracle = NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 10 * 100,
+	})
+	oracle.state.Validators[20] = &ValidatorInfo{
+		PendingRewardsWei:     big.NewInt(10),
+		AccumulatedRewardsWei: big.NewInt(20),
+		ValidatorStatus:       YellowCard,
+	}
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			20: {
+				Index:  20,
+				Status: v1.ValidatorStateExitedUnslashed,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: []byte{1},
+					PublicKey:             phase0.BLSPubKey{1},
+				},
+			},
+		}, nil
+	})
+	err = oracle.ValidatorCleanup(uint64(mainnetFork1 - 1))
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(10), oracle.state.Validators[20].PendingRewardsWei)
+	require.Equal(t, big.NewInt(20), oracle.state.Validators[20].AccumulatedRewardsWei)
+	require.Equal(t, YellowCard, oracle.state.Validators[20].ValidatorStatus)
+	require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
 }
 
 func Test_increaseValidatorPendingRewards(t *testing.T) {
