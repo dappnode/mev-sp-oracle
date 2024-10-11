@@ -2534,7 +2534,6 @@ func Test_ValidatorCleanup_1(t *testing.T) {
 	require.Equal(t, big.NewInt(99), oracle.state.Validators[22].AccumulatedRewardsWei)
 	require.Equal(t, Active, oracle.state.Validators[22].ValidatorStatus)
 	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
-	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
 
 	// Test5:
 	log.Info("Test5: Exited validator rewards are reset and go to the rest (including yellow)")
@@ -2581,7 +2580,6 @@ func Test_ValidatorCleanup_1(t *testing.T) {
 	require.Equal(t, big.NewInt(99), oracle.state.Validators[22].AccumulatedRewardsWei)
 	require.Equal(t, Active, oracle.state.Validators[22].ValidatorStatus)
 	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
-	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
 
 	// Test6:
 	log.Info("Test6: Slashed validator in the beacon chain. Pending goes to the rest")
@@ -2627,7 +2625,6 @@ func Test_ValidatorCleanup_1(t *testing.T) {
 	require.Equal(t, big.NewInt(344442055), oracle.state.Validators[22].PendingRewardsWei)
 	require.Equal(t, big.NewInt(99), oracle.state.Validators[22].AccumulatedRewardsWei)
 	require.Equal(t, Active, oracle.state.Validators[22].ValidatorStatus)
-	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
 	require.Equal(t, big.NewInt(76548235), oracle.state.PoolAccumulatedFees)
 
 	// Test7:
