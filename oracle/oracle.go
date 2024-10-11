@@ -206,6 +206,16 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	// Handle the donations from this block
 	or.handleDonations(blockDonations)
 
+	// Handle validator cleanup: redisitribute the pending rewards of validators subscribed to the pool
+	// that are not in the beacon chain anymore (exited/slashed). We dont run this on every slot because
+	// its expensive. Runs every 4 hours.
+	if or.state.NextSlotToProcess%uint64(1200) == 0 {
+		err = or.ValidatorCleanup(or.state.NextSlotToProcess)
+		if err != nil {
+			return 0, errors.Wrap(err, "could not cleanup validators")
+		}
+	}
+
 	processedSlot := or.state.NextSlotToProcess
 	or.state.LatestProcessedSlot = processedSlot
 	or.state.NextSlotToProcess++
@@ -217,8 +227,6 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 
 // Unsubscribes validators that are not active. Shares their pending rewards to the pool
 func (or *Oracle) ValidatorCleanup(slot uint64) error {
-	or.mutex.Lock()
-	defer or.mutex.Unlock()
 
 	// Only cleanup if we're past the cleanup slot fork
 	if slot >= SlotFork1[or.cfg.Network] {
