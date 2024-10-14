@@ -131,6 +131,7 @@ type httpOkBlock struct {
 
 type httpOkValidatorInfo struct {
 	ValidatorStatus       string `json:"status"`
+	BeaconValidatorStatus string `json:"beacon_status"`
 	AccumulatedRewardsWei string `json:"accumulated_rewards_wei"`
 	PendingRewardsWei     string `json:"pending_rewards_wei"`
 	CollateralWei         string `json:"collateral_wei"`
