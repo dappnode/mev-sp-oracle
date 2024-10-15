@@ -509,8 +509,14 @@ func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Req
 
 	validatorsResp := make([]httpOkValidatorInfo, 0)
 	for _, v := range validators {
+		beaconState, found := m.Onchain.Validators()[phase0.ValidatorIndex(v.ValidatorIndex)]
+		if !found {
+			log.Warn("could not find validator in beacon state: ", v.ValidatorIndex)
+			continue
+		}
 		validatorsResp = append(validatorsResp, httpOkValidatorInfo{
 			ValidatorStatus:       v.ValidatorStatus.String(),
+			BeaconValidatorStatus: beaconState.Status.String(),
 			AccumulatedRewardsWei: v.AccumulatedRewardsWei.String(),
 			PendingRewardsWei:     v.PendingRewardsWei.String(),
 			CollateralWei:         v.CollateralWei.String(),
@@ -589,8 +595,14 @@ func (m *ApiService) handleMemoryValidatorsByIndex(w http.ResponseWriter, req *h
 	for _, index := range indices {
 		if validator, found := m.oracle.State().Validators[index]; found {
 			// Convert ValidatorInfo to httpOkValidatorInfo. This is done to return strings instead of bigInts
+			beaconState, found := m.Onchain.Validators()[phase0.ValidatorIndex(validator.ValidatorIndex)]
+			if !found {
+				log.Warn("could not find validator in beacon state: ", validator.ValidatorIndex)
+				continue
+			}
 			foundValidator := httpOkValidatorInfo{
 				ValidatorStatus:       validator.ValidatorStatus.String(),
+				BeaconValidatorStatus: beaconState.Status.String(),
 				AccumulatedRewardsWei: validator.AccumulatedRewardsWei.String(),
 				PendingRewardsWei:     validator.PendingRewardsWei.String(),
 				CollateralWei:         validator.CollateralWei.String(),
@@ -658,9 +670,9 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 		}
 
 		// Skip validators that cannot be subscribed
-		if !oracle.CanValidatorSubscribeToPool(validator) {
-			continue
-		}
+		//if !oracle.CanValidatorSubscribeToPool(validator) {
+		//	continue
+		//}
 
 		requestedValidators[uint64(valIndex)] = &oracle.ValidatorInfo{
 			ValidatorStatus:       oracle.Untracked,
@@ -736,8 +748,14 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 
 	validatorsResp := make([]httpOkValidatorInfo, 0)
 	for _, v := range values {
+		beaconState, found := m.Onchain.Validators()[phase0.ValidatorIndex(v.ValidatorIndex)]
+		if !found {
+			log.Warn("could not find validator in beacon state: ", v.ValidatorIndex)
+			continue
+		}
 		validatorsResp = append(validatorsResp, httpOkValidatorInfo{
 			ValidatorStatus:       v.ValidatorStatus.String(),
+			BeaconValidatorStatus: beaconState.Status.String(),
 			AccumulatedRewardsWei: v.AccumulatedRewardsWei.String(),
 			PendingRewardsWei:     v.PendingRewardsWei.String(),
 			CollateralWei:         v.CollateralWei.String(),
