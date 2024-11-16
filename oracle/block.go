@@ -26,6 +26,10 @@ var WhitelistedBuilders = map[uint64][]string{
 	HoleskyChainId: {},
 }
 
+// See MevRewardInWei for more info
+// https://beaconcha.in/slot/10400574
+var ExceptionSlotMainnet1 = uint64(10400574)
+
 // Create a new block with the bare minimum information
 func NewFullBlock(
 	consensusDuty *api.ProposerDuty,
@@ -311,6 +315,28 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 		log.Fatal("Chain not found in whitelisted builders: ", b.ChainId)
 	}
 
+	// Special case. To be fixed.
+	// This block has a mev but the last contains a self destruct which
+	// makes the EtherReceived event to not be triggered.
+	// It could be solved with debug_traceTransaction but this call is expensive
+	// and requires an archival execution node running with debug.
+	// Since this is rare, we just hardcode the mev reward for this block by now.
+	// https://beaconcha.in/slot/10400574
+	if b.ChainId == MainnetChainId && b.GetSlotUint64() == ExceptionSlotMainnet1 {
+		hardcodedMevReward := big.NewInt(177043568463114308)
+		hardcodedMevRecipient := "0xAdFb8D27671F14f297eE94135e266aAFf8752e35"
+		log.WithFields(log.Fields{
+			"Network":            MainnetChainId,
+			"Slot":               ExceptionSlotMainnet1,
+			"HardcodedMevReward": hardcodedMevReward,
+			"MevRecipient":       hardcodedMevRecipient,
+		}).Info("Special case: MEV reward hardcoded")
+
+		return hardcodedMevReward,
+			true,
+			hardcodedMevRecipient
+	}
+
 	// Mev rewards are sent in the last tx. This tx sender
 	// matches the fee recipient of the protocol.
 	// We also consider a MEV reward if the tx comes from a whitelisted builder. This
@@ -528,6 +554,13 @@ func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherRe
 			continue
 		}
 		filteredEvents = append(filteredEvents, etherRxEvent)
+	}
+
+	// Special case. To be fixed. See MevRewardInWei for more info.
+	// In this case the EtherReceived event was not triggered due to a self destruct
+	// So we hardcode it. Temporal fix.
+	if b.ChainId == MainnetChainId && b.GetSlotUint64() == ExceptionSlotMainnet1 {
+		foundMev = true
 	}
 
 	// Sanity check

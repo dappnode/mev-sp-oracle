@@ -138,6 +138,30 @@ func Test_BlocksWithInternalTx(t *testing.T) {
 	require.Equal(t, 0, len(donations))
 }
 
+func Test_BlocksWithInternalTx2(t *testing.T) {
+	t.Skip("Skipping test")
+
+	pool := "0xAdFb8D27671F14f297eE94135e266aAFf8752e35"
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:3500",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       pool,
+	}
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+	oracle := NewOracle(&Config{})
+
+	// Self destruct that does not trigger EtherReceived event
+	// https://etherscan.io/tx/0x60571ab93a187c7e8f8ae7952430a7de64b47843e716cbd53a0fa741316569c6
+	fullBlock := onchain.FetchFullBlock(ExceptionSlotMainnet1, oracle)
+	donations := fullBlock.GetDonations(pool)
+	mevReward, isMev, recipient := fullBlock.MevRewardInWei()
+	require.Equal(t, big.NewInt(0).SetUint64(177043568463114308), mevReward)
+	require.Equal(t, true, isMev)
+	require.Equal(t, "0xAdFb8D27671F14f297eE94135e266aAFf8752e35", recipient)
+	require.Equal(t, 0, len(donations))
+}
+
 func Test_GetValidator(t *testing.T) {
 	if skip {
 		t.Skip("Skipping test")
