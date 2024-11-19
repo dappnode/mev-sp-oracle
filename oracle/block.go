@@ -12,6 +12,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/dappnode/mev-sp-oracle/utils"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -279,6 +280,28 @@ func (b *FullBlock) SetEvents(events *Events) {
 	}
 
 	b.Events = events
+
+	// Special case. Temporal fix. We artificially add the mev reward for this block.
+	// See: https://github.com/dappnode/mev-sp-oracle/pull/230
+	// See: https://beaconcha.in/slot/10400574
+	if b.ChainId == MainnetChainId && b.GetSlotUint64() == ExceptionSlotMainnet1 {
+		log.Warn("Special case: MEV reward hardcoded. See MevRewardInWei for more info")
+		b.Events.EtherReceived = append(b.Events.EtherReceived, &contract.ContractEtherReceived{
+			Sender:         common.Address{},
+			DonationAmount: big.NewInt(177043568463114308),
+			Raw: types.Log{
+				Address:     common.Address{},
+				Topics:      []common.Hash{},
+				Data:        []byte{},
+				BlockNumber: 0,
+				TxHash:      common.Hash{},
+				TxIndex:     0,
+				BlockHash:   common.Hash{},
+				Index:       0,
+				Removed:     false,
+			},
+		})
+	}
 }
 
 // Returns if there was an mev reward and its amount and fee recipient if any
@@ -554,13 +577,6 @@ func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherRe
 			continue
 		}
 		filteredEvents = append(filteredEvents, etherRxEvent)
-	}
-
-	// Special case. To be fixed. See MevRewardInWei for more info.
-	// In this case the EtherReceived event was not triggered due to a self destruct
-	// So we hardcode it. Temporal fix.
-	if b.ChainId == MainnetChainId && b.GetSlotUint64() == ExceptionSlotMainnet1 {
-		foundMev = true
 	}
 
 	// Sanity check
