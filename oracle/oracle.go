@@ -1247,6 +1247,11 @@ func (or *Oracle) handleManualBans(
 	}
 	// THIRD: share the pending rewards of the banned validators among the rest
 	or.increaseAllPendingRewards(totalPending)
+
+	// FOURTH: reset the pending rewards of the banned validators
+	for _, ban := range banEvents {
+		or.resetPendingRewards(ban.ValidatorID)
+	}
 }
 
 func (or *Oracle) handleManualUnbans(
