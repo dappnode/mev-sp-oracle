@@ -1241,6 +1241,11 @@ func (or *Oracle) handleManualBans(
 	//  - Sum all the pending rewards of the banned validators and share them among the rest.
 
 	for _, ban := range banEvents {
+		log.WithFields(log.Fields{
+			"BlockNumber":    ban.Raw.BlockNumber,
+			"TxHash":         ban.Raw.TxHash,
+			"ValidatorIndex": ban.ValidatorID,
+		}).Info("[Ban] Ban event received")
 		or.advanceStateMachine(ban.ValidatorID, ManualBan)
 		totalPending.Add(totalPending, or.state.Validators[ban.ValidatorID].PendingRewardsWei)
 
@@ -1271,6 +1276,11 @@ func (or *Oracle) handleManualUnbans(
 	// SECOND: iterate over the unban events.
 	//  - Advance state machine of all unbanned validators (move them to Active state).
 	for _, unban := range unbanEvents {
+		log.WithFields(log.Fields{
+			"BlockNumber":    unban.Raw.BlockNumber,
+			"TxHash":         unban.Raw.TxHash,
+			"ValidatorIndex": unban.ValidatorID,
+		}).Info("[Unban] Unban event received")
 		or.advanceStateMachine(unban.ValidatorID, ManualUnban)
 	}
 }
