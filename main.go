@@ -130,6 +130,7 @@ func main() {
 	oracleInstance := oracle.NewOracle(cfg)
 	oracleInstance.SetGetSetOfValidatorsFunc(onchain.GetSetOfValidators)
 	oracleInstance.SetOwnerToPodFunc(onchain.GetOwnerToPod)
+	oracleInstance.SetValidatorRestakedEventsFunc(onchain.GetValidatorRestakedEvents)
 
 	// If checkpoint sync url is provided, load state from it
 	if cliCfg.CheckPointSyncUrl != "" {
