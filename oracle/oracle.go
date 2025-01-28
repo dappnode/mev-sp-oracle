@@ -20,6 +20,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/dappnode/mev-sp-oracle/utils"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	log "github.com/sirupsen/logrus"
 )
@@ -29,12 +30,14 @@ var StateFolder = "oracle-data"
 var StateJsonName = "state.json"
 
 type GetSetOfValidatorsFunc func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error)
+type GetOwnerToPodFunc func(address common.Address, opts ...retry.Option) (common.Address, error)
 
 type Oracle struct {
 	cfg                *Config
 	state              *OracleState
 	mutex              sync.RWMutex
 	getSetOfValidators GetSetOfValidatorsFunc
+	getOwnerToPod      GetOwnerToPodFunc
 }
 
 // Fork 1 changes two things:
@@ -77,6 +80,7 @@ func NewOracle(cfg *Config) *Oracle {
 		cfg:                cfg,
 		state:              state,
 		getSetOfValidators: nil,
+		getOwnerToPod:      nil,
 	}
 
 	return oracle
@@ -84,6 +88,10 @@ func NewOracle(cfg *Config) *Oracle {
 
 func (or *Oracle) SetGetSetOfValidatorsFunc(oc GetSetOfValidatorsFunc) {
 	or.getSetOfValidators = oc
+}
+
+func (or *Oracle) SetOwnerToPodFunc(oc GetOwnerToPodFunc) {
+	or.getOwnerToPod = oc
 }
 
 // Returns the state of the oracle, containing all the information about the
@@ -1015,7 +1023,30 @@ func (or *Oracle) handleManualSubscriptions(
 		}
 
 		// Subscription received from an address that is not the validator withdrawal address
+		// AND sender is not the owner of a pod which staked validators include this transaction validator index
 		if !utils.Equals(sender, validatorWithdrawal) {
+
+			// Check if the sender is the owner of a pod which staked validators include this transaction validator index
+			// If it is, we allow the subscription
+			podAddress, err := or.getOwnerToPod(sub.Sender)
+			if err != nil {
+				log.Fatal("Error getting pod address from owner: ", err)
+			}
+			if podAddress == (common.Address{}) {
+				log.WithFields(log.Fields{
+					"BlockNumber":         sub.Raw.BlockNumber,
+					"Collateral":          sub.SubscriptionCollateral,
+					"TxHash":              sub.Raw.TxHash,
+					"ValidatorIndex":      valIdx,
+					"Sender":              sender,
+					"ValidatorWithdrawal": validatorWithdrawal,
+				}).Warn("[Subscription] Sender is not validator withdrawal and has no EigenPod")
+				or.sendRewardToPool(collateral)
+				continue
+			}
+
+			//TODO: filter events of eigenPod contract at address "podAddress" by ValidatorRestaked event
+
 			log.WithFields(log.Fields{
 				"BlockNumber":         sub.Raw.BlockNumber,
 				"Collateral":          sub.SubscriptionCollateral,

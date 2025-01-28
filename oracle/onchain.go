@@ -23,6 +23,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/config"
 	"github.com/dappnode/mev-sp-oracle/constants"
 	"github.com/dappnode/mev-sp-oracle/contract"
+	"github.com/dappnode/mev-sp-oracle/eigenLayer/manager"
 	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -53,15 +54,16 @@ type EpochDuties struct {
 var ProposalDutyCache EpochDuties
 
 type Onchain struct {
-	ConsensusClient *http.Service
-	ExecutionClient *ethclient.Client
-	Contract        *contract.Contract
-	NumRetries      int
-	updaterKey      *ecdsa.PrivateKey
-	UpdaterAddress  common.Address
-	PoolAddress     string
-	ChainId         uint64
-	validators      map[phase0.ValidatorIndex]*v1.Validator
+	ConsensusClient      *http.Service
+	ExecutionClient      *ethclient.Client
+	Contract             *contract.Contract
+	EigenManagerContract *manager.ManagerCaller
+	NumRetries           int
+	updaterKey           *ecdsa.PrivateKey
+	UpdaterAddress       common.Address
+	PoolAddress          string
+	ChainId              uint64
+	validators           map[phase0.ValidatorIndex]*v1.Validator
 }
 
 func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchain, error) {
@@ -138,21 +140,49 @@ func NewOnchain(cliCfg *config.CliConfig, updaterKey *ecdsa.PrivateKey) (*Onchai
 		return nil, errors.Wrap(err, "Error instantiating contract")
 	}
 
+	// Instantiate the EigenManager contract to run get/set operations on it
+	eigenManagerAddress := common.HexToAddress(cliCfg.EigenManagerAddress)
+	eigenManagerContract, err := manager.NewManagerCaller(eigenManagerAddress, executionClient)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error instantiating EigenManager contract")
+	}
+
 	var updaterAddress common.Address
 	if updaterKey != nil {
 		updaterAddress = crypto.PubkeyToAddress(updaterKey.PublicKey)
 	}
 
 	return &Onchain{
-		ConsensusClient: consensusClient,
-		ExecutionClient: executionClient,
-		PoolAddress:     cliCfg.PoolAddress,
-		Contract:        contract,
-		NumRetries:      cliCfg.NumRetries,
-		ChainId:         uint64(chainId.Int64()),
-		updaterKey:      updaterKey,
-		UpdaterAddress:  updaterAddress,
+		ConsensusClient:      consensusClient,
+		ExecutionClient:      executionClient,
+		PoolAddress:          cliCfg.PoolAddress,
+		Contract:             contract,
+		EigenManagerContract: eigenManagerContract,
+		NumRetries:           cliCfg.NumRetries,
+		ChainId:              uint64(chainId.Int64()),
+		updaterKey:           updaterKey,
+		UpdaterAddress:       updaterAddress,
 	}, nil
+}
+
+// Gets the Pod from a given owner address. If no pods are found, returns an empty address
+func (o *Onchain) GetOwnerToPod(address common.Address, opts ...retry.Option) (common.Address, error) {
+	var podAddress common.Address
+	err := retry.Do(
+		func() error {
+			callOpts := &bind.CallOpts{Context: context.Background(), Pending: false}
+			var err error
+			podAddress, err = o.EigenManagerContract.OwnerToPod(callOpts, address)
+			if err != nil {
+				log.Warn("Failed attempt to get pod from contract: ", err.Error(), " Retrying...")
+				return errors.New("could not get pod from contract: " + err.Error())
+			}
+			return nil
+		}, o.GetRetryOpts(opts)...)
+	if err != nil {
+		return common.Address{}, errors.New("could not get pod from contract: " + err.Error())
+	}
+	return podAddress, nil
 }
 
 func (o *Onchain) AreNodesInSync(opts ...retry.Option) (bool, error) {
