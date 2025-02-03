@@ -1285,12 +1285,11 @@ func Test_ManualBanUnbanValidators(t *testing.T) {
 	require.Equal(t, Active, oracle.state.Validators[33].ValidatorStatus)
 }
 
-
 func TestBanUnbanWithRewards(t *testing.T) {
 
 	oracle := NewOracle(&Config{
-		CollateralInWei: big.NewInt(0),
-		Network:         "mainnet",
+		CollateralInWei:          big.NewInt(0),
+		Network:                  "mainnet",
 		PoolFeesPercentOver10000: 0, // No fees for the sake of test simplicity
 	})
 
@@ -1300,7 +1299,7 @@ func TestBanUnbanWithRewards(t *testing.T) {
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
 				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey: phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+				PublicKey:             phase0.BLSPubKey{129, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 			},
 		},
 		&v1.Validator{
@@ -1308,7 +1307,7 @@ func TestBanUnbanWithRewards(t *testing.T) {
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
 				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 149, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey: phase0.BLSPubKey{128, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+				PublicKey:             phase0.BLSPubKey{128, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 			},
 		},
 		&v1.Validator{
@@ -1316,7 +1315,7 @@ func TestBanUnbanWithRewards(t *testing.T) {
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
 				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 150, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey: phase0.BLSPubKey{127, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+				PublicKey:             phase0.BLSPubKey{127, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 			},
 		},
 
@@ -1325,7 +1324,7 @@ func TestBanUnbanWithRewards(t *testing.T) {
 			Status: v1.ValidatorStateActiveOngoing,
 			Validator: &phase0.Validator{
 				WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 151, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
-				PublicKey: phase0.BLSPubKey{127, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
+				PublicKey:             phase0.BLSPubKey{127, 170, 231, 9, 230, 174, 231, 237, 73, 205, 21, 185, 65, 216, 91, 150, 122, 252, 200, 184, 68, 238, 32, 188, 126, 19, 150, 46, 132, 132, 87, 44, 27, 67, 212, 190, 117, 101, 33, 25, 236, 53, 60, 26, 50, 68, 62, 13},
 			},
 		},
 	}
@@ -1385,12 +1384,22 @@ func TestBanUnbanWithRewards(t *testing.T) {
 			ValidatorID: 34,
 			Raw:         types.Log{TxHash: [32]byte{0x1}, BlockNumber: 1},
 		},
+		// validator 37 is not subscribed and hasnt ever been tracked
+		&contract.ContractBanValidator{
+			ValidatorID: 37,
+			Raw:         types.Log{TxHash: [32]byte{0x1}, BlockNumber: 1},
+		},
+		// banning again validator 34. Should not change anything
+		&contract.ContractBanValidator{
+			ValidatorID: 34,
+			Raw:         types.Log{TxHash: [32]byte{0x1}, BlockNumber: 1},
+		},
 	}
 
 	oracle.handleManualBans(bans)
 	require.Equal(t, Banned, oracle.state.Validators[33].ValidatorStatus)
 
-	// Test rewards after the validator ban. 
+	// Test rewards after the validator ban.
 	require.Equal(t, big.NewInt(110000), oracle.state.Validators[33].AccumulatedRewardsWei)
 	require.Equal(t, big.NewInt(0), oracle.state.Validators[33].PendingRewardsWei)
 
@@ -1408,6 +1417,14 @@ func TestBanUnbanWithRewards(t *testing.T) {
 			ValidatorID: 33,
 			Raw:         types.Log{TxHash: [32]byte{0x1}, BlockNumber: 1},
 		},
+		&contract.ContractUnbanValidator{
+			ValidatorID: 37,
+			Raw:         types.Log{TxHash: [32]byte{0x1}, BlockNumber: 1},
+		},
+		&contract.ContractUnbanValidator{
+			ValidatorID: 33,
+			Raw:         types.Log{TxHash: [32]byte{0x1}, BlockNumber: 1},
+		},
 	}
 
 	oracle.handleManualUnbans(unbans)
@@ -1416,8 +1433,6 @@ func TestBanUnbanWithRewards(t *testing.T) {
 	require.Equal(t, big.NewInt(110000), oracle.state.Validators[33].AccumulatedRewardsWei)
 
 }
-
-
 
 func Test_handleManualSubscriptions_AlreadySubscribed_WithBalance(t *testing.T) {
 	// Test a subscription to an already subscribed validator, that already

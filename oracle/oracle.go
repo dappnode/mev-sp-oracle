@@ -1245,6 +1245,13 @@ func (or *Oracle) handleManualBans(
 			"TxHash":         ban.Raw.TxHash,
 			"ValidatorIndex": ban.ValidatorID,
 		}).Info("[Ban] Ban event received")
+
+		//Check if the validator is subscribed. If not, we log it and dont do anything
+		if !or.isSubscribed(ban.ValidatorID) {
+			log.Warn("Validator is not subscribed, skipping ban event")
+			continue
+		}
+
 		or.advanceStateMachine(ban.ValidatorID, ManualBan)
 		totalPending.Add(totalPending, or.state.Validators[ban.ValidatorID].PendingRewardsWei)
 		or.resetPendingRewards(ban.ValidatorID)
@@ -1277,6 +1284,13 @@ func (or *Oracle) handleManualUnbans(
 			"TxHash":         unban.Raw.TxHash,
 			"ValidatorIndex": unban.ValidatorID,
 		}).Info("[Unban] Unban event received")
+
+		// Check if the validator is banned. If not, we log it and dont do anything
+		if !or.isBanned(unban.ValidatorID) {
+			log.Warn("Validator is not banned, skipping unban event")
+			continue
+		}
+
 		or.advanceStateMachine(unban.ValidatorID, ManualUnban)
 	}
 }
@@ -1560,6 +1574,18 @@ func GetWithdrawalAndType(validator *v1.Validator) (string, WithdrawalType) {
 // See the spec for state diagram with states and transitions. This tracks all the different
 // states and state transitions that a given validator can have from the oracle point of view
 func (or *Oracle) advanceStateMachine(valIndex uint64, event Event) {
+
+	// Safety check, if the validator does not exist, we log it and return
+	validator, exists := or.state.Validators[valIndex]
+	if !exists || validator == nil {
+		// Handle the case where the validator does not exist or is nil
+		log.WithFields(log.Fields{
+			"ValidatorIndex": valIndex,
+			"Error":          "Validator not found or is nil",
+		}).Warn("Called advanceStateMachine with a validator that does not exist or is nil")
+		return
+	}
+
 	switch or.state.Validators[valIndex].ValidatorStatus {
 	case Active:
 		switch event {
@@ -1710,7 +1736,7 @@ func (or *Oracle) advanceStateMachine(valIndex uint64, event Event) {
 			}).Info("Validator state change")
 			or.state.Validators[valIndex].ValidatorStatus = Active
 		}
-	// TODO: A validator could return to the state it was after being banned, but we
+	// A validator could return to the state it was after being banned, but we
 	// return it always to the Active state for the sake of simplicity.
 	case Banned:
 		switch event {
