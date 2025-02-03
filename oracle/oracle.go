@@ -1223,7 +1223,6 @@ func (or *Oracle) handleManualBans(
 	banEvents []*contract.ContractBanValidator) {
 
 	// FIRST: healthy checks, ensure the bans events are okay.
-
 	// Ensure the bans events are from the same block
 	if len(banEvents) > 0 {
 		blockReference := banEvents[0].Raw.BlockNumber
@@ -1239,7 +1238,7 @@ func (or *Oracle) handleManualBans(
 	// SECOND: iterate over the ban events.
 	//  - Advance state machine of all banned validators (move them to Banned state).
 	//  - Sum all the pending rewards of the banned validators and share them among the rest.
-
+	// 	- Reset the pending rewards of the banned validators (sets pending to 0).
 	for _, ban := range banEvents {
 		log.WithFields(log.Fields{
 			"BlockNumber":    ban.Raw.BlockNumber,
@@ -1248,15 +1247,12 @@ func (or *Oracle) handleManualBans(
 		}).Info("[Ban] Ban event received")
 		or.advanceStateMachine(ban.ValidatorID, ManualBan)
 		totalPending.Add(totalPending, or.state.Validators[ban.ValidatorID].PendingRewardsWei)
-
-	}
-	// THIRD: share the pending rewards of the banned validators among the rest
-	or.increaseAllPendingRewards(totalPending)
-
-	// FOURTH: reset the pending rewards of the banned validators
-	for _, ban := range banEvents {
 		or.resetPendingRewards(ban.ValidatorID)
+
 	}
+
+	// THIRD: share the total pending rewards of the banned validators among the rest
+	or.increaseAllPendingRewards(totalPending)
 }
 
 func (or *Oracle) handleManualUnbans(
