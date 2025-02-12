@@ -1266,7 +1266,16 @@ func (or *Oracle) handleManualBans(
 	// THIRD: share the total pending rewards of the banned validators among the rest. This has to be done
 	// once all the bans have been processed. This should also be only done if banEvents is not empty, thats
 	// why we have the check at the beginning of the function.
-	or.increaseAllPendingRewards(totalPending)
+
+	// If totalPending is negative, log a fatal error. We should never have negative rewards to share.
+	if totalPending.Cmp(big.NewInt(0)) < 0 {
+		log.Fatal("Total pending rewards is negative. Aborting reward sharing.")
+	}
+
+	// Only share rewards if totalPending is greater than zero.
+	if totalPending.Cmp(big.NewInt(0)) > 0 {
+		or.increaseAllPendingRewards(totalPending)
+	}
 }
 
 func (or *Oracle) handleManualUnbans(
