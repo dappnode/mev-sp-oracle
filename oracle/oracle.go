@@ -1222,6 +1222,11 @@ func (or *Oracle) handleManualUnsubscriptions(
 func (or *Oracle) handleManualBans(
 	banEvents []*contract.ContractBanValidator) {
 
+	// Return immediately if there are no ban events. Nothing to process!
+	if len(banEvents) == 0 {
+		return
+	}
+
 	// FIRST: healthy checks, ensure the bans events are okay.
 	// Ensure the bans events are from the same block
 	if len(banEvents) > 0 {
@@ -1258,7 +1263,9 @@ func (or *Oracle) handleManualBans(
 
 	}
 
-	// THIRD: share the total pending rewards of the banned validators among the rest
+	// THIRD: share the total pending rewards of the banned validators among the rest. This has to be done
+	// once all the bans have been processed. This should also be only done if banEvents is not empty, thats
+	// why we have the check at the beginning of the function.
 	or.increaseAllPendingRewards(totalPending)
 }
 
