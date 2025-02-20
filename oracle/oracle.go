@@ -206,6 +206,14 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	// Handle the donations from this block
 	or.handleDonations(blockDonations)
 
+	// Manual bans/unbans should always be the last thing to be processed in each block, since
+	// we want to ensure they persist to the next block
+	// Handle manual bans
+	or.handleManualBans(fullBlock.Events.BanValidator)
+
+	// Handle manual unbans
+	or.handleManualUnbans(fullBlock.Events.UnbanValidator)
+
 	// Handle validator cleanup: redisitribute the pending rewards of validators subscribed to the pool
 	// that are not in the beacon chain anymore (exited/slashed). We dont run this on every slot because
 	// its expensive. Runs every 4 hours.
@@ -1211,6 +1219,98 @@ func (or *Oracle) handleManualUnsubscriptions(
 	}
 }
 
+func (or *Oracle) handleManualBans(
+	banEvents []*contract.ContractBanValidator) {
+
+	// Return immediately if there are no ban events. Nothing to process!
+	if len(banEvents) == 0 {
+		return
+	}
+
+	// FIRST: healthy checks, ensure the bans events are okay.
+	// Ensure the bans events are from the same block
+	if len(banEvents) > 0 {
+		blockReference := banEvents[0].Raw.BlockNumber
+		for _, ban := range banEvents {
+			if ban.Raw.BlockNumber != blockReference {
+				log.Fatal("Handling manual bans from different blocks is not possible: ",
+					ban.Raw.BlockNumber, " vs ", blockReference)
+			}
+		}
+	}
+
+	totalPending := big.NewInt(0)
+	// SECOND: iterate over the ban events.
+	//  - Advance state machine of all banned validators (move them to Banned state).
+	//  - Sum all the pending rewards of the banned validators and share them among the rest.
+	// 	- Reset the pending rewards of the banned validators (sets pending to 0).
+	for _, ban := range banEvents {
+		log.WithFields(log.Fields{
+			"BlockNumber":    ban.Raw.BlockNumber,
+			"TxHash":         ban.Raw.TxHash,
+			"ValidatorIndex": ban.ValidatorID,
+		}).Info("[Ban] Ban event received")
+
+		//Check if the validator is subscribed. If not, we log it and dont do anything
+		if !or.isSubscribed(ban.ValidatorID) {
+			log.Warn("Validator is not subscribed, skipping ban event")
+			continue
+		}
+
+		or.advanceStateMachine(ban.ValidatorID, ManualBan)
+		totalPending.Add(totalPending, or.state.Validators[ban.ValidatorID].PendingRewardsWei)
+		or.resetPendingRewards(ban.ValidatorID)
+
+	}
+
+	// THIRD: share the total pending rewards of the banned validators among the rest. This has to be done
+	// once all the bans have been processed. This should also be only done if banEvents is not empty, thats
+	// why we have the check at the beginning of the function.
+
+	// If totalPending is negative, log a fatal error. We should never have negative rewards to share.
+	if totalPending.Cmp(big.NewInt(0)) < 0 {
+		log.Fatal("Total pending rewards is negative. Aborting reward sharing.")
+	}
+
+	// Only share rewards if totalPending is greater than zero.
+	if totalPending.Cmp(big.NewInt(0)) > 0 {
+		or.increaseAllPendingRewards(totalPending)
+	}
+}
+
+func (or *Oracle) handleManualUnbans(
+	unbanEvents []*contract.ContractUnbanValidator) {
+
+	// FIRST: healthy checks, ensure the unbans events are okay.
+	if len(unbanEvents) > 0 {
+		blockReference := unbanEvents[0].Raw.BlockNumber
+		for _, ban := range unbanEvents {
+			if ban.Raw.BlockNumber != blockReference {
+				log.Fatal("Handling manual unbans from different blocks is not possible: ",
+					ban.Raw.BlockNumber, " vs ", blockReference)
+			}
+		}
+	}
+
+	// SECOND: iterate over the unban events.
+	//  - Advance state machine of all unbanned validators (move them to Active state).
+	for _, unban := range unbanEvents {
+		log.WithFields(log.Fields{
+			"BlockNumber":    unban.Raw.BlockNumber,
+			"TxHash":         unban.Raw.TxHash,
+			"ValidatorIndex": unban.ValidatorID,
+		}).Info("[Unban] Unban event received")
+
+		// Check if the validator is banned. If not, we log it and dont do anything
+		if !or.isBanned(unban.ValidatorID) {
+			log.Warn("Validator is not banned, skipping unban event")
+			continue
+		}
+
+		or.advanceStateMachine(unban.ValidatorID, ManualUnban)
+	}
+}
+
 // Banning a validator implies sharing its pending rewards among the rest
 // of the validators and setting its pending to zero.
 func (or *Oracle) handleBanValidator(block SummarizedBlock) {
@@ -1490,6 +1590,18 @@ func GetWithdrawalAndType(validator *v1.Validator) (string, WithdrawalType) {
 // See the spec for state diagram with states and transitions. This tracks all the different
 // states and state transitions that a given validator can have from the oracle point of view
 func (or *Oracle) advanceStateMachine(valIndex uint64, event Event) {
+
+	// Safety check, if the validator does not exist, we log it and return
+	validator, exists := or.state.Validators[valIndex]
+	if !exists || validator == nil {
+		// Handle the case where the validator does not exist or is nil
+		log.WithFields(log.Fields{
+			"ValidatorIndex": valIndex,
+			"Error":          "Validator not found or is nil",
+		}).Warn("Called advanceStateMachine with a validator that does not exist or is nil")
+		return
+	}
+
 	switch or.state.Validators[valIndex].ValidatorStatus {
 	case Active:
 		switch event {
@@ -1525,6 +1637,15 @@ func (or *Oracle) advanceStateMachine(valIndex uint64, event Event) {
 				"Slot":           or.state.NextSlotToProcess,
 			}).Info("Validator state change")
 			or.state.Validators[valIndex].ValidatorStatus = NotSubscribed
+		case ManualBan:
+			log.WithFields(log.Fields{
+				"Event":          "ManualBan",
+				"StateChange":    "Active -> Banned",
+				"ValidatorIndex": valIndex,
+				"Slot":           or.state.NextSlotToProcess,
+			}).Info("Validator state change")
+			or.state.Validators[valIndex].ValidatorStatus = Banned
+
 		}
 	case YellowCard:
 		switch event {
@@ -1560,6 +1681,14 @@ func (or *Oracle) advanceStateMachine(valIndex uint64, event Event) {
 				"Slot":           or.state.NextSlotToProcess,
 			}).Info("Validator state change")
 			or.state.Validators[valIndex].ValidatorStatus = NotSubscribed
+		case ManualBan:
+			log.WithFields(log.Fields{
+				"Event":          "ManualBan",
+				"StateChange":    "YellowCard -> Banned",
+				"ValidatorIndex": valIndex,
+				"Slot":           or.state.NextSlotToProcess,
+			}).Info("Validator state change")
+			or.state.Validators[valIndex].ValidatorStatus = Banned
 		}
 	case RedCard:
 		switch event {
@@ -1595,6 +1724,14 @@ func (or *Oracle) advanceStateMachine(valIndex uint64, event Event) {
 				"Slot":           or.state.NextSlotToProcess,
 			}).Info("Validator state change")
 			or.state.Validators[valIndex].ValidatorStatus = NotSubscribed
+		case ManualBan:
+			log.WithFields(log.Fields{
+				"Event":          "ManualBan",
+				"StateChange":    "RedCard -> Banned",
+				"ValidatorIndex": valIndex,
+				"Slot":           or.state.NextSlotToProcess,
+			}).Info("Validator state change")
+			or.state.Validators[valIndex].ValidatorStatus = Banned
 		}
 	case NotSubscribed:
 		switch event {
@@ -1610,6 +1747,19 @@ func (or *Oracle) advanceStateMachine(valIndex uint64, event Event) {
 			log.WithFields(log.Fields{
 				"Event":          "AutoSubscription",
 				"StateChange":    "NotSubscribed -> Active",
+				"ValidatorIndex": valIndex,
+				"Slot":           or.state.NextSlotToProcess,
+			}).Info("Validator state change")
+			or.state.Validators[valIndex].ValidatorStatus = Active
+		}
+	// A validator could return to the state it was after being banned, but we
+	// return it always to the Active state for the sake of simplicity.
+	case Banned:
+		switch event {
+		case ManualUnban:
+			log.WithFields(log.Fields{
+				"Event":          "ManualUnban",
+				"StateChange":    "Banned -> Active",
 				"ValidatorIndex": valIndex,
 				"Slot":           or.state.NextSlotToProcess,
 			}).Info("Validator state change")
