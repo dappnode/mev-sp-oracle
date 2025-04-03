@@ -43,6 +43,7 @@ type Oracle struct {
 var SlotFork1 = map[string]uint64{
 	"mainnet": uint64(10188220),
 	"holesky": uint64(2720632),
+	"hoodi":   uint64(1),
 }
 
 func NewOracle(cfg *Config) *Oracle {

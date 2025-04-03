@@ -25,6 +25,7 @@ var WhitelistedBuilders = map[uint64][]string{
 		"0xae0A3D884E746599BD6C893a674E556C36a47f1e",
 	},
 	HoleskyChainId: {},
+	HoodiChainId:   {},
 }
 
 // See MevRewardInWei for more info
