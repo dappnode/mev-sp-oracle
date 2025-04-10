@@ -305,13 +305,13 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	totalDonationsWei := big.NewInt(0)
 
 	// Prevent underflow
-	if uint64(m.oracle.State().LatestProcessedSlot) < SlotsInOneMonth {
-		m.respondError(w, http.StatusInternalServerError, "head slot is lower than slots in a month, this should not happen")
+	if uint64(m.oracle.State().LatestProcessedSlot) < 1 {
+		m.respondError(w, http.StatusInternalServerError, "head slot is lower than 1, this should not happen")
 		return
 	}
 
-	if uint64(m.oracle.State().LatestProcessedBlock) < SlotsInOneMonth {
-		m.respondError(w, http.StatusInternalServerError, "head block is lower than slots in a month, this should not happen")
+	if uint64(m.oracle.State().LatestProcessedBlock) < 1 {
+		m.respondError(w, http.StatusInternalServerError, "head block is lower than 1, this should not happen")
 		return
 	}
 
@@ -657,7 +657,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 
 		// Check if the withdrawal address matches the requested one
 		credStr := hex.EncodeToString(validator.Validator.WithdrawalCredentials)
-		eth1Add, err := utils.GetEth1Address(credStr) // TODO: Use the new function
+		eth1Add, err := utils.GetCompatibleAddress(credStr) // TODO: Use the new function
 
 		// Skip validators without non eth withdrawal address (bls address)
 		if err != nil {

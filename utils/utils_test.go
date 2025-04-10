@@ -160,34 +160,51 @@ func Test_WithdrawalCredentials(t *testing.T) {
 	blsKey2 := "00b9f30bfce35138f7638d68c1473d1d45693dae775166022a493f38d942deb5"
 	eth1Key1 := "010000000000000000000000dc62f9e8c34be08501cdef4ebde0a280f576d762"
 	eth1Key2 := "01000000000000000000000059b0d71688da01057c08e4c1baa8faa629819c2a"
+	electraKey1 := "020000000000000000000000dc62f9e8c34be08501cdef4ebde0a280f576d762"
+	electraKey2 := "020000000000000000000000dc62f9e8c34be08501cdef4ebde0a280f576d762"
 
 	wrongKey1 := "098765"
 
+	// BLS type checks
 	require.Equal(t, true, IsBlsType(blsKey1))
 	require.Equal(t, true, IsBlsType(blsKey2))
 	require.Equal(t, false, IsBlsType(eth1Key1))
 	require.Equal(t, false, IsBlsType(eth1Key2))
+	require.Equal(t, false, IsBlsType(electraKey1))
+	require.Equal(t, false, IsBlsType(electraKey2))
 
+	// ETH1 type checks
 	require.Equal(t, true, IsEth1Type(eth1Key1))
 	require.Equal(t, true, IsEth1Type(eth1Key2))
 	require.Equal(t, false, IsEth1Type(blsKey1))
 	require.Equal(t, false, IsEth1Type(blsKey2))
+	require.Equal(t, false, IsEth1Type(electraKey1))
+	require.Equal(t, false, IsEth1Type(electraKey2))
 
+	// Electra type checks
+	require.Equal(t, true, IsElectraType(electraKey1))
+	require.Equal(t, true, IsElectraType(electraKey2))
+	require.Equal(t, false, IsElectraType(blsKey1))
+	require.Equal(t, false, IsElectraType(eth1Key1))
+
+	// Invalid key check
 	require.Equal(t, false, IsEth1Type(wrongKey1))
 	require.Equal(t, false, IsBlsType(wrongKey1))
+	require.Equal(t, false, IsElectraType(wrongKey1))
 
-	_, err := GetEth1Address(blsKey1)
+	// GetCompatibleAddress checks
+	_, err := GetCompatibleAddress(blsKey1)
 	require.Error(t, err)
 
-	rec1, err := GetEth1Address(eth1Key1)
+	rec1, err := GetCompatibleAddress(eth1Key1)
 	require.NoError(t, err)
 	require.Equal(t, rec1, "0xdc62f9e8c34be08501cdef4ebde0a280f576d762")
 
-	rec2, err := GetEth1Address(eth1Key2)
+	rec2, err := GetCompatibleAddress(eth1Key2)
 	require.NoError(t, err)
 	require.Equal(t, rec2, "0x59b0d71688da01057c08e4c1baa8faa629819c2a")
 
-	b1, err := GetEth1AddressByte([]byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237})
+	b1, err := GetCompatibleAddressByte([]byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237})
 	require.NoError(t, err)
 	require.Equal(t, b1, "0x9427a30991170f917d7b83def6e44d26577871ed")
 }
