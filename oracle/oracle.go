@@ -46,6 +46,11 @@ var SlotFork1 = map[string]uint64{
 	"hoodi":   uint64(1),
 }
 
+var ElectraFork = map[string]uint64{
+	"mainnet": uint64(11649024), // May 7, 2025
+	"hoodi":   uint64(1),
+}
+
 func NewOracle(cfg *Config) *Oracle {
 	state := &OracleState{
 		StateHash:            "",
@@ -1388,13 +1393,13 @@ func (or *Oracle) consolidateBalance(valIndex uint64) {
 	}).Debug("Consolidating balance")
 }
 
-// Returns a list of all the eligible validators for rewards.
-func (or *Oracle) getEligibleValidators() []uint64 {
-	eligibleValidators := make([]uint64, 0)
+// Returns a list of all the eligible validators for rewards using phase0.ValidatorIndex type.
+func (or *Oracle) getEligibleValidators() []phase0.ValidatorIndex {
+	eligibleValidators := make([]phase0.ValidatorIndex, 0)
 
 	for valIndex, validator := range or.state.Validators {
 		if validator.ValidatorStatus == Active || validator.ValidatorStatus == YellowCard {
-			eligibleValidators = append(eligibleValidators, valIndex)
+			eligibleValidators = append(eligibleValidators, phase0.ValidatorIndex(valIndex))
 		}
 	}
 	return eligibleValidators
@@ -1404,6 +1409,8 @@ func (or *Oracle) getEligibleValidators() []uint64 {
 // of said rewards. Note that pending rewards cant be claimed until a block is proposed
 // by the validator. But the pool owner can claim the pool cut at any time, so they are
 // added as accumulated rewards.
+// The reward will be shared differently depending on the network and the slot. Electra fork
+// makes the rewards proportional to the balance of the validators.
 func (or *Oracle) increaseAllPendingRewards(
 	reward *big.Int) {
 
@@ -1433,19 +1440,39 @@ func (or *Oracle) increaseAllPendingRewards(
 
 	totalFees := big.NewInt(0)
 	perValidatorReward := big.NewInt(0)
-	if slotFork, found := SlotFork1[or.cfg.Network]; found {
-		// Fixes minor bug in rewards calculation from a given slot. It just affects a few wei nothing
-		// major, but this fixes the remainder1 not being scalled over 100.
+
+	if electraFork, found := ElectraFork[or.cfg.Network]; found && or.state.NextSlotToProcess >= electraFork {
+		// call to the beacon node to get the balances of the validators.
+		validators, err := or.getSetOfValidators(eligibleValidators, strconv.FormatUint(or.state.NextSlotToProcess, 10))
+		if err != nil {
+			log.Fatal("Failed to fetch validator balances: ", err)
+		}
+
+		// Calculate total balance of all eligible validators
+		totalBalance := big.NewInt(0)
+		for _, val := range validators {
+			totalBalance.Add(totalBalance, big.NewInt(int64(val.Balance)))
+		}
+
+		toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
+
+		if totalBalance.Cmp(big.NewInt(0)) == 0 {
+			log.Fatal("Total balance of all validators is zero, cannot divide rewards")
+		}
+
+		// Distribute rewards proportionally
+		for idx, val := range validators {
+			// First, calculate the product of the total rewards to share and the validator's balance
+			validatorShareProduct := big.NewInt(0).Mul(toShareAllValidators, big.NewInt(int64(val.Balance)))
+
+			// Then, divide the product by the total balance to get the individual share
+			share := big.NewInt(0).Div(validatorShareProduct, totalBalance)
+			or.state.Validators[uint64(idx)].PendingRewardsWei.Add(or.state.Validators[uint64(idx)].PendingRewardsWei, share)
+		}
+		// If we are not yet in the Electra fork, we use the old method, which is to divide the rewards
+		// equally among all eligible validators
+	} else if slotFork, found := SlotFork1[or.cfg.Network]; found {
 		if or.state.NextSlotToProcess >= slotFork {
-
-			log.WithFields(log.Fields{
-				"SlotFork":           slotFork,
-				"Slot":               or.state.NextSlotToProcess,
-				"Network":            or.cfg.Network,
-				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
-				"Method":             "PostFork1",
-			}).Debug("Calculating rewards")
-
 			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
 			perValidatorReward = big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
 			remainder := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
@@ -1501,7 +1528,7 @@ func (or *Oracle) increaseAllPendingRewards(
 
 	// Increase eligible validators rewards
 	for _, eligibleIndex := range eligibleValidators {
-		or.state.Validators[eligibleIndex].PendingRewardsWei.Add(or.state.Validators[eligibleIndex].PendingRewardsWei, perValidatorReward)
+		or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei.Add(or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei, perValidatorReward)
 	}
 }
 
