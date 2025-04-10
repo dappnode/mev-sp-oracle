@@ -630,6 +630,8 @@ func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Summariz
 				poolBlock.BlockType = OkPoolProposalBlsKeys
 			} else if withdrawalType == Eth1Withdrawal {
 				poolBlock.BlockType = OkPoolProposal
+			} else if withdrawalType == ElectraWithdrawal {
+				poolBlock.BlockType = OkPoolProposal
 			} else {
 				log.Fatal("Unknown withdrawal type: ", withdrawalType)
 			}

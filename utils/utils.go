@@ -144,30 +144,46 @@ func IsEth1Type(withdrawalCred string) bool {
 	return false
 }
 
+// Input example: 020000000000000000000000dc62f9e8c34be08501cdef4ebde0a280f576d762 (true)
+func IsElectraType(withdrawalCred string) bool {
+	if len(withdrawalCred) != 64 {
+		return false
+	}
+
+	// ETH1_ADDRESS_WITHDRAWAL_PREFIX
+	if strings.HasPrefix(withdrawalCred, "020000000000000000000000") {
+		return true
+	}
+	return false
+}
+
 // See: https://github.com/ethereum/eth2.0-specs/blob/dev/specs/phase0/validator.md#withdrawal-credentials
+// TODO: update link once electra is merged
 // Input example: 01000000000000000000000059b0d71688da01057c08e4c1baa8faa629819c2a
 // Output example: 0x59b0d71688da01057c08e4c1baa8faa629819c2a
-func GetEth1Address(withdrawalCred string) (string, error) {
+func GetCompatibleAddress(withdrawalCred string) (string, error) {
 	if len(withdrawalCred) != 64 {
 		return "", errors.New("Withdrawal credentials are not a valid length")
 	}
 	// ETH1_ADDRESS_WITHDRAWAL_PREFIX
-	if !strings.HasPrefix(withdrawalCred, "010000000000000000000000") {
-		return "", errors.New("Withdrawal credentials prefix does not match the spec")
+	if strings.HasPrefix(withdrawalCred, "010000000000000000000000") || strings.HasPrefix(withdrawalCred, "020000000000000000000000") {
+		return "0x" + withdrawalCred[24:], nil
 	}
-	return "0x" + withdrawalCred[24:], nil
+
+	return "", errors.New("Withdrawal credentials prefix does not match the spec")
 }
 
-func GetEth1AddressByte(withdrawalCredByte []byte) (string, error) {
+func GetCompatibleAddressByte(withdrawalCredByte []byte) (string, error) {
 	withdrawalCred := hex.EncodeToString(withdrawalCredByte)
 	if len(withdrawalCred) != 64 {
 		return "", errors.New("Withdrawal credentials are not a valid length")
 	}
-	// ETH1_ADDRESS_WITHDRAWAL_PREFIX
-	if !strings.HasPrefix(withdrawalCred, "010000000000000000000000") {
-		return "", errors.New("Withdrawal credentials prefix does not match the spec")
+	// Compatible with both ETH1_ADDRESS_WITHDRAWAL_PREFIX and PECTRA_ADDRESS_WITHDRAWAL_PREFIX
+	if strings.HasPrefix(withdrawalCred, "010000000000000000000000") || strings.HasPrefix(withdrawalCred, "020000000000000000000000") {
+		return "0x" + withdrawalCred[24:], nil
 	}
-	return "0x" + withdrawalCred[24:], nil
+
+	return "", errors.New("Withdrawal credentials prefix does not match the spec")
 }
 
 func Equals(a string, b string) bool {
