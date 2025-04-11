@@ -1411,7 +1411,9 @@ func (or *Oracle) getEligibleValidators() []phase0.ValidatorIndex {
 // added as accumulated rewards.
 // The reward will be shared differently depending on the network and the slot. Electra fork
 // makes the rewards proportional to the balance of the validators.
-func (or *Oracle) increaseAllPendingRewards(reward *big.Int) {
+func (or *Oracle) increaseAllPendingRewards(
+	reward *big.Int) {
+
 	eligibleValidators := or.getEligibleValidators()
 	numEligibleValidators := big.NewInt(int64(len(eligibleValidators)))
 
@@ -1440,44 +1442,36 @@ func (or *Oracle) increaseAllPendingRewards(reward *big.Int) {
 	perValidatorReward := big.NewInt(0)
 
 	if electraFork, found := ElectraFork[or.cfg.Network]; found && or.state.NextSlotToProcess >= electraFork {
-		// --- Electra fork reward distribution ---
+		// call to the beacon node to get the balances of the validators.
 		validators, err := or.getSetOfValidators(eligibleValidators, strconv.FormatUint(or.state.NextSlotToProcess, 10))
 		if err != nil {
 			log.Fatal("Failed to fetch validator balances: ", err)
 		}
 
+		// Calculate total balance of all eligible validators
 		totalBalance := big.NewInt(0)
 		for _, val := range validators {
 			totalBalance.Add(totalBalance, big.NewInt(int64(val.Balance)))
 		}
 
+		toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
+
 		if totalBalance.Cmp(big.NewInt(0)) == 0 {
 			log.Fatal("Total balance of all validators is zero, cannot divide rewards")
 		}
 
-		remainderFromCut := big.NewInt(0).Mod(aux, over)
-		toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
-		toShareAllValidators.Sub(toShareAllValidators, remainderFromCut)
-
-		totalDistributed := big.NewInt(0)
+		// Distribute rewards proportionally
 		for idx, val := range validators {
-			balance := big.NewInt(int64(val.Balance))
-			product := new(big.Int).Mul(toShareAllValidators, balance)
-			share := new(big.Int).Div(product, totalBalance)
+			// First, calculate the product of the total rewards to share and the validator's balance
+			validatorShareProduct := big.NewInt(0).Mul(toShareAllValidators, big.NewInt(int64(val.Balance)))
+
+			// Then, divide the product by the total balance to get the individual share
+			share := big.NewInt(0).Div(validatorShareProduct, totalBalance)
 			or.state.Validators[uint64(idx)].PendingRewardsWei.Add(or.state.Validators[uint64(idx)].PendingRewardsWei, share)
-			totalDistributed.Add(totalDistributed, share)
 		}
-
-		remainderFromDistribution := new(big.Int).Sub(toShareAllValidators, totalDistributed)
-
-		// Total pool fees = pool cut + both remainders
-		totalFees = big.NewInt(0).Add(poolCut, remainderFromCut)
-		totalFees.Add(totalFees, remainderFromDistribution)
-
-		or.state.PoolAccumulatedFees.Add(or.state.PoolAccumulatedFees, totalFees)
-
+		// If we are not yet in the Electra fork, we use the old method, which is to divide the rewards
+		// equally among all eligible validators
 	} else if slotFork, found := SlotFork1[or.cfg.Network]; found {
-		// --- Fork1 and pre-fork1 reward logic ---
 		if or.state.NextSlotToProcess >= slotFork {
 			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
 			perValidatorReward = big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
@@ -1509,25 +1503,20 @@ func (or *Oracle) increaseAllPendingRewards(reward *big.Int) {
 			totalFees = big.NewInt(0).Add(poolCut, remainder1)
 			totalFees.Add(totalFees, remainder2)
 		}
-
-		or.state.PoolAccumulatedFees.Add(or.state.PoolAccumulatedFees, totalFees)
 	} else {
 		log.Fatal("Network not found in forks list: ", or.cfg.Network)
 	}
 
-	// Final accounting check (works for all forks)
-	calculated := big.NewInt(0)
-	for _, v := range or.state.Validators {
-		calculated.Add(calculated, v.PendingRewardsWei)
-	}
-	calculated.Add(calculated, or.state.PoolAccumulatedFees)
+	// Increase pool rewards (fees)
+	or.state.PoolAccumulatedFees.Add(or.state.PoolAccumulatedFees, totalFees)
 
-	if calculated.Cmp(reward) != 0 {
+	// Extra check to ensure what we split and what we have match
+	if big.NewInt(0).Add(big.NewInt(0).Mul(perValidatorReward, numEligibleValidators), totalFees).Cmp(reward) != 0 {
 		log.WithFields(log.Fields{
-			"TotalValidatorRewards": calculated,
-			"PoolFees":              or.state.PoolAccumulatedFees,
-			"ExpectedTotalReward":   reward,
-		}).Fatal("Total rewards do not match sum of validator rewards and pool fees")
+			"perValidatorReward":    perValidatorReward,
+			"totalFees":             totalFees,
+			"numEligibleValidators": numEligibleValidators,
+		}).Fatal("Total rewards dont match the sum of the rewards per validator and the pool fees")
 	}
 
 	log.WithFields(log.Fields{
@@ -1537,11 +1526,9 @@ func (or *Oracle) increaseAllPendingRewards(reward *big.Int) {
 		"TotalRewardWei":           reward,
 	}).Info("Increasing pending rewards of eligible validators")
 
-	// Apply equal reward logic only for non-Electra forks
-	if electraFork, found := ElectraFork[or.cfg.Network]; !(found && or.state.NextSlotToProcess >= electraFork) {
-		for _, eligibleIndex := range eligibleValidators {
-			or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei.Add(or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei, perValidatorReward)
-		}
+	// Increase eligible validators rewards
+	for _, eligibleIndex := range eligibleValidators {
+		or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei.Add(or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei, perValidatorReward)
 	}
 }
 
