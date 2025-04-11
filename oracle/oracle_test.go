@@ -3099,6 +3099,55 @@ func Test_ValidatorCleanup_1(t *testing.T) {
 	require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
 }
 
+func Test_IncreaseAllPendingRewards_ElectraFork(t *testing.T) {
+	reward := big.NewInt(1000000000) // 1 Gwei
+	oracle := NewOracle(&Config{
+		Network:                  "mainnet",
+		PoolFeesPercentOver10000: 1000,                   // 10%
+		DeployedSlot:             ElectraFork["mainnet"], // simulate we are at the fork
+	})
+
+	oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 10
+
+	// Add validators
+	oracle.state.Validators[0] = &ValidatorInfo{
+		PendingRewardsWei: big.NewInt(0),
+		ValidatorStatus:   Active,
+	}
+	oracle.state.Validators[1] = &ValidatorInfo{
+		PendingRewardsWei: big.NewInt(0),
+		ValidatorStatus:   Active,
+	}
+	oracle.state.Validators[2] = &ValidatorInfo{
+		PendingRewardsWei: big.NewInt(0),
+		ValidatorStatus:   YellowCard,
+	}
+
+	// Mock balances
+	oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		return map[phase0.ValidatorIndex]*v1.Validator{
+			0: {Balance: 10},
+			1: {Balance: 30},
+			2: {Balance: 60},
+		}, nil
+	})
+
+	oracle.increaseAllPendingRewards(reward)
+
+	// Pool cut: 10% of 1_000_000_000 = 100_000_000
+	expectedPoolCut := big.NewInt(100000000)
+
+	fmt.Println("Pool cut:", expectedPoolCut)
+	fmt.Println("Pool accumulated fees:", oracle.state.PoolAccumulatedFees)
+
+	require.Equal(t, expectedPoolCut, oracle.state.PoolAccumulatedFees)
+
+	// The remaining: 900_000_000 to be shared proportionally
+	require.Equal(t, big.NewInt(90000000), oracle.state.Validators[0].PendingRewardsWei)  // 10%
+	require.Equal(t, big.NewInt(270000000), oracle.state.Validators[1].PendingRewardsWei) // 30%
+	require.Equal(t, big.NewInt(540000000), oracle.state.Validators[2].PendingRewardsWei) // 60%
+}
+
 func Test_increaseValidatorPendingRewards(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[12] = &ValidatorInfo{
