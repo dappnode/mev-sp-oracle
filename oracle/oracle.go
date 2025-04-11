@@ -1405,6 +1405,119 @@ func (or *Oracle) getEligibleValidators() []phase0.ValidatorIndex {
 	return eligibleValidators
 }
 
+func (or *Oracle) determineRewardMethod() string {
+	if forkSlot, found := ElectraFork[or.cfg.Network]; found && or.state.NextSlotToProcess >= forkSlot {
+		return "electra"
+	}
+	if forkSlot, found := SlotFork1[or.cfg.Network]; found && or.state.NextSlotToProcess >= forkSlot {
+		return "fork1"
+	}
+	if _, found := SlotFork1[or.cfg.Network]; found {
+		return "prefork1"
+	}
+	log.Fatal("Network not found in forks list: ", or.cfg.Network)
+	return ""
+}
+
+func (or *Oracle) handleElectraRewardDistribution(
+	reward, poolCut *big.Int,
+	eligibleValidators []phase0.ValidatorIndex,
+) (map[uint64]*big.Int, *big.Int, error) {
+	toDistribute := new(big.Int).Sub(reward, poolCut)
+	validatorsMap, err := or.getSetOfValidators(eligibleValidators, strconv.FormatUint(or.state.NextSlotToProcess, 10))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch validator balances: %w", err)
+	}
+
+	totalBalance := new(big.Int)
+	for _, v := range validatorsMap {
+		totalBalance.Add(totalBalance, big.NewInt(int64(v.Balance)))
+	}
+	if totalBalance.Sign() == 0 {
+		return nil, nil, fmt.Errorf("total balance is zero")
+	}
+
+	perValidatorRewards := make(map[uint64]*big.Int)
+	totalDistributed := new(big.Int)
+
+	for _, v := range validatorsMap {
+		share := new(big.Int).Mul(toDistribute, big.NewInt(int64(v.Balance)))
+		share.Div(share, totalBalance)
+
+		perValidatorRewards[uint64(v.Index)] = share
+		totalDistributed.Add(totalDistributed, share)
+	}
+
+	remainder := new(big.Int).Sub(toDistribute, totalDistributed)
+	totalFees := new(big.Int).Add(poolCut, remainder)
+
+	sum := new(big.Int).Add(totalDistributed, totalFees)
+	if sum.Cmp(reward) != 0 {
+		log.WithFields(log.Fields{
+			"SumValidatorRewards": totalDistributed,
+			"TotalFees":           totalFees,
+			"TotalExpectedReward": reward,
+		}).Fatal("Electra fork: Reward mismatch — rewards to validators + pool fees ≠ total reward")
+	}
+
+	return perValidatorRewards, totalFees, nil
+}
+
+func (or *Oracle) handleFork1RewardDistribution(
+	reward, poolCut, numEligibleValidators *big.Int,
+) (totalFees, perValidatorReward *big.Int, err error) {
+	toShareAllValidators := new(big.Int).Sub(reward, poolCut)
+	perValidatorReward = new(big.Int).Div(toShareAllValidators, numEligibleValidators)
+	remainder := new(big.Int).Mod(toShareAllValidators, numEligibleValidators)
+	totalFees = new(big.Int).Add(poolCut, remainder)
+
+	// Consistency check
+	sum := new(big.Int).Add(new(big.Int).Mul(perValidatorReward, numEligibleValidators), totalFees)
+	if sum.Cmp(reward) != 0 {
+		log.WithFields(log.Fields{
+			"perValidatorReward":    perValidatorReward,
+			"totalFees":             totalFees,
+			"numEligibleValidators": numEligibleValidators,
+		}).Fatal("Fork1: Reward mismatch — rewards to validators + pool fees ≠ total reward")
+	}
+
+	return totalFees, perValidatorReward, nil
+}
+
+func (or *Oracle) handlePreFork1RewardDistribution(
+	reward, poolCut, aux, over, numEligibleValidators *big.Int,
+) (totalFees, perValidatorReward *big.Int, err error) {
+	log.WithFields(log.Fields{
+		"SlotFork":           SlotFork1[or.cfg.Network],
+		"Slot":               or.state.NextSlotToProcess,
+		"Network":            or.cfg.Network,
+		"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
+		"Method":             "PreFork1",
+	}).Debug("Calculating rewards")
+
+	remainder1 := new(big.Int).Mod(aux, over)
+
+	toShareAllValidators := new(big.Int).Sub(reward, poolCut)
+	toShareAllValidators.Sub(toShareAllValidators, remainder1)
+
+	perValidatorReward = new(big.Int).Div(toShareAllValidators, numEligibleValidators)
+	remainder2 := new(big.Int).Mod(toShareAllValidators, numEligibleValidators)
+
+	totalFees = new(big.Int).Add(poolCut, remainder1)
+	totalFees.Add(totalFees, remainder2)
+
+	sum := new(big.Int).Add(new(big.Int).Mul(perValidatorReward, numEligibleValidators), totalFees)
+	if sum.Cmp(reward) != 0 {
+		log.WithFields(log.Fields{
+			"perValidatorReward":    perValidatorReward,
+			"totalFees":             totalFees,
+			"numEligibleValidators": numEligibleValidators,
+		}).Fatal("PreFork1: Reward mismatch — rewards to validators + pool fees ≠ total reward")
+	}
+
+	return totalFees, perValidatorReward, nil
+}
+
 // Increases the pending rewards of all validators, and gives the pool owner a cut
 // of said rewards. Note that pending rewards cant be claimed until a block is proposed
 // by the validator. But the pool owner can claim the pool cut at any time, so they are
@@ -1425,133 +1538,52 @@ func (or *Oracle) increaseAllPendingRewards(reward *big.Int) {
 		log.Fatal("Pool fees percent cannot be greater than 100% (10000) value: ", or.state.PoolFeesPercentOver10000)
 	}
 
-	// 100 is the % and the other 100 is because we use two decimals
-	// eg 1000 is 10%
-	// eg 50 is 0.5%
 	over := big.NewInt(100 * 100)
-
-	// The pool takes PoolFeesPercentOver10000 cut of the rewards
 	aux := big.NewInt(0).Mul(reward, big.NewInt(int64(or.state.PoolFeesPercentOver10000)))
-
-	// Calculate the pool cut (not taking into account the remainder)
 	poolCut := big.NewInt(0).Div(aux, over)
 
+	method := or.determineRewardMethod()
+
 	var totalFees *big.Int
-	perValidatorReward := big.NewInt(0)
+	var perValidatorReward *big.Int
+	var electraRewards map[uint64]*big.Int
+	var err error
 
-	if electraFork, found := ElectraFork[or.cfg.Network]; found && or.state.NextSlotToProcess >= electraFork {
-		// Electra fork logic: proportional distribution
-
-		// Fetch validator balances
-		validatorsMap, err := or.getSetOfValidators(eligibleValidators, strconv.FormatUint(or.state.NextSlotToProcess, 10))
-		if err != nil {
-			log.Fatal("Failed to fetch validator balances: ", err)
-		}
-
-		toDistribute := new(big.Int).Sub(reward, poolCut)
-		totalBalance := new(big.Int)
-
-		for _, v := range validatorsMap {
-			totalBalance.Add(totalBalance, big.NewInt(int64(v.Balance)))
-		}
-
-		if totalBalance.Sign() == 0 {
-			log.Fatal("Total balance is zero")
-		}
-
-		totalDistributed := new(big.Int)
-
-		// Iterate over the validatorsMap and distribute the rewards based on their balance
-		for _, v := range validatorsMap {
-			// Calculate share
-			share := new(big.Int).Mul(toDistribute, big.NewInt(int64(v.Balance)))
-			share.Div(share, totalBalance)
-
-			// Add the share to the validator's pending rewards
-			// We use v.Index instead of range iterator to avoid possible bugs, but it should work too.
-			or.state.Validators[uint64(v.Index)].PendingRewardsWei.Add(
-				or.state.Validators[uint64(v.Index)].PendingRewardsWei,
-				share,
-			)
-
-			// Track the total distributed rewards
-			totalDistributed.Add(totalDistributed, share)
-		}
-
-		// We have been dividing a lot, so we need to check if there is a remainder and add it to the pool.
-		// Its just a few wei.
-		remainder := new(big.Int).Sub(toDistribute, totalDistributed)
-		totalFees = new(big.Int).Add(poolCut, remainder)
-
-		// Consistency check
-		sum := big.NewInt(0).Add(totalDistributed, totalFees)
-		if sum.Cmp(reward) != 0 {
-			log.WithFields(log.Fields{
-				"SumValidatorRewards": totalDistributed,
-				"TotalFees":           totalFees,
-				"TotalExpectedReward": reward,
-			}).Fatal("Electra fork: Reward mismatch — rewards to validators + pool fees ≠ total reward")
-		}
-	} else if slotFork, found := SlotFork1[or.cfg.Network]; found {
-		if or.state.NextSlotToProcess >= slotFork {
-			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
-			perValidatorReward = big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
-			remainder := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
-			totalFees = big.NewInt(0).Add(poolCut, remainder)
-		} else {
-
-			log.WithFields(log.Fields{
-				"SlotFork":           slotFork,
-				"Slot":               or.state.NextSlotToProcess,
-				"Network":            or.cfg.Network,
-				"FeePercentOver1000": or.cfg.PoolFeesPercentOver10000,
-				"Method":             "PreFork1",
-			}).Debug("Calculating rewards")
-
-			// And remainder of above operation
-			remainder1 := big.NewInt(0).Mod(aux, over)
-
-			// The amount to share is the reward minus the pool cut + remainder
-			toShareAllValidators := big.NewInt(0).Sub(reward, poolCut)
-			toShareAllValidators.Sub(toShareAllValidators, remainder1)
-
-			// Each validator gets that divided by numEligibleValidators
-			perValidatorReward = big.NewInt(0).Div(toShareAllValidators, numEligibleValidators)
-			// And remainder of above operation
-			remainder2 := big.NewInt(0).Mod(toShareAllValidators, numEligibleValidators)
-
-			// Total fees for the pool are: the cut (%) + the remainders
-			totalFees = big.NewInt(0).Add(poolCut, remainder1)
-			totalFees.Add(totalFees, remainder2)
-		}
-
-		// Consistency check
-		sum := big.NewInt(0).Add(big.NewInt(0).Mul(perValidatorReward, numEligibleValidators), totalFees)
-		if sum.Cmp(reward) != 0 {
-			log.WithFields(log.Fields{
-				"perValidatorReward":    perValidatorReward,
-				"totalFees":             totalFees,
-				"numEligibleValidators": numEligibleValidators,
-			}).Fatal("Reward mismatch — rewards to validators + pool fees ≠ total reward")
-		}
-	} else {
-		log.Fatal("Network not found in forks list: ", or.cfg.Network)
+	switch method {
+	case "electra":
+		electraRewards, totalFees, err = or.handleElectraRewardDistribution(reward, poolCut, eligibleValidators)
+	case "fork1":
+		totalFees, perValidatorReward, err = or.handleFork1RewardDistribution(reward, poolCut, numEligibleValidators)
+	case "prefork1":
+		totalFees, perValidatorReward, err = or.handlePreFork1RewardDistribution(reward, poolCut, aux, over, numEligibleValidators)
+	default:
+		log.Fatal("Unknown reward distribution method")
 	}
 
-	// Increase pool rewards (fees)
+	if err != nil {
+		log.Fatal("Reward distribution failed: ", err)
+	}
+
 	or.state.PoolAccumulatedFees.Add(or.state.PoolAccumulatedFees, totalFees)
 
-	// Reward validators (only if not Electra, since Electra already added rewards above)
-	if electraFork, found := ElectraFork[or.cfg.Network]; !(found && or.state.NextSlotToProcess >= electraFork) {
+	// Apply rewards. Electra rewards are returned as a map where the key is the validator index
+	// because the rewards are proportional to the balance of the validator. The rest of the forks
+	// are just a fixed amount per validator.
+	switch method {
+	case "electra":
+		for idx, reward := range electraRewards {
+			or.state.Validators[idx].PendingRewardsWei.Add(
+				or.state.Validators[idx].PendingRewardsWei, reward,
+			)
+		}
+	default:
 		for _, eligibleIndex := range eligibleValidators {
 			or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei.Add(
-				or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei,
-				perValidatorReward,
+				or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei, perValidatorReward,
 			)
 		}
 	}
 
-	// Logging
 	log.WithFields(log.Fields{
 		"AmountEligibleValidators": numEligibleValidators,
 		"RewardPerValidatorWei":    perValidatorReward,
