@@ -1424,11 +1424,14 @@ func (or *Oracle) handleElectraRewardDistribution(
 	eligibleValidators []phase0.ValidatorIndex,
 ) (map[uint64]*big.Int, *big.Int, error) {
 	toDistribute := new(big.Int).Sub(reward, poolCut)
+
+	//get onchain validators balance at current processing slot
 	validatorsMap, err := or.getSetOfValidators(eligibleValidators, strconv.FormatUint(or.state.NextSlotToProcess, 10))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to fetch validator balances: %w", err)
 	}
 
+	// total balance of all validators, needed to compute what each validator gets
 	totalBalance := new(big.Int)
 	for _, v := range validatorsMap {
 		totalBalance.Add(totalBalance, big.NewInt(int64(v.Balance)))
@@ -1437,9 +1440,14 @@ func (or *Oracle) handleElectraRewardDistribution(
 		return nil, nil, fmt.Errorf("total balance is zero")
 	}
 
+	// perValidatorRewards is a map of validator index to the amount of rewards they will receive
 	perValidatorRewards := make(map[uint64]*big.Int)
+
+	// we keep track of the total amount of rewards distributed to validators to later check everything is correct
 	totalDistributed := new(big.Int)
 
+	// iterate over all validators and calculate their share of the rewards
+	// we use the balance of each validator to calculate their share
 	for _, v := range validatorsMap {
 		share := new(big.Int).Mul(toDistribute, big.NewInt(int64(v.Balance)))
 		share.Div(share, totalBalance)
@@ -1448,9 +1456,11 @@ func (or *Oracle) handleElectraRewardDistribution(
 		totalDistributed.Add(totalDistributed, share)
 	}
 
+	// there will be a small amount of wei that cannot be distributed evenly, it goes to the pool
 	remainder := new(big.Int).Sub(toDistribute, totalDistributed)
 	totalFees := new(big.Int).Add(poolCut, remainder)
 
+	// Check that the "total amount of rewards distributed to validators" + "pool fees" = total reward
 	sum := new(big.Int).Add(totalDistributed, totalFees)
 	if sum.Cmp(reward) != 0 {
 		log.WithFields(log.Fields{
@@ -1463,6 +1473,8 @@ func (or *Oracle) handleElectraRewardDistribution(
 	return perValidatorRewards, totalFees, nil
 }
 
+// Distributes the rewards for the fork1 method. The rewards are distributed evenly among all
+// eligible validators. The pool cut is added to the total fees.
 func (or *Oracle) handleFork1RewardDistribution(
 	reward, poolCut, numEligibleValidators *big.Int,
 ) (totalFees, perValidatorReward *big.Int, err error) {
