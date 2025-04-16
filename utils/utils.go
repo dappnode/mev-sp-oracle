@@ -36,8 +36,10 @@ func DecodeTx(rawTx []byte) (*types.Transaction, error) {
 	return &tx, err
 }
 
-func GetTxSender(tx *types.Transaction) (common.Address, error) {
-	from, err := types.Sender(types.LatestSignerForChainID(tx.ChainId()), tx)
+func GetTxSender(tx *types.Transaction, chainId uint64) (common.Address, error) {
+	// ChainId is set by execution client. We make sure we are always using the correct chainId,
+	// as some tx may have been sent with chainId null or 0 and can be problematic with geth v1.15.6 onwards.
+	from, err := types.Sender(types.LatestSignerForChainID(new(big.Int).SetUint64(chainId)), tx)
 	if err != nil {
 		return common.Address{}, err
 	}
