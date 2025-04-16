@@ -331,7 +331,7 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 		return big.NewInt(0), false, ""
 	}
 
-	sender, err := utils.GetTxSender(tx)
+	sender, err := utils.GetTxSender(tx, b.ChainId)
 	if err != nil {
 		log.Fatal("could not get tx sender: ", err)
 	}
