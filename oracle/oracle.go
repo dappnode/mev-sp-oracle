@@ -29,12 +29,14 @@ var StateFolder = "oracle-data"
 var StateJsonName = "state.json"
 
 type GetSetOfValidatorsFunc func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error)
+type GetPendingConsolidationsFunc func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error)
 
 type Oracle struct {
-	cfg                *Config
-	state              *OracleState
-	mutex              sync.RWMutex
-	getSetOfValidators GetSetOfValidatorsFunc
+	cfg                      *Config
+	state                    *OracleState
+	mutex                    sync.RWMutex
+	getSetOfValidators       GetSetOfValidatorsFunc
+	getPendingConsolidations GetPendingConsolidationsFunc
 }
 
 // Fork 1 changes two things:
@@ -80,9 +82,10 @@ func NewOracle(cfg *Config) *Oracle {
 	}
 
 	oracle := &Oracle{
-		cfg:                cfg,
-		state:              state,
-		getSetOfValidators: nil,
+		cfg:                      cfg,
+		state:                    state,
+		getSetOfValidators:       nil,
+		getPendingConsolidations: nil,
 	}
 
 	return oracle
@@ -90,6 +93,10 @@ func NewOracle(cfg *Config) *Oracle {
 
 func (or *Oracle) SetGetSetOfValidatorsFunc(oc GetSetOfValidatorsFunc) {
 	or.getSetOfValidators = oc
+}
+
+func (or *Oracle) GetPendingConsolidationsFunc(oc GetPendingConsolidationsFunc) {
+	or.getPendingConsolidations = oc
 }
 
 // Returns the state of the oracle, containing all the information about the
@@ -257,6 +264,25 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 			return nil
 		}
 
+		var sourceToTarget map[uint64]uint64
+		sourceToTarget = make(map[uint64]uint64)
+
+		// 🔒 Only fetch consolidations if past Electra fork
+		if slot >= ElectraFork[or.cfg.Network] {
+			pendingConsolidations, err := or.getPendingConsolidations(strconv.FormatUint(slot, 10))
+			if err != nil {
+				return errors.Wrap(err, "could not fetch pending consolidations")
+			}
+
+			for _, c := range pendingConsolidations.Data {
+				srcIdx, err1 := strconv.ParseUint(c.SourceIndex, 10, 64)
+				tgtIdx, err2 := strconv.ParseUint(c.TargetIndex, 10, 64)
+				if err1 == nil && err2 == nil {
+					sourceToTarget[srcIdx] = tgtIdx
+				}
+			}
+		}
+
 		// Get the latest validator information for all subscribed validators at once
 		validatorInfo, err := or.getSetOfValidators(indices, strconv.FormatUint(slot, 10))
 		if err != nil {
@@ -269,22 +295,36 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 		for _, validator := range validatorInfo {
 			// If a validator is subscribed but not active onchain, we have to unsubscribe it and treat it as a ban:
 			// this means setting the validator rewards to 0 and sharing them among the pool
-			if !validator.Status.IsActive() && or.isSubscribed(uint64(validator.Index)) {
+			idx := uint64(validator.Index)
+
+			if !validator.Status.IsActive() && or.isSubscribed(idx) {
 				log.WithFields(log.Fields{
-					"PendingRewardsWei":     or.state.Validators[uint64(validator.Index)].PendingRewardsWei,
-					"BeaconValidatorState":  or.state.Validators[uint64(validator.Index)].ValidatorStatus,
+					"PendingRewardsWei":     or.state.Validators[idx].PendingRewardsWei,
+					"BeaconValidatorState":  or.state.Validators[idx].ValidatorStatus,
 					"ValidatorIndex":        validator.Index,
 					"OracleValidatorStatus": validator.Status,
 					"Slot":                  slot,
 					"Network":               or.cfg.Network,
 				}).Info("Cleaning up validator")
-				or.advanceStateMachine(uint64(validator.Index), Unsubscribe)
-				rewardsToDistribute.Add(rewardsToDistribute, or.state.Validators[uint64(validator.Index)].PendingRewardsWei)
-				or.resetPendingRewards(uint64(validator.Index))
+
+				or.advanceStateMachine(idx, Unsubscribe)
+				// sourceToTarget map will only be populated if the oracle is past the Electra fork and there are pending consolidations
+				if targetIdx, ok := sourceToTarget[idx]; ok {
+					if or.isSubscribed(targetIdx) {
+						log.Infof("Transferring pending rewards of validator %d to its consolidation target %d", idx, targetIdx)
+						or.increaseValidatorPendingRewards(targetIdx, or.state.Validators[idx].PendingRewardsWei)
+					} else {
+						log.Infof("Target validator %d not subscribed, transferring rewards of validator %d to pool", targetIdx, idx)
+						rewardsToDistribute.Add(rewardsToDistribute, or.state.Validators[idx].PendingRewardsWei)
+					}
+				} else {
+					rewardsToDistribute.Add(rewardsToDistribute, or.state.Validators[idx].PendingRewardsWei)
+				}
+
+				or.resetPendingRewards(idx)
 			}
 		}
 
-		// Distribute the rewards among the pool. Majority of times this will be 0
 		if rewardsToDistribute.Cmp(big.NewInt(0)) != 0 {
 			or.increaseAllPendingRewards(rewardsToDistribute)
 		}
