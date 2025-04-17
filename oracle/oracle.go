@@ -1419,6 +1419,8 @@ func (or *Oracle) determineRewardMethod() string {
 	return ""
 }
 
+// Handles the reward distribution for the electra method. The rewards are distributed
+// according to the Effective Balance of each validator. The pool cut is added to the total fees.
 func (or *Oracle) handleElectraRewardDistribution(
 	reward, poolCut *big.Int,
 	eligibleValidators []phase0.ValidatorIndex,
@@ -1434,7 +1436,7 @@ func (or *Oracle) handleElectraRewardDistribution(
 	// total balance of all validators, needed to compute what each validator gets
 	totalBalance := new(big.Int)
 	for _, v := range validatorsMap {
-		totalBalance.Add(totalBalance, big.NewInt(int64(v.Balance)))
+		totalBalance.Add(totalBalance, big.NewInt(int64(v.Validator.EffectiveBalance)))
 	}
 	if totalBalance.Sign() == 0 {
 		return nil, nil, fmt.Errorf("total balance is zero")
@@ -1449,7 +1451,7 @@ func (or *Oracle) handleElectraRewardDistribution(
 	// iterate over all validators and calculate their share of the rewards
 	// we use the balance of each validator to calculate their share
 	for _, v := range validatorsMap {
-		share := new(big.Int).Mul(toDistribute, big.NewInt(int64(v.Balance)))
+		share := new(big.Int).Mul(toDistribute, big.NewInt(int64(v.Validator.EffectiveBalance)))
 		share.Div(share, totalBalance)
 
 		perValidatorRewards[uint64(v.Index)] = share

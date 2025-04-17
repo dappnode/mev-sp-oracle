@@ -3199,9 +3199,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				1: {Index: 1, Balance: 10},
-				2: {Index: 2, Balance: 30},
-				5: {Index: 5, Balance: 60},
+				1: {Index: 1, Validator: &phase0.Validator{EffectiveBalance: 10}},
+				2: {Index: 2, Validator: &phase0.Validator{EffectiveBalance: 30}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 60}},
 			}, nil
 		})
 
@@ -3241,9 +3241,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				3:  {Index: 3, Balance: 100},
-				11: {Index: 11, Balance: 100},
-				7:  {Index: 7, Balance: 100},
+				3:  {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 100}},
+				11: {Index: 11, Validator: &phase0.Validator{EffectiveBalance: 100}},
+				7:  {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
 			}, nil
 		})
 
@@ -3275,9 +3275,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				3: {Index: 3, Balance: 1},
-				5: {Index: 5, Balance: 2},
-				7: {Index: 7, Balance: 3},
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 1}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 2}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 3}},
 			}, nil
 		})
 
@@ -3309,9 +3309,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				3: {Index: 3, Balance: 0},
-				5: {Index: 5, Balance: 0},
-				7: {Index: 7, Balance: 100},
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
 			}, nil
 		})
 
@@ -3341,9 +3341,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		// Total balance = 5 + 15 + 30 = 50
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				3: {Index: 3, Balance: 5},
-				5: {Index: 5, Balance: 15},
-				7: {Index: 7, Balance: 30},
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 5}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 15}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 30}},
 			}, nil
 		})
 
@@ -3370,9 +3370,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				3: {Index: 3, Balance: 100},
-				5: {Index: 5, Balance: 100},
-				7: {Index: 7, Balance: 100},
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 100}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 100}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
 			}, nil
 		})
 
@@ -3414,9 +3414,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				3: {Index: 3, Balance: 1},
-				5: {Index: 5, Balance: 2},
-				7: {Index: 7, Balance: 3},
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 1}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 2}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 3}},
 			}, nil
 		})
 
@@ -3457,9 +3457,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				3: {Index: 3, Balance: 0},
-				5: {Index: 5, Balance: 0},
-				7: {Index: 7, Balance: 100},
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
 			}, nil
 		})
 
@@ -3558,8 +3558,8 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		// Mock only eligible validators
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				5: {Index: 5, Balance: 40},
-				7: {Index: 7, Balance: 60},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 40}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 60}},
 			}, nil
 		})
 
@@ -3599,8 +3599,8 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		// Ensure no reward is given to validator 1 because balance is 0
 		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 			return map[phase0.ValidatorIndex]*v1.Validator{
-				5: {Index: 5, Balance: 0},
-				7: {Index: 7, Balance: 100},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
 			}, nil
 		})
 
