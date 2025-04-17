@@ -299,22 +299,23 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 
 			if !validator.Status.IsActive() && or.isSubscribed(idx) {
 				log.WithFields(log.Fields{
-					"PendingRewardsWei":     or.state.Validators[idx].PendingRewardsWei,
-					"BeaconValidatorState":  or.state.Validators[idx].ValidatorStatus,
-					"ValidatorIndex":        validator.Index,
-					"OracleValidatorStatus": validator.Status,
-					"Slot":                  slot,
-					"Network":               or.cfg.Network,
+					"OracleValidatorStatus":   or.state.Validators[idx].ValidatorStatus,
+					"OraclePendingRewardsWei": or.state.Validators[idx].PendingRewardsWei,
+					"BeaconValidatorIndex":    validator.Index,
+					"BeaconValidatorState":    validator.Status,
+					"CurrentOracleSlot":       slot,
+					"Network":                 or.cfg.Network,
 				}).Info("Cleaning up validator")
 
 				or.advanceStateMachine(idx, Unsubscribe)
 				// sourceToTarget map will only be populated if the oracle is past the Electra fork and there are pending consolidations
 				if targetIdx, ok := sourceToTarget[idx]; ok {
+					log.Infof("Found consolidation for validator %d to target %d", idx, targetIdx)
 					if or.isSubscribed(targetIdx) {
 						log.Infof("Transferring pending rewards of validator %d to its consolidation target %d", idx, targetIdx)
 						or.increaseValidatorPendingRewards(targetIdx, or.state.Validators[idx].PendingRewardsWei)
 					} else {
-						log.Infof("Target validator %d not subscribed, transferring rewards of validator %d to pool", targetIdx, idx)
+						log.Infof("Target validator %d not subscribed, transferring rewards of validator %d to the pool", targetIdx, idx)
 						rewardsToDistribute.Add(rewardsToDistribute, or.state.Validators[idx].PendingRewardsWei)
 					}
 				} else {
