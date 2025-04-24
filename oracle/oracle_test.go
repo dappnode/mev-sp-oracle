@@ -3099,6 +3099,167 @@ func Test_ValidatorCleanup_1(t *testing.T) {
 	require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
 }
 
+func Test_ValidatorCleanup_Consolidations(t *testing.T) {
+	mainnetElectra := ElectraFork["mainnet"]
+
+	t.Run("Test1: Exited validator transfers rewards to consolidation target that is subscribed", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"}) // no fees
+		oracle.state.Validators[30] = &ValidatorInfo{PendingRewardsWei: big.NewInt(1000), ValidatorStatus: Active}
+		oracle.state.Validators[31] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				30: {Index: 30, Status: v1.ValidatorStateExitedUnslashed},
+				31: {Index: 31, Status: v1.ValidatorStateActiveOngoing},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: "30", TargetIndex: "31"},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[30].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[30].ValidatorStatus)
+		require.Equal(t, big.NewInt(1000), oracle.state.Validators[31].PendingRewardsWei)
+	})
+
+	t.Run("Test2: Exited validator consolidates to non-subscribed target, rewards go to pool", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"})
+		oracle.state.Validators[40] = &ValidatorInfo{PendingRewardsWei: big.NewInt(2000), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				40: {Index: 40, Status: v1.ValidatorStateExitedUnslashed},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: "40", TargetIndex: "41"},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[40].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[40].ValidatorStatus)
+		require.Equal(t, big.NewInt(2000), oracle.state.PoolAccumulatedFees) // no other validators to share with
+	})
+
+	t.Run("Test3: Exited validator consolidates to non-subscribed target, rewards go to other validators", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"})
+		oracle.state.Validators[40] = &ValidatorInfo{PendingRewardsWei: big.NewInt(10), ValidatorStatus: Active}
+		oracle.state.Validators[41] = &ValidatorInfo{PendingRewardsWei: big.NewInt(20), ValidatorStatus: Active}
+		oracle.state.Validators[42] = &ValidatorInfo{PendingRewardsWei: big.NewInt(30), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				40: {Index: 40, Status: v1.ValidatorStateExitedUnslashed},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: "40", TargetIndex: "45"},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[40].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[40].ValidatorStatus)
+		require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)               // no fees pool
+		require.Equal(t, big.NewInt(25), oracle.state.Validators[41].PendingRewardsWei) // 20 pending + 5 from distribution
+		require.Equal(t, big.NewInt(35), oracle.state.Validators[42].PendingRewardsWei) // 30 pending + 5 from distribution
+	})
+
+	t.Run("Test4: Multiple exits, only some have consolidations. Pool has fees", func(t *testing.T) {
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 10 * 100}) // 10% fees
+		oracle.state.Validators[50] = &ValidatorInfo{PendingRewardsWei: big.NewInt(10), ValidatorStatus: Active}
+		oracle.state.Validators[51] = &ValidatorInfo{PendingRewardsWei: big.NewInt(30), ValidatorStatus: Active}
+		oracle.state.Validators[52] = &ValidatorInfo{PendingRewardsWei: big.NewInt(20), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				50: {Index: 50, Status: v1.ValidatorStateExitedSlashed},   // 50 exited
+				51: {Index: 51, Status: v1.ValidatorStateExitedUnslashed}, // 51 exited
+				52: {Index: 52, Status: v1.ValidatorStateActiveOngoing},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: "51", TargetIndex: "52"}, // only 51 has consolidation
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[50].PendingRewardsWei)  // 0 pending, it exited
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[51].PendingRewardsWei)  // 0 pending, it exited
+		require.Equal(t, NotSubscribed, oracle.state.Validators[50].ValidatorStatus)    // unsubscribed
+		require.Equal(t, NotSubscribed, oracle.state.Validators[51].ValidatorStatus)    // unsubscribed
+		require.Equal(t, big.NewInt(59), oracle.state.Validators[52].PendingRewardsWei) // 20 pending + 15 from validator 51 + 9 from validator 50
+		require.Equal(t, big.NewInt(1), oracle.state.PoolAccumulatedFees)               // 10% fee of exit without consolidation from validator 50
+	})
+
+	t.Run("Test5: Same target for two consolidation sources", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"})
+		oracle.state.Validators[60] = &ValidatorInfo{PendingRewardsWei: big.NewInt(100), ValidatorStatus: Active}
+		oracle.state.Validators[61] = &ValidatorInfo{PendingRewardsWei: big.NewInt(200), ValidatorStatus: Active}
+		oracle.state.Validators[62] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				60: {Index: 60, Status: v1.ValidatorStateExitedUnslashed},
+				61: {Index: 61, Status: v1.ValidatorStateExitedUnslashed},
+				62: {Index: 62, Status: v1.ValidatorStateActiveOngoing},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: "60", TargetIndex: "62"},
+				{SourceIndex: "61", TargetIndex: "62"},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[62].PendingRewardsWei) // it has 100 from 60 and 200 from 61.
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[60].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[61].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[60].ValidatorStatus)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[61].ValidatorStatus)
+	})
+
+	t.Run("Test7: Consolidation target is exited – fallback to pool", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"})
+		oracle.state.Validators[80] = &ValidatorInfo{PendingRewardsWei: big.NewInt(999), ValidatorStatus: Active}
+		oracle.state.Validators[81] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				80: {Index: 80, Status: v1.ValidatorStateExitedUnslashed},
+				81: {Index: 81, Status: v1.ValidatorStateExitedUnslashed},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: "80", TargetIndex: "81"},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[80].PendingRewardsWei)
+		require.Equal(t, big.NewInt(999), oracle.state.PoolAccumulatedFees)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[80].ValidatorStatus)
+	})
+
+}
+
 func Test_increaseValidatorPendingRewards(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[12] = &ValidatorInfo{
