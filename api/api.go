@@ -515,15 +515,17 @@ func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Req
 			continue
 		}
 		validatorsResp = append(validatorsResp, httpOkValidatorInfo{
-			ValidatorStatus:       v.ValidatorStatus.String(),
-			BeaconValidatorStatus: beaconState.Status.String(),
-			AccumulatedRewardsWei: v.AccumulatedRewardsWei.String(),
-			PendingRewardsWei:     v.PendingRewardsWei.String(),
-			CollateralWei:         v.CollateralWei.String(),
-			WithdrawalAddress:     v.WithdrawalAddress,
-			ValidatorIndex:        v.ValidatorIndex,
-			ValidatorKey:          v.ValidatorKey,
-			SubscriptionType:      v.SubscriptionType.String(),
+			ValidatorStatus:                 v.ValidatorStatus.String(),
+			BeaconValidatorBalance:          fmt.Sprintf("%d", beaconState.Balance),
+			BeaconValidatorEffectiveBalance: fmt.Sprintf("%d", beaconState.Validator.EffectiveBalance),
+			BeaconValidatorStatus:           beaconState.Status.String(),
+			AccumulatedRewardsWei:           v.AccumulatedRewardsWei.String(),
+			PendingRewardsWei:               v.PendingRewardsWei.String(),
+			CollateralWei:                   v.CollateralWei.String(),
+			WithdrawalAddress:               v.WithdrawalAddress,
+			ValidatorIndex:                  v.ValidatorIndex,
+			ValidatorKey:                    v.ValidatorKey,
+			SubscriptionType:                v.SubscriptionType.String(),
 		})
 	}
 
@@ -601,15 +603,17 @@ func (m *ApiService) handleMemoryValidatorsByIndex(w http.ResponseWriter, req *h
 				continue
 			}
 			foundValidator := httpOkValidatorInfo{
-				ValidatorStatus:       validator.ValidatorStatus.String(),
-				BeaconValidatorStatus: beaconState.Status.String(),
-				AccumulatedRewardsWei: validator.AccumulatedRewardsWei.String(),
-				PendingRewardsWei:     validator.PendingRewardsWei.String(),
-				CollateralWei:         validator.CollateralWei.String(),
-				WithdrawalAddress:     validator.WithdrawalAddress,
-				ValidatorIndex:        validator.ValidatorIndex,
-				ValidatorKey:          validator.ValidatorKey,
-				SubscriptionType:      validator.SubscriptionType.String(),
+				ValidatorStatus:                 validator.ValidatorStatus.String(),
+				BeaconValidatorBalance:          fmt.Sprintf("%d", beaconState.Balance),
+				BeaconValidatorEffectiveBalance: fmt.Sprintf("%d", beaconState.Validator.EffectiveBalance),
+				BeaconValidatorStatus:           beaconState.Status.String(),
+				AccumulatedRewardsWei:           validator.AccumulatedRewardsWei.String(),
+				PendingRewardsWei:               validator.PendingRewardsWei.String(),
+				CollateralWei:                   validator.CollateralWei.String(),
+				WithdrawalAddress:               validator.WithdrawalAddress,
+				ValidatorIndex:                  validator.ValidatorIndex,
+				ValidatorKey:                    validator.ValidatorKey,
+				SubscriptionType:                validator.SubscriptionType.String(),
 			}
 			foundValidators = append(foundValidators, foundValidator)
 		} else {
@@ -754,15 +758,17 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 			continue
 		}
 		validatorsResp = append(validatorsResp, httpOkValidatorInfo{
-			ValidatorStatus:       v.ValidatorStatus.String(),
-			BeaconValidatorStatus: beaconState.Status.String(),
-			AccumulatedRewardsWei: v.AccumulatedRewardsWei.String(),
-			PendingRewardsWei:     v.PendingRewardsWei.String(),
-			CollateralWei:         v.CollateralWei.String(),
-			WithdrawalAddress:     v.WithdrawalAddress,
-			ValidatorIndex:        v.ValidatorIndex,
-			ValidatorKey:          v.ValidatorKey,
-			SubscriptionType:      v.SubscriptionType.String(),
+			ValidatorStatus:                 v.ValidatorStatus.String(),
+			BeaconValidatorBalance:          fmt.Sprintf("%d", beaconState.Balance),
+			BeaconValidatorEffectiveBalance: fmt.Sprintf("%d", beaconState.Validator.EffectiveBalance),
+			BeaconValidatorStatus:           beaconState.Status.String(),
+			AccumulatedRewardsWei:           v.AccumulatedRewardsWei.String(),
+			PendingRewardsWei:               v.PendingRewardsWei.String(),
+			CollateralWei:                   v.CollateralWei.String(),
+			WithdrawalAddress:               v.WithdrawalAddress,
+			ValidatorIndex:                  v.ValidatorIndex,
+			ValidatorKey:                    v.ValidatorKey,
+			SubscriptionType:                v.SubscriptionType.String(),
 		})
 	}
 	m.respondOK(w, validatorsResp)
