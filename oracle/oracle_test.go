@@ -3234,6 +3234,36 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		require.Equal(t, NotSubscribed, oracle.state.Validators[61].ValidatorStatus)
 	})
 
+	t.Run("Test6: Source validator is active – consolidation should be ignored", func(t *testing.T) {
+		// There will be lots of times where we will have a consolidation to a validator that is not exited yet.
+		// In this case, we should ignore the consolidation and dont do anything.
+		oracle := NewOracle(&Config{Network: "mainnet",
+			PoolFeesPercentOver10000: 10 * 100}) // 10% fees
+		oracle.state.Validators[70] = &ValidatorInfo{PendingRewardsWei: big.NewInt(10), ValidatorStatus: Active}
+		oracle.state.Validators[71] = &ValidatorInfo{PendingRewardsWei: big.NewInt(20), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				70: {Index: 70, Status: v1.ValidatorStateActiveOngoing}, // still active
+				71: {Index: 71, Status: v1.ValidatorStateActiveOngoing},
+			}, nil
+		})
+
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: "70", TargetIndex: "71"}, // consolidation to a subscribed validator, but it comes from an active validator! should be ignored
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(10), oracle.state.Validators[70].PendingRewardsWei)
+		require.Equal(t, big.NewInt(20), oracle.state.Validators[71].PendingRewardsWei)
+		require.Equal(t, Active, oracle.state.Validators[70].ValidatorStatus)
+		require.Equal(t, Active, oracle.state.Validators[71].ValidatorStatus)
+		require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
+	})
+
 	t.Run("Test7: Consolidation target is exited – fallback to pool", func(t *testing.T) {
 		oracle := NewOracle(&Config{Network: "mainnet"})
 		oracle.state.Validators[80] = &ValidatorInfo{PendingRewardsWei: big.NewInt(999), ValidatorStatus: Active}
