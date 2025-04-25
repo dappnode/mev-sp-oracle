@@ -365,6 +365,29 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		avgBlockRewardWei = big.NewInt(0).Div(totalRewardsSentWei, big.NewInt(0).SetUint64(totalOkPoolProposalBlocks))
 	}
 
+	// Total and average effective balance
+	totalEffectiveBalance := uint64(0)
+	effectiveBalances := m.Onchain.Validators()
+
+	for _, validator := range m.oracle.State().Validators {
+		if validator.ValidatorStatus == oracle.Active ||
+			validator.ValidatorStatus == oracle.YellowCard ||
+			validator.ValidatorStatus == oracle.RedCard {
+
+			beaconState, found := effectiveBalances[phase0.ValidatorIndex(validator.ValidatorIndex)]
+			if !found {
+				log.Warn("could not find validator in beacon state: ", validator.ValidatorIndex)
+				continue
+			}
+			totalEffectiveBalance += uint64(beaconState.Validator.EffectiveBalance)
+		}
+	}
+
+	avgEffectiveBalance := uint64(0)
+	if totalSubscribed > 0 {
+		avgEffectiveBalance = totalEffectiveBalance / totalSubscribed
+	}
+
 	m.respondOK(w, httpOkMemoryStatistics{
 		TotalSubscribed:              totalSubscribed,
 		TotalActive:                  totalActive,
@@ -384,6 +407,8 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 		TotalProposedBlocks:          totalProposedBlocks,
 		TotalMissedBlocks:            uint64(len(m.oracle.State().MissedBlocks)),
 		TotalWrongFeeBlocks:          uint64(len(m.oracle.State().WrongFeeBlocks)),
+		TotalEffectiveBalanceGwei:    fmt.Sprintf("%d", totalEffectiveBalance),
+		AvgEffectiveBalanceGwei:      fmt.Sprintf("%d", avgEffectiveBalance),
 	})
 }
 
@@ -515,17 +540,17 @@ func (m *ApiService) handleMemoryValidators(w http.ResponseWriter, req *http.Req
 			continue
 		}
 		validatorsResp = append(validatorsResp, httpOkValidatorInfo{
-			ValidatorStatus:                 v.ValidatorStatus.String(),
-			BeaconValidatorBalance:          fmt.Sprintf("%d", beaconState.Balance),
-			BeaconValidatorEffectiveBalance: fmt.Sprintf("%d", beaconState.Validator.EffectiveBalance),
-			BeaconValidatorStatus:           beaconState.Status.String(),
-			AccumulatedRewardsWei:           v.AccumulatedRewardsWei.String(),
-			PendingRewardsWei:               v.PendingRewardsWei.String(),
-			CollateralWei:                   v.CollateralWei.String(),
-			WithdrawalAddress:               v.WithdrawalAddress,
-			ValidatorIndex:                  v.ValidatorIndex,
-			ValidatorKey:                    v.ValidatorKey,
-			SubscriptionType:                v.SubscriptionType.String(),
+			ValidatorStatus:                     v.ValidatorStatus.String(),
+			BeaconValidatorBalanceGwei:          fmt.Sprintf("%d", beaconState.Balance),
+			BeaconValidatorEffectiveBalanceGwei: fmt.Sprintf("%d", beaconState.Validator.EffectiveBalance),
+			BeaconValidatorStatus:               beaconState.Status.String(),
+			AccumulatedRewardsWei:               v.AccumulatedRewardsWei.String(),
+			PendingRewardsWei:                   v.PendingRewardsWei.String(),
+			CollateralWei:                       v.CollateralWei.String(),
+			WithdrawalAddress:                   v.WithdrawalAddress,
+			ValidatorIndex:                      v.ValidatorIndex,
+			ValidatorKey:                        v.ValidatorKey,
+			SubscriptionType:                    v.SubscriptionType.String(),
 		})
 	}
 
@@ -603,17 +628,17 @@ func (m *ApiService) handleMemoryValidatorsByIndex(w http.ResponseWriter, req *h
 				continue
 			}
 			foundValidator := httpOkValidatorInfo{
-				ValidatorStatus:                 validator.ValidatorStatus.String(),
-				BeaconValidatorBalance:          fmt.Sprintf("%d", beaconState.Balance),
-				BeaconValidatorEffectiveBalance: fmt.Sprintf("%d", beaconState.Validator.EffectiveBalance),
-				BeaconValidatorStatus:           beaconState.Status.String(),
-				AccumulatedRewardsWei:           validator.AccumulatedRewardsWei.String(),
-				PendingRewardsWei:               validator.PendingRewardsWei.String(),
-				CollateralWei:                   validator.CollateralWei.String(),
-				WithdrawalAddress:               validator.WithdrawalAddress,
-				ValidatorIndex:                  validator.ValidatorIndex,
-				ValidatorKey:                    validator.ValidatorKey,
-				SubscriptionType:                validator.SubscriptionType.String(),
+				ValidatorStatus:                     validator.ValidatorStatus.String(),
+				BeaconValidatorBalanceGwei:          fmt.Sprintf("%d", beaconState.Balance),
+				BeaconValidatorEffectiveBalanceGwei: fmt.Sprintf("%d", beaconState.Validator.EffectiveBalance),
+				BeaconValidatorStatus:               beaconState.Status.String(),
+				AccumulatedRewardsWei:               validator.AccumulatedRewardsWei.String(),
+				PendingRewardsWei:                   validator.PendingRewardsWei.String(),
+				CollateralWei:                       validator.CollateralWei.String(),
+				WithdrawalAddress:                   validator.WithdrawalAddress,
+				ValidatorIndex:                      validator.ValidatorIndex,
+				ValidatorKey:                        validator.ValidatorKey,
+				SubscriptionType:                    validator.SubscriptionType.String(),
 			}
 			foundValidators = append(foundValidators, foundValidator)
 		} else {
@@ -758,17 +783,17 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 			continue
 		}
 		validatorsResp = append(validatorsResp, httpOkValidatorInfo{
-			ValidatorStatus:                 v.ValidatorStatus.String(),
-			BeaconValidatorBalance:          fmt.Sprintf("%d", beaconState.Balance),
-			BeaconValidatorEffectiveBalance: fmt.Sprintf("%d", beaconState.Validator.EffectiveBalance),
-			BeaconValidatorStatus:           beaconState.Status.String(),
-			AccumulatedRewardsWei:           v.AccumulatedRewardsWei.String(),
-			PendingRewardsWei:               v.PendingRewardsWei.String(),
-			CollateralWei:                   v.CollateralWei.String(),
-			WithdrawalAddress:               v.WithdrawalAddress,
-			ValidatorIndex:                  v.ValidatorIndex,
-			ValidatorKey:                    v.ValidatorKey,
-			SubscriptionType:                v.SubscriptionType.String(),
+			ValidatorStatus:                     v.ValidatorStatus.String(),
+			BeaconValidatorBalanceGwei:          fmt.Sprintf("%d", beaconState.Balance),
+			BeaconValidatorEffectiveBalanceGwei: fmt.Sprintf("%d", beaconState.Validator.EffectiveBalance),
+			BeaconValidatorStatus:               beaconState.Status.String(),
+			AccumulatedRewardsWei:               v.AccumulatedRewardsWei.String(),
+			PendingRewardsWei:                   v.PendingRewardsWei.String(),
+			CollateralWei:                       v.CollateralWei.String(),
+			WithdrawalAddress:                   v.WithdrawalAddress,
+			ValidatorIndex:                      v.ValidatorIndex,
+			ValidatorKey:                        v.ValidatorKey,
+			SubscriptionType:                    v.SubscriptionType.String(),
 		})
 	}
 	m.respondOK(w, validatorsResp)

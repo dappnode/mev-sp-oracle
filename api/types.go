@@ -79,6 +79,8 @@ type httpOkMemoryStatistics struct {
 	TotalProposedBlocks          uint64 `json:"total_proposed_blocks"`
 	TotalMissedBlocks            uint64 `json:"total_missed_blocks"`
 	TotalWrongFeeBlocks          uint64 `json:"total_wrongfee_blocks"`
+	TotalEffectiveBalanceGwei    string `json:"total_effective_balance_gwei"`
+	AvgEffectiveBalanceGwei      string `json:"avg_effective_balance_gwei"`
 }
 
 type httpOkProofs struct {
@@ -130,17 +132,17 @@ type httpOkBlock struct {
 }
 
 type httpOkValidatorInfo struct {
-	ValidatorStatus                 string `json:"status"`
-	BeaconValidatorStatus           string `json:"beacon_status"`
-	BeaconValidatorBalance          string `json:"beacon_balance"`
-	BeaconValidatorEffectiveBalance string `json:"beacon_effective_balance"`
-	AccumulatedRewardsWei           string `json:"accumulated_rewards_wei"`
-	PendingRewardsWei               string `json:"pending_rewards_wei"`
-	CollateralWei                   string `json:"collateral_wei"`
-	WithdrawalAddress               string `json:"withdrawal_address"`
-	ValidatorIndex                  uint64 `json:"validator_index"`
-	ValidatorKey                    string `json:"validator_key"`
-	SubscriptionType                string `json:"subscription_type"`
+	ValidatorStatus                     string `json:"status"`
+	BeaconValidatorStatus               string `json:"beacon_status"`
+	BeaconValidatorBalanceGwei          string `json:"beacon_balance_gwei"`
+	BeaconValidatorEffectiveBalanceGwei string `json:"beacon_effective_balance_gwei"`
+	AccumulatedRewardsWei               string `json:"accumulated_rewards_wei"`
+	PendingRewardsWei                   string `json:"pending_rewards_wei"`
+	CollateralWei                       string `json:"collateral_wei"`
+	WithdrawalAddress                   string `json:"withdrawal_address"`
+	ValidatorIndex                      uint64 `json:"validator_index"`
+	ValidatorKey                        string `json:"validator_key"`
+	SubscriptionType                    string `json:"subscription_type"`
 }
 
 type httpOkValidatorsByIndex struct {
