@@ -305,13 +305,13 @@ func (m *ApiService) handleMemoryStatistics(w http.ResponseWriter, req *http.Req
 	totalDonationsWei := big.NewInt(0)
 
 	// Prevent underflow
-	if uint64(m.oracle.State().LatestProcessedSlot) < 1 {
-		m.respondError(w, http.StatusInternalServerError, "head slot is lower than 1, this should not happen")
+	if uint64(m.oracle.State().LatestProcessedSlot) < SlotsInOneMonth {
+		m.respondError(w, http.StatusInternalServerError, "head slot is lower than slots in a month, this should not happen")
 		return
 	}
 
-	if uint64(m.oracle.State().LatestProcessedBlock) < 1 {
-		m.respondError(w, http.StatusInternalServerError, "head block is lower than 1, this should not happen")
+	if uint64(m.oracle.State().LatestProcessedBlock) < SlotsInOneMonth {
+		m.respondError(w, http.StatusInternalServerError, "head block is lower than slots in a month, this should not happen")
 		return
 	}
 
