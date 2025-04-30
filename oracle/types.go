@@ -67,8 +67,9 @@ const (
 type WithdrawalType uint8
 
 const (
-	BlsWithdrawal  WithdrawalType = 0
-	Eth1Withdrawal WithdrawalType = 1
+	BlsWithdrawal     WithdrawalType = 0
+	Eth1Withdrawal    WithdrawalType = 1
+	ElectraWithdrawal WithdrawalType = 2
 )
 
 // Type of validator subscription

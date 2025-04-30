@@ -38,6 +38,7 @@ import (
 var MainnetChainId = uint64(1)
 var GoerliChainId = uint64(5)
 var HoleskyChainId = uint64(17000)
+var HoodiChainId = uint64(560048)
 
 // This file provides different functions to access the blockchain state from both consensus and
 // execution layer and modifying the its state via smart contract calls.
@@ -1067,6 +1068,8 @@ func (onchain *Onchain) GetConfigFromContract(
 		network = "goerli"
 	} else if depositContract.Data.ChainID == HoleskyChainId {
 		network = "holesky"
+	} else if depositContract.Data.ChainID == HoodiChainId {
+		network = "hoodi"
 	} else {
 		log.Fatal("ChainID not supported: ", depositContract.Data.ChainID)
 	}

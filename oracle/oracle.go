@@ -43,6 +43,7 @@ type Oracle struct {
 var SlotFork1 = map[string]uint64{
 	"mainnet": uint64(10188220),
 	"holesky": uint64(2720632),
+	"hoodi":   uint64(1),
 }
 
 func NewOracle(cfg *Config) *Oracle {
@@ -999,8 +1000,8 @@ func (or *Oracle) handleManualSubscriptions(
 			continue
 		}
 
-		// Subscription received for a validator that dont have eth1 withdrawal address (bls)
-		validatorWithdrawal, err := utils.GetEth1AddressByte(validator.Validator.WithdrawalCredentials)
+		// Subscription received for a validator that doesnt have a compatible withdrawal address (0x01 or 0x02)
+		validatorWithdrawal, err := utils.GetCompatibleAddressByte(validator.Validator.WithdrawalCredentials)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"BlockNumber":    sub.Raw.BlockNumber,
@@ -1157,8 +1158,9 @@ func (or *Oracle) handleManualUnsubscriptions(
 				valIdx, " vs ", validator.Index)
 		}
 
-		// Unsubscription but for a validator that does not have an eth1 address. Should never happen
-		withdrawalAddress, err := utils.GetEth1AddressByte(validator.Validator.WithdrawalCredentials)
+		// Unsubscription received for a validator that doesnt have a compatible withdrawal address (0x01 or 0x02)
+		// This should never happen, check just in case
+		withdrawalAddress, err := utils.GetCompatibleAddressByte(validator.Validator.WithdrawalCredentials)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"BlockNumber":    unsub.Raw.BlockNumber,
@@ -1576,6 +1578,8 @@ func GetWithdrawalAndType(validator *v1.Validator) (string, WithdrawalType) {
 		return "0x" + withdrawalCred[2:], BlsWithdrawal
 	} else if utils.IsEth1Type(withdrawalCred) {
 		return "0x" + withdrawalCred[24:], Eth1Withdrawal
+	} else if utils.IsElectraType(withdrawalCred) {
+		return "0x" + withdrawalCred[24:], ElectraWithdrawal
 	}
 	// can happen if a validator sets wrong withdrawal credentials (not very likely)
 	// aka not respecting the 0x00 or 0x000000000000000000000000 prefixes

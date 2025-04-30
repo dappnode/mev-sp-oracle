@@ -657,7 +657,7 @@ func (m *ApiService) handleMemoryValidatorsByWithdrawal(w http.ResponseWriter, r
 
 		// Check if the withdrawal address matches the requested one
 		credStr := hex.EncodeToString(validator.Validator.WithdrawalCredentials)
-		eth1Add, err := utils.GetEth1Address(credStr) // TODO: Use the new function
+		eth1Add, err := utils.GetCompatibleAddress(credStr) // TODO: Use the new function
 
 		// Skip validators without non eth withdrawal address (bls address)
 		if err != nil {
