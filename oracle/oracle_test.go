@@ -3126,14 +3126,33 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		require.Equal(t, big.NewInt(1000), oracle.state.Validators[31].PendingRewardsWei)
 	})
 
-	t.Run("Test2: Exited validator consolidates to non-subscribed target, rewards go to pool", func(t *testing.T) {
+	t.Run("Test2: Exited validator consolidates to non-subscribed target, transfer rewards and not subscribe", func(t *testing.T) {
 		oracle := NewOracle(&Config{Network: "mainnet"})
 		oracle.state.Validators[40] = &ValidatorInfo{PendingRewardsWei: big.NewInt(2000), ValidatorStatus: Active}
 
-		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
-			return map[phase0.ValidatorIndex]*v1.Validator{
-				40: {Index: 40, Status: v1.ValidatorStateExitedUnslashed},
-			}, nil
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			result := make(map[phase0.ValidatorIndex]*v1.Validator)
+			for _, index := range valIndices {
+				switch index {
+				case 40:
+					result[40] = &v1.Validator{
+						Index: 40, Status: v1.ValidatorStateExitedUnslashed,
+						Validator: &phase0.Validator{
+							WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+							PublicKey:             phase0.BLSPubKey{1},
+						},
+					}
+				case 41:
+					result[41] = &v1.Validator{
+						Index: 41, Status: v1.ValidatorStateExitedUnslashed,
+						Validator: &phase0.Validator{
+							WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 38, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+							PublicKey:             phase0.BLSPubKey{1},
+						},
+					}
+				}
+			}
+			return result, nil
 		})
 		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
 			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
@@ -3145,7 +3164,9 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, big.NewInt(0), oracle.state.Validators[40].PendingRewardsWei)
 		require.Equal(t, NotSubscribed, oracle.state.Validators[40].ValidatorStatus)
-		require.Equal(t, big.NewInt(2000), oracle.state.PoolAccumulatedFees) // no other validators to share with
+		require.Equal(t, NotSubscribed, oracle.state.Validators[41].ValidatorStatus)
+		require.Equal(t, big.NewInt(2000), oracle.state.Validators[41].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
 	})
 
 	t.Run("Test3: Exited validator consolidates to non-subscribed target, rewards go to other validators", func(t *testing.T) {
@@ -3154,10 +3175,29 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		oracle.state.Validators[41] = &ValidatorInfo{PendingRewardsWei: big.NewInt(20), ValidatorStatus: Active}
 		oracle.state.Validators[42] = &ValidatorInfo{PendingRewardsWei: big.NewInt(30), ValidatorStatus: Active}
 
-		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
-			return map[phase0.ValidatorIndex]*v1.Validator{
-				40: {Index: 40, Status: v1.ValidatorStateExitedUnslashed},
-			}, nil
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			result := make(map[phase0.ValidatorIndex]*v1.Validator)
+			for _, index := range valIndices {
+				switch index {
+				case 40:
+					result[40] = &v1.Validator{
+						Index: 40, Status: v1.ValidatorStateExitedUnslashed,
+						Validator: &phase0.Validator{
+							WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+							PublicKey:             phase0.BLSPubKey{1},
+						},
+					}
+				case 45:
+					result[45] = &v1.Validator{
+						Index: 45, Status: v1.ValidatorStateExitedUnslashed,
+						Validator: &phase0.Validator{
+							WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 38, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+							PublicKey:             phase0.BLSPubKey{1},
+						},
+					}
+				}
+			}
+			return result, nil
 		})
 		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
 			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
@@ -3169,9 +3209,11 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, big.NewInt(0), oracle.state.Validators[40].PendingRewardsWei)
 		require.Equal(t, NotSubscribed, oracle.state.Validators[40].ValidatorStatus)
-		require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)               // no fees pool
-		require.Equal(t, big.NewInt(25), oracle.state.Validators[41].PendingRewardsWei) // 20 pending + 5 from distribution
-		require.Equal(t, big.NewInt(35), oracle.state.Validators[42].PendingRewardsWei) // 30 pending + 5 from distribution
+		require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees) // no fees pool
+		require.Equal(t, big.NewInt(20), oracle.state.Validators[41].PendingRewardsWei)
+		require.Equal(t, big.NewInt(30), oracle.state.Validators[42].PendingRewardsWei)
+		require.Equal(t, big.NewInt(10), oracle.state.Validators[45].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[45].ValidatorStatus)
 	})
 
 	t.Run("Test4: Multiple exits, only some have consolidations. Pool has fees", func(t *testing.T) {

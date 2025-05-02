@@ -336,21 +336,29 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 						}).Info("[CONSOLIDATION] Transferring pending rewards of consolidated source to target")
 						or.increaseValidatorPendingRewards(targetIdx, or.state.Validators[idx].PendingRewardsWei)
 					} else if !or.isTracked(targetIdx) {
+						log.WithFields(log.Fields{
+							"SourceIndex":        idx,
+							"TargetIndex":        targetIdx,
+							"PendingToAddTarget": or.state.Validators[idx].PendingRewardsWei,
+						}).Info("[CONSOLIDATION] Target is not subscribed, transfer rewards and not subscribe")
 						targetValidator, err := or.getSetOfValidators([]phase0.ValidatorIndex{
 							phase0.ValidatorIndex(targetIdx)},
 							strconv.FormatUint(slot, 10))
 						if err != nil {
 							return errors.Wrap(err, "could not get target validator info")
 						}
-						if len(targetValidator) != 1 {
-							return errors.New(fmt.Sprintf("expected just one validator. got: %v", targetValidator))
+
+						targetValidatorSingle, found := targetValidator[phase0.ValidatorIndex(targetIdx)]
+
+						if !found {
+							return errors.New(fmt.Sprintf("expected validator not found. got: %v", targetValidator))
 						}
-						validatorWithdrawal, err := utils.GetCompatibleAddressByte(targetValidator[0].Validator.WithdrawalCredentials)
+						validatorWithdrawal, err := utils.GetCompatibleAddressByte(targetValidatorSingle.Validator.WithdrawalCredentials)
 						if err != nil {
 							// In theory impossible. Fail
 							// A validator with BLS cant be consolidated
 							log.WithFields(log.Fields{
-								"WithdrawalAddr": hexutil.Encode(targetValidator[0].Validator.WithdrawalCredentials[:]),
+								"WithdrawalAddr": hexutil.Encode(targetValidatorSingle.Validator.WithdrawalCredentials[:]),
 								"TargetIndex":    targetIdx,
 							}).Fatal("[CONSOLIDATION]: The target has BLS keys, this cant happen")
 						}
@@ -362,7 +370,7 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 							CollateralWei:         big.NewInt(0),
 							WithdrawalAddress:     validatorWithdrawal,
 							ValidatorIndex:        targetIdx,
-							ValidatorKey:          hexutil.Encode(targetValidator[0].Validator.PublicKey[:]),
+							ValidatorKey:          hexutil.Encode(targetValidatorSingle.Validator.PublicKey[:]),
 							// Note that 0 = Manual. But it is NotSubscribed. May be confusing.
 							SubscriptionType: Manual,
 						}
