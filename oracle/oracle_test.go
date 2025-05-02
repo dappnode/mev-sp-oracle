@@ -3100,7 +3100,7 @@ func Test_ValidatorCleanup_1(t *testing.T) {
 }
 
 func Test_ValidatorCleanup_Consolidations(t *testing.T) {
-	mainnetElectra := ElectraFork["mainnet"]
+	mainnetElectra := SlotElectraFork["mainnet"]
 
 	t.Run("Test1: Exited validator transfers rewards to consolidation target that is subscribed", func(t *testing.T) {
 		oracle := NewOracle(&Config{Network: "mainnet"}) // no fees
@@ -3115,7 +3115,7 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		})
 		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
 			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
-				{SourceIndex: "30", TargetIndex: "31"},
+				{SourceIndex: 30, TargetIndex: 31},
 			}}, nil
 		})
 
@@ -3137,7 +3137,7 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		})
 		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
 			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
-				{SourceIndex: "40", TargetIndex: "41"},
+				{SourceIndex: 40, TargetIndex: 41},
 			}}, nil
 		})
 
@@ -3161,7 +3161,7 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		})
 		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
 			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
-				{SourceIndex: "40", TargetIndex: "45"},
+				{SourceIndex: 40, TargetIndex: 45},
 			}}, nil
 		})
 
@@ -3191,7 +3191,7 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		})
 		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
 			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
-				{SourceIndex: "51", TargetIndex: "52"}, // only 51 has consolidation
+				{SourceIndex: 51, TargetIndex: 52}, // only 51 has consolidation
 			}}, nil
 		})
 
@@ -3220,8 +3220,8 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		})
 		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
 			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
-				{SourceIndex: "60", TargetIndex: "62"},
-				{SourceIndex: "61", TargetIndex: "62"},
+				{SourceIndex: 60, TargetIndex: 62},
+				{SourceIndex: 61, TargetIndex: 62},
 			}}, nil
 		})
 
@@ -3251,7 +3251,7 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 
 		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
 			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
-				{SourceIndex: "70", TargetIndex: "71"}, // consolidation to a subscribed validator, but it comes from an active validator! should be ignored
+				{SourceIndex: 70, TargetIndex: 71}, // consolidation to a subscribed validator, but it comes from an active validator! should be ignored
 			}}, nil
 		})
 
@@ -3277,7 +3277,7 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		})
 		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
 			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
-				{SourceIndex: "80", TargetIndex: "81"},
+				{SourceIndex: 80, TargetIndex: 81},
 			}}, nil
 		})
 
@@ -3378,10 +3378,10 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 1000, // 10%
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
 
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 10
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 10
 
 		// 3 eligible validators
 		oracle.state.Validators[1] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
@@ -3419,9 +3419,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 0,
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 0
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 0
 
 		for _, idx := range []uint64{3, 11, 7} {
 			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
@@ -3453,9 +3453,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 0,
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 1
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
 
 		for _, idx := range []uint64{3, 5, 7} {
 			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
@@ -3487,9 +3487,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 0,
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 1
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
 
 		for _, idx := range []uint64{3, 5, 7} {
 			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
@@ -3521,9 +3521,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 0,
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 1
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
 
 		for _, idx := range []uint64{3, 5, 7} {
 			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
@@ -3551,9 +3551,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 1000, // 10%
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 1
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
 
 		for _, idx := range []uint64{3, 5, 7} {
 			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
@@ -3591,9 +3591,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 2000, // 20%
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 1
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
 
 		for _, idx := range []uint64{3, 5, 7} {
 			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
@@ -3638,9 +3638,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 1000, // 10%
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 1
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
 
 		for _, idx := range []uint64{3, 5, 7} {
 			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
@@ -3734,10 +3734,10 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 500, // 5%
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
 
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 100
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 100
 
 		// Define validators
 		oracle.state.Validators[2] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Banned}
@@ -3780,9 +3780,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 0,
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 1
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
 
 		oracle.state.Validators[5] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
 		oracle.state.Validators[7] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: YellowCard}
@@ -3810,9 +3810,9 @@ func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
 		oracle := NewOracle(&Config{
 			Network:                  "mainnet",
 			PoolFeesPercentOver10000: 1234,
-			DeployedSlot:             ElectraFork["mainnet"],
+			DeployedSlot:             SlotElectraFork["mainnet"],
 		})
-		oracle.state.NextSlotToProcess = ElectraFork["mainnet"] + 1
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
 
 		oracle.state.Validators[0] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: RedCard}
 		oracle.state.Validators[1] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Banned}

@@ -43,6 +43,12 @@ var GoerliChainId = uint64(5)
 var HoleskyChainId = uint64(17000)
 var HoodiChainId = uint64(560048)
 
+// Network names
+var Mainnet = "mainnet"
+var Goerli = "goerli"
+var Holesky = "holesky"
+var Hoodi = "hoodi"
+
 // This file provides different functions to access the blockchain state from both consensus and
 // execution layer and modifying the its state via smart contract calls.
 type EpochDuties struct {
@@ -1066,13 +1072,13 @@ func (onchain *Onchain) GetConfigFromContract(
 
 	network := ""
 	if depositContract.Data.ChainID == MainnetChainId {
-		network = "mainnet"
+		network = Mainnet
 	} else if depositContract.Data.ChainID == GoerliChainId {
-		network = "goerli"
+		network = Goerli
 	} else if depositContract.Data.ChainID == HoleskyChainId {
-		network = "holesky"
+		network = Holesky
 	} else if depositContract.Data.ChainID == HoodiChainId {
-		network = "hoodi"
+		network = Hoodi
 	} else {
 		log.Fatal("ChainID not supported: ", depositContract.Data.ChainID)
 	}
@@ -1770,8 +1776,8 @@ func (o *Onchain) GetRetryOpts(opts []retry.Option) []retry.Option {
 // TODO: Manual implementation of pending consolidations beacon API call
 // Remove once attestantio eth2 library is updated to support it
 type PendingConsolidation struct {
-	SourceIndex string `json:"source_index"`
-	TargetIndex string `json:"target_index"`
+	SourceIndex phase0.ValidatorIndex `json:"source_index"`
+	TargetIndex phase0.ValidatorIndex `json:"target_index"`
 }
 
 type PendingConsolidationsResponse struct {

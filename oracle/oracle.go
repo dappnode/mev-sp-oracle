@@ -39,18 +39,29 @@ type Oracle struct {
 	getPendingConsolidations GetPendingConsolidationsFunc
 }
 
+// Rewards calculation methods. Different methods on how
+// to calculate the rewards of the pool.
+const (
+	RewardMethodPreFork1 = "pre_fork1"
+	RewardMethodFork1    = "fork1"
+	RewardMethodElectra  = "electra"
+)
+
 // Fork 1 changes two things:
 // - minor fix in rewards calculation (some wei rouding)
 // - exited and slahed validators no longer get fees
 var SlotFork1 = map[string]uint64{
-	"mainnet": uint64(10188220),
-	"holesky": uint64(2720632),
-	"hoodi":   uint64(1),
+	Mainnet: uint64(10188220),
+	Holesky: uint64(2720632),
+	Hoodi:   uint64(1),
 }
 
-var ElectraFork = map[string]uint64{
-	"mainnet": uint64(11649024), // May 7, 2025
-	"hoodi":   uint64(1),
+// Fork in slots
+var SlotElectraFork = map[string]uint64{
+	// https://github.com/sigp/lighthouse/blob/e42406d7b79a85ad4622f3a7440ff6468ac4c9e1/common/eth2_network_config/built_in_network_configs/mainnet/config.yaml#L52
+	Mainnet: uint64(11649024), // May 7, 2025
+	// https://github.com/sigp/lighthouse/blob/e42406d7b79a85ad4622f3a7440ff6468ac4c9e1/common/eth2_network_config/built_in_network_configs/hoodi/config.yaml#L41
+	Hoodi: uint64(65536),
 }
 
 func NewOracle(cfg *Config) *Oracle {
@@ -268,18 +279,15 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 		sourceToTarget = make(map[uint64]uint64)
 
 		// 🔒 Only fetch consolidations if past Electra fork
-		if slot >= ElectraFork[or.cfg.Network] {
+		if slot >= SlotElectraFork[or.cfg.Network] {
 			pendingConsolidations, err := or.getPendingConsolidations(strconv.FormatUint(slot, 10))
 			if err != nil {
 				return errors.Wrap(err, "could not fetch pending consolidations")
 			}
 
 			for _, c := range pendingConsolidations.Data {
-				srcIdx, err1 := strconv.ParseUint(c.SourceIndex, 10, 64)
-				tgtIdx, err2 := strconv.ParseUint(c.TargetIndex, 10, 64)
-				if err1 == nil && err2 == nil {
-					sourceToTarget[srcIdx] = tgtIdx
-				}
+				sourceToTarget[uint64(c.SourceIndex)] = uint64(c.TargetIndex)
+
 			}
 		}
 
@@ -310,13 +318,64 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 				or.advanceStateMachine(idx, Unsubscribe)
 				// sourceToTarget map will only be populated if the oracle is past the Electra fork and there are pending consolidations
 				if targetIdx, ok := sourceToTarget[idx]; ok {
-					log.Infof("Found consolidation for validator %d to target %d", idx, targetIdx)
-					if or.isSubscribed(targetIdx) {
-						log.Infof("Transferring pending rewards of validator %d to its consolidation target %d", idx, targetIdx)
+					log.WithFields(log.Fields{
+						"SourceIndex":        idx,
+						"TargetIndex":        targetIdx,
+						"SourceState":        or.state.Validators[idx].ValidatorStatus,
+						"IsTargetTracked":    or.isTracked(targetIdx),
+						"IsTargetBanned":     or.isBanned(targetIdx),
+						"IsTargetSubscribed": or.isSubscribed(targetIdx),
+					}).Info("[CONSOLIDATION] of exited source found")
+					if or.isTracked(targetIdx) && !or.isBanned(targetIdx) {
+						log.WithFields(log.Fields{
+							"SourceIndex":        idx,
+							"TargetIndex":        targetIdx,
+							"SourceState":        or.state.Validators[idx].ValidatorStatus,
+							"TargetState":        or.state.Validators[targetIdx].ValidatorStatus,
+							"PendingTransferred": or.state.Validators[idx].PendingRewardsWei,
+						}).Info("[CONSOLIDATION] Transferring pending rewards of consolidated source to target")
 						or.increaseValidatorPendingRewards(targetIdx, or.state.Validators[idx].PendingRewardsWei)
-					} else {
-						log.Infof("Target validator %d not subscribed, transferring rewards of validator %d to the pool", targetIdx, idx)
+					} else if !or.isTracked(targetIdx) {
+						targetValidator, err := or.getSetOfValidators([]phase0.ValidatorIndex{
+							phase0.ValidatorIndex(targetIdx)},
+							strconv.FormatUint(slot, 10))
+						if err != nil {
+							return errors.Wrap(err, "could not get target validator info")
+						}
+						if len(targetValidator) != 1 {
+							return errors.New(fmt.Sprintf("expected just one validator. got: %v", targetValidator))
+						}
+						validatorWithdrawal, err := utils.GetCompatibleAddressByte(targetValidator[0].Validator.WithdrawalCredentials)
+						if err != nil {
+							// In theory impossible. Fail
+							// A validator with BLS cant be consolidated
+							log.WithFields(log.Fields{
+								"WithdrawalAddr": hexutil.Encode(targetValidator[0].Validator.WithdrawalCredentials[:]),
+								"TargetIndex":    targetIdx,
+							}).Fatal("[CONSOLIDATION]: The target has BLS keys, this cant happen")
+						}
+
+						or.state.Validators[targetIdx] = &ValidatorInfo{
+							ValidatorStatus:       NotSubscribed,
+							AccumulatedRewardsWei: big.NewInt(0),
+							PendingRewardsWei:     or.state.Validators[idx].PendingRewardsWei,
+							CollateralWei:         big.NewInt(0),
+							WithdrawalAddress:     validatorWithdrawal,
+							ValidatorIndex:        targetIdx,
+							ValidatorKey:          hexutil.Encode(targetValidator[0].Validator.PublicKey[:]),
+							// Note that 0 = Manual. But it is NotSubscribed. May be confusing.
+							SubscriptionType: Manual,
+						}
+
+					} else if or.isBanned(targetIdx) {
+						log.WithFields(log.Fields{
+							"SourceIndex":     idx,
+							"TargetIndex":     targetIdx,
+							"PendingGoToPool": or.state.Validators[idx].PendingRewardsWei,
+						}).Info("[CONSOLIDATION] Target is banned, rewards go to pool")
 						rewardsToDistribute.Add(rewardsToDistribute, or.state.Validators[idx].PendingRewardsWei)
+					} else {
+						log.Fatal("[CONSOLIDATION] Fail. Unknown case")
 					}
 				} else {
 					rewardsToDistribute.Add(rewardsToDistribute, or.state.Validators[idx].PendingRewardsWei)
@@ -1447,14 +1506,14 @@ func (or *Oracle) getEligibleValidators() []phase0.ValidatorIndex {
 }
 
 func (or *Oracle) determineRewardMethod() string {
-	if forkSlot, found := ElectraFork[or.cfg.Network]; found && or.state.NextSlotToProcess >= forkSlot {
-		return "electra"
+	if forkSlot, found := SlotElectraFork[or.cfg.Network]; found && or.state.NextSlotToProcess >= forkSlot {
+		return RewardMethodElectra
 	}
 	if forkSlot, found := SlotFork1[or.cfg.Network]; found && or.state.NextSlotToProcess >= forkSlot {
-		return "fork1"
+		return RewardMethodFork1
 	}
 	if _, found := SlotFork1[or.cfg.Network]; found {
-		return "prefork1"
+		return RewardMethodPreFork1
 	}
 	log.Fatal("Network not found in forks list: ", or.cfg.Network)
 	return ""
@@ -1494,6 +1553,14 @@ func (or *Oracle) handleElectraRewardDistribution(
 	for _, v := range validatorsMap {
 		share := new(big.Int).Mul(toDistribute, big.NewInt(int64(v.Validator.EffectiveBalance)))
 		share.Div(share, totalBalance)
+
+		log.WithFields(log.Fields{
+			"ValidatorIndex":            v.Index,
+			"ValidatorEffectiveBalance": v.Validator.EffectiveBalance,
+			"TotalEffectiveBalance":     totalBalance,
+			"RewardToDistribute":        toDistribute,
+			"Share":                     share,
+		}).Info("[ELECTRA] Validator share")
 
 		perValidatorRewards[uint64(v.Index)] = share
 		totalDistributed.Add(totalDistributed, share)
@@ -1605,11 +1672,11 @@ func (or *Oracle) increaseAllPendingRewards(reward *big.Int) {
 	var err error
 
 	switch method {
-	case "electra":
+	case RewardMethodElectra:
 		electraRewards, totalFees, err = or.handleElectraRewardDistribution(reward, poolCut, eligibleValidators)
-	case "fork1":
+	case RewardMethodFork1:
 		totalFees, perValidatorReward, err = or.handleFork1RewardDistribution(reward, poolCut, numEligibleValidators)
-	case "prefork1":
+	case RewardMethodPreFork1:
 		totalFees, perValidatorReward, err = or.handlePreFork1RewardDistribution(reward, poolCut, aux, over, numEligibleValidators)
 	default:
 		log.Fatal("Unknown reward distribution method")
@@ -1625,26 +1692,32 @@ func (or *Oracle) increaseAllPendingRewards(reward *big.Int) {
 	// because the rewards are proportional to the balance of the validator. The rest of the forks
 	// are just a fixed amount per validator.
 	switch method {
-	case "electra":
+	case RewardMethodElectra:
+		log.WithFields(log.Fields{
+			"AmountEligibleValidators": numEligibleValidators,
+			"PoolFeesWei":              totalFees,
+			"TotalRewardWei":           reward,
+		}).Info("[PECTRA] Increasing pending rewards of eligible validators")
 		for idx, reward := range electraRewards {
 			or.state.Validators[idx].PendingRewardsWei.Add(
 				or.state.Validators[idx].PendingRewardsWei, reward,
 			)
 		}
-	default:
+	case RewardMethodFork1, RewardMethodPreFork1:
+		log.WithFields(log.Fields{
+			"AmountEligibleValidators": numEligibleValidators,
+			"RewardPerValidatorWei":    perValidatorReward,
+			"PoolFeesWei":              totalFees,
+			"TotalRewardWei":           reward,
+		}).Info("Increasing pending rewards of eligible validators")
 		for _, eligibleIndex := range eligibleValidators {
 			or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei.Add(
 				or.state.Validators[uint64(eligibleIndex)].PendingRewardsWei, perValidatorReward,
 			)
 		}
+	default:
+		log.Fatal("Unknown reward distribution method: ", method)
 	}
-
-	log.WithFields(log.Fields{
-		"AmountEligibleValidators": numEligibleValidators,
-		"RewardPerValidatorWei":    perValidatorReward,
-		"PoolFeesWei":              totalFees,
-		"TotalRewardWei":           reward,
-	}).Info("Increasing pending rewards of eligible validators")
 }
 
 // Increases the pending rewards of a given validator index.
