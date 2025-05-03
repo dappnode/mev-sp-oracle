@@ -3099,6 +3099,239 @@ func Test_ValidatorCleanup_1(t *testing.T) {
 	require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
 }
 
+func Test_ValidatorCleanup_Consolidations(t *testing.T) {
+	mainnetElectra := SlotElectraFork["mainnet"]
+
+	t.Run("Test1: Exited validator transfers rewards to consolidation target that is subscribed", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"}) // no fees
+		oracle.state.Validators[30] = &ValidatorInfo{PendingRewardsWei: big.NewInt(1000), ValidatorStatus: Active}
+		oracle.state.Validators[31] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				30: {Index: 30, Status: v1.ValidatorStateExitedUnslashed},
+				31: {Index: 31, Status: v1.ValidatorStateActiveOngoing},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: 30, TargetIndex: 31},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[30].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[30].ValidatorStatus)
+		require.Equal(t, big.NewInt(1000), oracle.state.Validators[31].PendingRewardsWei)
+	})
+
+	t.Run("Test2: Exited validator consolidates to non-subscribed target, transfer rewards and not subscribe", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"})
+		oracle.state.Validators[40] = &ValidatorInfo{PendingRewardsWei: big.NewInt(2000), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			result := make(map[phase0.ValidatorIndex]*v1.Validator)
+			for _, index := range valIndices {
+				switch index {
+				case 40:
+					result[40] = &v1.Validator{
+						Index: 40, Status: v1.ValidatorStateExitedUnslashed,
+						Validator: &phase0.Validator{
+							WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+							PublicKey:             phase0.BLSPubKey{1},
+						},
+					}
+				case 41:
+					result[41] = &v1.Validator{
+						Index: 41, Status: v1.ValidatorStateExitedUnslashed,
+						Validator: &phase0.Validator{
+							WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 38, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+							PublicKey:             phase0.BLSPubKey{1},
+						},
+					}
+				}
+			}
+			return result, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: 40, TargetIndex: 41},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[40].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[40].ValidatorStatus)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[41].ValidatorStatus)
+		require.Equal(t, big.NewInt(2000), oracle.state.Validators[41].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
+	})
+
+	t.Run("Test3: Exited validator consolidates to non-subscribed target, rewards go to other validators", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"})
+		oracle.state.Validators[40] = &ValidatorInfo{PendingRewardsWei: big.NewInt(10), ValidatorStatus: Active}
+		oracle.state.Validators[41] = &ValidatorInfo{PendingRewardsWei: big.NewInt(20), ValidatorStatus: Active}
+		oracle.state.Validators[42] = &ValidatorInfo{PendingRewardsWei: big.NewInt(30), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			result := make(map[phase0.ValidatorIndex]*v1.Validator)
+			for _, index := range valIndices {
+				switch index {
+				case 40:
+					result[40] = &v1.Validator{
+						Index: 40, Status: v1.ValidatorStateExitedUnslashed,
+						Validator: &phase0.Validator{
+							WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 39, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+							PublicKey:             phase0.BLSPubKey{1},
+						},
+					}
+				case 45:
+					result[45] = &v1.Validator{
+						Index: 45, Status: v1.ValidatorStateExitedUnslashed,
+						Validator: &phase0.Validator{
+							WithdrawalCredentials: []byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 148, 38, 163, 9, 145, 23, 15, 145, 125, 123, 131, 222, 246, 228, 77, 38, 87, 120, 113, 237},
+							PublicKey:             phase0.BLSPubKey{1},
+						},
+					}
+				}
+			}
+			return result, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: 40, TargetIndex: 45},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[40].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[40].ValidatorStatus)
+		require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees) // no fees pool
+		require.Equal(t, big.NewInt(20), oracle.state.Validators[41].PendingRewardsWei)
+		require.Equal(t, big.NewInt(30), oracle.state.Validators[42].PendingRewardsWei)
+		require.Equal(t, big.NewInt(10), oracle.state.Validators[45].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[45].ValidatorStatus)
+	})
+
+	t.Run("Test4: Multiple exits, only some have consolidations. Pool has fees", func(t *testing.T) {
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 10 * 100}) // 10% fees
+		oracle.state.Validators[50] = &ValidatorInfo{PendingRewardsWei: big.NewInt(10), ValidatorStatus: Active}
+		oracle.state.Validators[51] = &ValidatorInfo{PendingRewardsWei: big.NewInt(30), ValidatorStatus: Active}
+		oracle.state.Validators[52] = &ValidatorInfo{PendingRewardsWei: big.NewInt(20), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				50: {Index: 50, Status: v1.ValidatorStateExitedSlashed},   // 50 exited
+				51: {Index: 51, Status: v1.ValidatorStateExitedUnslashed}, // 51 exited
+				52: {Index: 52, Status: v1.ValidatorStateActiveOngoing},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: 51, TargetIndex: 52}, // only 51 has consolidation
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[50].PendingRewardsWei)  // 0 pending, it exited
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[51].PendingRewardsWei)  // 0 pending, it exited
+		require.Equal(t, NotSubscribed, oracle.state.Validators[50].ValidatorStatus)    // unsubscribed
+		require.Equal(t, NotSubscribed, oracle.state.Validators[51].ValidatorStatus)    // unsubscribed
+		require.Equal(t, big.NewInt(59), oracle.state.Validators[52].PendingRewardsWei) // 20 pending + 15 from validator 51 + 9 from validator 50
+		require.Equal(t, big.NewInt(1), oracle.state.PoolAccumulatedFees)               // 10% fee of exit without consolidation from validator 50
+	})
+
+	t.Run("Test5: Same target for two consolidation sources", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"})
+		oracle.state.Validators[60] = &ValidatorInfo{PendingRewardsWei: big.NewInt(100), ValidatorStatus: Active}
+		oracle.state.Validators[61] = &ValidatorInfo{PendingRewardsWei: big.NewInt(200), ValidatorStatus: Active}
+		oracle.state.Validators[62] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				60: {Index: 60, Status: v1.ValidatorStateExitedUnslashed},
+				61: {Index: 61, Status: v1.ValidatorStateExitedUnslashed},
+				62: {Index: 62, Status: v1.ValidatorStateActiveOngoing},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: 60, TargetIndex: 62},
+				{SourceIndex: 61, TargetIndex: 62},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[62].PendingRewardsWei) // it has 100 from 60 and 200 from 61.
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[60].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[61].PendingRewardsWei)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[60].ValidatorStatus)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[61].ValidatorStatus)
+	})
+
+	t.Run("Test6: Source validator is active – consolidation should be ignored", func(t *testing.T) {
+		// There will be lots of times where we will have a consolidation to a validator that is not exited yet.
+		// In this case, we should ignore the consolidation and dont do anything.
+		oracle := NewOracle(&Config{Network: "mainnet",
+			PoolFeesPercentOver10000: 10 * 100}) // 10% fees
+		oracle.state.Validators[70] = &ValidatorInfo{PendingRewardsWei: big.NewInt(10), ValidatorStatus: Active}
+		oracle.state.Validators[71] = &ValidatorInfo{PendingRewardsWei: big.NewInt(20), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				70: {Index: 70, Status: v1.ValidatorStateActiveOngoing}, // still active
+				71: {Index: 71, Status: v1.ValidatorStateActiveOngoing},
+			}, nil
+		})
+
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: 70, TargetIndex: 71}, // consolidation to a subscribed validator, but it comes from an active validator! should be ignored
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(10), oracle.state.Validators[70].PendingRewardsWei)
+		require.Equal(t, big.NewInt(20), oracle.state.Validators[71].PendingRewardsWei)
+		require.Equal(t, Active, oracle.state.Validators[70].ValidatorStatus)
+		require.Equal(t, Active, oracle.state.Validators[71].ValidatorStatus)
+		require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
+	})
+
+	t.Run("Test7: Consolidation target is exited – fallback to pool", func(t *testing.T) {
+		oracle := NewOracle(&Config{Network: "mainnet"})
+		oracle.state.Validators[80] = &ValidatorInfo{PendingRewardsWei: big.NewInt(999), ValidatorStatus: Active}
+		oracle.state.Validators[81] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+
+		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				80: {Index: 80, Status: v1.ValidatorStateExitedUnslashed},
+				81: {Index: 81, Status: v1.ValidatorStateExitedUnslashed},
+			}, nil
+		})
+		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+				{SourceIndex: 80, TargetIndex: 81},
+			}}, nil
+		})
+
+		err := oracle.ValidatorCleanup(mainnetElectra + 1)
+		require.NoError(t, err)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[80].PendingRewardsWei)
+		require.Equal(t, big.NewInt(999), oracle.state.PoolAccumulatedFees)
+		require.Equal(t, NotSubscribed, oracle.state.Validators[80].ValidatorStatus)
+	})
+
+}
+
 func Test_increaseValidatorPendingRewards(t *testing.T) {
 	oracle := NewOracle(&Config{})
 	oracle.state.Validators[12] = &ValidatorInfo{
@@ -3119,6 +3352,516 @@ func Test_increaseValidatorPendingRewards(t *testing.T) {
 
 	oracle.increaseValidatorPendingRewards(12, big.NewInt(1))
 	require.Equal(t, big.NewInt(8765432+100+1), oracle.state.Validators[12].PendingRewardsWei)
+}
+
+func TestGetEligibleValidators(t *testing.T) {
+	t.Run("No validators in state", func(t *testing.T) {
+		oracle := NewOracle(&Config{})
+		oracle.state.Validators = map[uint64]*ValidatorInfo{}
+
+		result := oracle.getEligibleValidators()
+		require.Empty(t, result)
+	})
+
+	t.Run("All validators eligible", func(t *testing.T) {
+		oracle := NewOracle(&Config{})
+		oracle.state.Validators = map[uint64]*ValidatorInfo{
+			0: {ValidatorStatus: Active},
+			1: {ValidatorStatus: YellowCard},
+			2: {ValidatorStatus: Active},
+		}
+
+		result := oracle.getEligibleValidators()
+		require.ElementsMatch(t, []phase0.ValidatorIndex{0, 1, 2}, result)
+	})
+
+	t.Run("All validators ineligible", func(t *testing.T) {
+		oracle := NewOracle(&Config{})
+		oracle.state.Validators = map[uint64]*ValidatorInfo{
+			0: {ValidatorStatus: RedCard},
+			1: {ValidatorStatus: NotSubscribed},
+			2: {ValidatorStatus: Banned},
+		}
+
+		result := oracle.getEligibleValidators()
+		require.Empty(t, result)
+	})
+
+	t.Run("Some eligible, some not", func(t *testing.T) {
+		oracle := NewOracle(&Config{})
+		oracle.state.Validators = map[uint64]*ValidatorInfo{
+			0: {ValidatorStatus: RedCard},
+			1: {ValidatorStatus: Active},
+			2: {ValidatorStatus: YellowCard},
+			3: {ValidatorStatus: Banned},
+		}
+
+		result := oracle.getEligibleValidators()
+		require.ElementsMatch(t, []phase0.ValidatorIndex{1, 2}, result)
+	})
+
+	t.Run("Non-contiguous validator indices", func(t *testing.T) {
+		oracle := NewOracle(&Config{})
+		oracle.state.Validators = map[uint64]*ValidatorInfo{
+			2:  {ValidatorStatus: Active},
+			10: {ValidatorStatus: YellowCard},
+			20: {ValidatorStatus: RedCard},
+			30: {ValidatorStatus: Active},
+		}
+
+		result := oracle.getEligibleValidators()
+		require.ElementsMatch(t, []phase0.ValidatorIndex{2, 10, 30}, result)
+	})
+}
+
+func Test_IncreaseAllPendingRewards_AllForks(t *testing.T) {
+	t.Run("Proportional distribution with remainder to pool", func(t *testing.T) {
+		reward := big.NewInt(1000000000) // 1 Gwei
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 1000, // 10%
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 10
+
+		// 3 eligible validators
+		oracle.state.Validators[1] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		oracle.state.Validators[2] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		oracle.state.Validators[5] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: YellowCard}
+
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				1: {Index: 1, Validator: &phase0.Validator{EffectiveBalance: 10}},
+				2: {Index: 2, Validator: &phase0.Validator{EffectiveBalance: 30}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 60}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		expectedPoolCut := big.NewInt(100000000)
+		require.True(t, oracle.state.PoolAccumulatedFees.Cmp(expectedPoolCut) >= 0)
+
+		require.Equal(t, big.NewInt(90000000), oracle.state.Validators[1].PendingRewardsWei)  // 10%
+		require.Equal(t, big.NewInt(270000000), oracle.state.Validators[2].PendingRewardsWei) // 30%
+		require.Equal(t, big.NewInt(540000000), oracle.state.Validators[5].PendingRewardsWei) // 60%
+
+		totalValidatorRewards := big.NewInt(0).
+			Add(oracle.state.Validators[1].PendingRewardsWei,
+				big.NewInt(0).Add(oracle.state.Validators[2].PendingRewardsWei, oracle.state.Validators[5].PendingRewardsWei),
+			)
+
+		totalDistributed := big.NewInt(0).Add(totalValidatorRewards, oracle.state.PoolAccumulatedFees)
+		require.Equal(t, reward, totalDistributed)
+	})
+
+	t.Run("Electra fork – 0% pool fee - Equal balances with non-eligible validators", func(t *testing.T) {
+		reward := big.NewInt(900)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 0,
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 0
+
+		for _, idx := range []uint64{3, 11, 7} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+		oracle.state.Validators[9] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: RedCard}
+		oracle.state.Validators[5] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Banned}
+		oracle.state.Validators[13] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: NotSubscribed}
+
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				3:  {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 100}},
+				11: {Index: 11, Validator: &phase0.Validator{EffectiveBalance: 100}},
+				7:  {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[3].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[7].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[9].PendingRewardsWei)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[11].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[13].PendingRewardsWei)
+	})
+
+	t.Run("Electra fork – 0% pool fee - Balances in 1:2:3 ratio with non-eligible validators", func(t *testing.T) {
+		reward := big.NewInt(600)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 0,
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
+
+		for _, idx := range []uint64{3, 5, 7} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+		oracle.state.Validators[9] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: RedCard}
+		oracle.state.Validators[11] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Banned}
+		oracle.state.Validators[13] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: NotSubscribed}
+
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 1}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 2}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 3}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		require.Equal(t, big.NewInt(100), oracle.state.Validators[3].PendingRewardsWei)
+		require.Equal(t, big.NewInt(200), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[7].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[9].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[11].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[13].PendingRewardsWei)
+	})
+
+	t.Run("Electra fork – 0% pool fee - One validator gets all rewards with non-eligible validators", func(t *testing.T) {
+		reward := big.NewInt(900)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 0,
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
+
+		for _, idx := range []uint64{3, 5, 7} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+		oracle.state.Validators[9] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: RedCard}
+		oracle.state.Validators[11] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Banned}
+		oracle.state.Validators[13] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: NotSubscribed}
+
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[3].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, big.NewInt(900), oracle.state.Validators[7].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[9].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[11].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[13].PendingRewardsWei)
+	})
+
+	t.Run("Electra fork – 0% pool fee - Uneven reward with remainder", func(t *testing.T) {
+		reward := big.NewInt(1000)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 0,
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
+
+		for _, idx := range []uint64{3, 5, 7} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+
+		// Total balance = 5 + 15 + 30 = 50
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 5}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 15}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 30}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		// 5/50 = 10%, 15/50 = 30%, 30/50 = 60%
+		require.Equal(t, big.NewInt(100), oracle.state.Validators[3].PendingRewardsWei)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, big.NewInt(600), oracle.state.Validators[7].PendingRewardsWei)
+	})
+
+	t.Run("Electra fork – 10% pool fee - equal balances", func(t *testing.T) {
+		reward := big.NewInt(900)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 1000, // 10%
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
+
+		for _, idx := range []uint64{3, 5, 7} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 100}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 100}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		// Pool gets 10% = 90
+		require.Equal(t, big.NewInt(90), oracle.state.PoolAccumulatedFees)
+
+		// Left to distribute = 810 → split 3 ways = 270
+		require.Equal(t, big.NewInt(270), oracle.state.Validators[3].PendingRewardsWei)
+		require.Equal(t, big.NewInt(270), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, big.NewInt(270), oracle.state.Validators[7].PendingRewardsWei)
+
+		totalValidatorRewards := big.NewInt(0).
+			Add(oracle.state.Validators[3].PendingRewardsWei,
+				big.NewInt(0).Add(oracle.state.Validators[5].PendingRewardsWei, oracle.state.Validators[7].PendingRewardsWei),
+			)
+		totalDistributed := big.NewInt(0).Add(totalValidatorRewards, oracle.state.PoolAccumulatedFees)
+
+		require.Equal(t, reward, totalDistributed)
+	})
+
+	t.Run("Electra fork – 20% pool fee - 1:2:3 balance ratio", func(t *testing.T) {
+		reward := big.NewInt(600)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 2000, // 20%
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
+
+		for _, idx := range []uint64{3, 5, 7} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+
+		oracle.state.Validators[9] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: RedCard}
+		oracle.state.Validators[11] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Banned}
+		oracle.state.Validators[13] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: NotSubscribed}
+
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 1}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 2}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 3}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		expectedPoolFee := big.NewInt(120) // 20% of 600
+		require.Equal(t, expectedPoolFee, oracle.state.PoolAccumulatedFees)
+
+		// Left to distribute: 480 → 1/6, 2/6, 3/6 = 80, 160, 240
+		require.Equal(t, big.NewInt(80), oracle.state.Validators[3].PendingRewardsWei)
+		require.Equal(t, big.NewInt(160), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, big.NewInt(240), oracle.state.Validators[7].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[9].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[11].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[13].PendingRewardsWei)
+
+		totalValidatorRewards := big.NewInt(0).
+			Add(oracle.state.Validators[3].PendingRewardsWei,
+				big.NewInt(0).Add(oracle.state.Validators[5].PendingRewardsWei, oracle.state.Validators[7].PendingRewardsWei),
+			)
+		totalDistributed := big.NewInt(0).Add(totalValidatorRewards, oracle.state.PoolAccumulatedFees)
+
+		require.Equal(t, reward, totalDistributed)
+	})
+
+	t.Run("Electra fork – 10% pool fee - one validator gets all", func(t *testing.T) {
+		reward := big.NewInt(1000)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 1000, // 10%
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
+
+		for _, idx := range []uint64{3, 5, 7} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				3: {Index: 3, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		// Pool cut = 100, remainder = 900 → all to validator 7
+		require.Equal(t, big.NewInt(100), oracle.state.PoolAccumulatedFees)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[3].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, big.NewInt(900), oracle.state.Validators[7].PendingRewardsWei)
+
+		totalDistributed := new(big.Int).Add(oracle.state.Validators[7].PendingRewardsWei, oracle.state.PoolAccumulatedFees)
+		require.Equal(t, reward, totalDistributed)
+	})
+
+	t.Run("Fork1 – Even split with zero pool fees", func(t *testing.T) {
+		reward := big.NewInt(900)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 0,
+		})
+		oracle.state.NextSlotToProcess = SlotFork1["mainnet"] + 5
+
+		for _, idx := range []uint64{4, 6, 10} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+
+		oracle.increaseAllPendingRewards(reward)
+
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[4].PendingRewardsWei)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[6].PendingRewardsWei)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[10].PendingRewardsWei)
+	})
+
+	t.Run("Fork1 – Remainder goes to pool", func(t *testing.T) {
+		reward := big.NewInt(1001) // 1001 / 3 = 333 each + 2 remainder
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 0,
+		})
+		oracle.state.NextSlotToProcess = SlotFork1["mainnet"] + 1
+
+		for _, idx := range []uint64{3, 5, 9} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+
+		oracle.increaseAllPendingRewards(reward)
+
+		require.Equal(t, big.NewInt(333), oracle.state.Validators[3].PendingRewardsWei)
+		require.Equal(t, big.NewInt(333), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, big.NewInt(333), oracle.state.Validators[9].PendingRewardsWei)
+
+		require.Equal(t, big.NewInt(2), oracle.state.PoolAccumulatedFees)
+	})
+
+	t.Run("PreFork1 – Simple pool fee + clean division", func(t *testing.T) {
+		reward := big.NewInt(1000)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 1000, // 10%
+		})
+		oracle.state.NextSlotToProcess = SlotFork1["mainnet"] - 1
+
+		for _, idx := range []uint64{3, 6, 9} {
+			oracle.state.Validators[idx] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		}
+
+		oracle.increaseAllPendingRewards(reward)
+
+		expectedCut := big.NewInt(100) // 10% pool fee
+
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[3].PendingRewardsWei)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[6].PendingRewardsWei)
+		require.Equal(t, big.NewInt(300), oracle.state.Validators[9].PendingRewardsWei)
+
+		require.Equal(t, expectedCut, oracle.state.PoolAccumulatedFees)
+	})
+
+	t.Run("Only eligible validators receive rewards from unordered, non-contiguous indexes", func(t *testing.T) {
+		reward := big.NewInt(1000000000) // 1 Gwei
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 500, // 5%
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 100
+
+		// Define validators
+		oracle.state.Validators[2] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Banned}
+		oracle.state.Validators[5] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: YellowCard}
+		oracle.state.Validators[7] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		oracle.state.Validators[11] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: RedCard}
+		oracle.state.Validators[12] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: UnknownState}
+
+		// Mock only eligible validators
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 40}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 60}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		expectedPoolCut := big.NewInt(50000000)
+		require.True(t, oracle.state.PoolAccumulatedFees.Cmp(expectedPoolCut) >= 0)
+
+		// Remaining: 950_000_000, split 40/60 between 5 and 7
+		require.Equal(t, big.NewInt(380000000), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, big.NewInt(570000000), oracle.state.Validators[7].PendingRewardsWei)
+
+		// All others should have zero
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[2].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[11].PendingRewardsWei)
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[12].PendingRewardsWei)
+
+		totalValidatorRewards := big.NewInt(0).
+			Add(oracle.state.Validators[5].PendingRewardsWei, oracle.state.Validators[7].PendingRewardsWei)
+
+		totalDistributed := big.NewInt(0).Add(totalValidatorRewards, oracle.state.PoolAccumulatedFees)
+		require.Equal(t, reward, totalDistributed)
+	})
+
+	t.Run("Validator with zero balance gets zero reward", func(t *testing.T) {
+		reward := big.NewInt(1000000000)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 0,
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
+
+		oracle.state.Validators[5] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+		oracle.state.Validators[7] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: YellowCard}
+
+		// Ensure no reward is given to validator 1 because balance is 0
+		oracle.SetGetSetOfValidatorsFunc(func(valIndices []phase0.ValidatorIndex, slot string, opts ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+			return map[phase0.ValidatorIndex]*v1.Validator{
+				5: {Index: 5, Validator: &phase0.Validator{EffectiveBalance: 0}},
+				7: {Index: 7, Validator: &phase0.Validator{EffectiveBalance: 100}},
+			}, nil
+		})
+
+		oracle.increaseAllPendingRewards(reward)
+
+		require.Equal(t, big.NewInt(0), oracle.state.Validators[5].PendingRewardsWei)
+		require.Equal(t, reward, oracle.state.Validators[7].PendingRewardsWei)
+
+		totalValidatorRewards := big.NewInt(0).
+			Add(oracle.state.Validators[5].PendingRewardsWei, oracle.state.Validators[7].PendingRewardsWei)
+		require.Equal(t, reward, totalValidatorRewards)
+	})
+
+	t.Run("Pool receives entire reward if no validator is eligible", func(t *testing.T) {
+		reward := big.NewInt(123456789)
+		oracle := NewOracle(&Config{
+			Network:                  "mainnet",
+			PoolFeesPercentOver10000: 1234,
+			DeployedSlot:             SlotElectraFork["mainnet"],
+		})
+		oracle.state.NextSlotToProcess = SlotElectraFork["mainnet"] + 1
+
+		oracle.state.Validators[0] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: RedCard}
+		oracle.state.Validators[1] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Banned}
+
+		oracle.increaseAllPendingRewards(reward)
+		require.Equal(t, reward, oracle.state.PoolAccumulatedFees)
+	})
 }
 
 func Test_increaseValidatorAccumulatedRewards(t *testing.T) {

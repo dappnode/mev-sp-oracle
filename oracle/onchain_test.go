@@ -470,6 +470,27 @@ func Test_EndToEnd_Mainnet(t *testing.T) {
 	}
 }
 
+func Test_GetPendingConsolidations(t *testing.T) {
+	// Note it works only for hoodi
+	t.Skip("Skipping test")
+
+	var cfgOnchain = &config.CliConfig{
+		ConsensusEndpoint: "http://127.0.0.1:3500",
+		ExecutionEndpoint: "http://127.0.0.1:8545",
+		PoolAddress:       "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
+	}
+
+	onchain, err := NewOnchain(cfgOnchain, nil)
+	require.NoError(t, err)
+
+	consolidations, err := onchain.GetPendingConsolidations("100000")
+	require.NoError(t, err)
+
+	for _, c := range consolidations.Data {
+		fmt.Println(c.SourceIndex, c.TargetIndex)
+	}
+}
+
 func Test_Mainnet_BeaverIssue(t *testing.T) {
 	t.Skip("Skipping test")
 

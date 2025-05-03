@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
+	normalHttp "net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +42,12 @@ var MainnetChainId = uint64(1)
 var GoerliChainId = uint64(5)
 var HoleskyChainId = uint64(17000)
 var HoodiChainId = uint64(560048)
+
+// Network names
+var Mainnet = "mainnet"
+var Goerli = "goerli"
+var Holesky = "holesky"
+var Hoodi = "hoodi"
 
 // This file provides different functions to access the blockchain state from both consensus and
 // execution layer and modifying the its state via smart contract calls.
@@ -1063,13 +1072,13 @@ func (onchain *Onchain) GetConfigFromContract(
 
 	network := ""
 	if depositContract.Data.ChainID == MainnetChainId {
-		network = "mainnet"
+		network = Mainnet
 	} else if depositContract.Data.ChainID == GoerliChainId {
-		network = "goerli"
+		network = Goerli
 	} else if depositContract.Data.ChainID == HoleskyChainId {
-		network = "holesky"
+		network = Holesky
 	} else if depositContract.Data.ChainID == HoodiChainId {
-		network = "hoodi"
+		network = Hoodi
 	} else {
 		log.Fatal("ChainID not supported: ", depositContract.Data.ChainID)
 	}
@@ -1762,4 +1771,63 @@ func (o *Onchain) GetRetryOpts(opts []retry.Option) []retry.Option {
 	} else {
 		return opts
 	}
+}
+
+// TODO: Manual implementation of pending consolidations beacon API call
+// Remove once attestantio eth2 library is updated to support it
+type PendingConsolidation struct {
+	SourceIndex phase0.ValidatorIndex `json:"source_index"`
+	TargetIndex phase0.ValidatorIndex `json:"target_index"`
+}
+
+type PendingConsolidationsResponse struct {
+	Version             string                 `json:"version"`
+	ExecutionOptimistic bool                   `json:"execution_optimistic"`
+	Finalized           bool                   `json:"finalized"`
+	Data                []PendingConsolidation `json:"data"`
+}
+
+func (o *Onchain) GetPendingConsolidations(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+	var (
+		consolidations *PendingConsolidationsResponse
+		err            error
+	)
+
+	err = retry.Do(func() error {
+		url := fmt.Sprintf("%s/eth/v1/beacon/states/%s/pending_consolidations", o.ConsensusClient.Address(), stateID)
+
+		req, reqErr := normalHttp.NewRequest(normalHttp.MethodGet, url, nil)
+		if reqErr != nil {
+			return fmt.Errorf("creating request failed: %w", reqErr)
+		}
+		req.Header.Set("Accept", "application/json")
+
+		resp, httpErr := normalHttp.DefaultClient.Do(req)
+		if httpErr != nil {
+			log.Warn("Failed attempt to call pending consolidations endpoint: ", httpErr.Error(), " Retrying...")
+			return fmt.Errorf("HTTP request failed: %w", httpErr)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != normalHttp.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			log.Warn("Received non-200 response: ", resp.StatusCode, " Body: ", string(bodyBytes))
+			return fmt.Errorf("non-200 response: %d - %s", resp.StatusCode, string(bodyBytes))
+		}
+
+		var result PendingConsolidationsResponse
+		if decodeErr := json.NewDecoder(resp.Body).Decode(&result); decodeErr != nil {
+			log.Warn("Failed attempt to decode pending consolidations response: ", decodeErr.Error(), " Retrying...")
+			return fmt.Errorf("decoding response failed: %w", decodeErr)
+		}
+
+		consolidations = &result
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch pending consolidations: %w", err)
+	}
+
+	return consolidations, nil
 }

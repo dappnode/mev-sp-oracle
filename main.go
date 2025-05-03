@@ -129,6 +129,7 @@ func main() {
 	// Create the oracle instance
 	oracleInstance := oracle.NewOracle(cfg)
 	oracleInstance.SetGetSetOfValidatorsFunc(onchain.GetSetOfValidators)
+	oracleInstance.GetPendingConsolidationsFunc(onchain.GetPendingConsolidations)
 
 	// If checkpoint sync url is provided, load state from it
 	if cliCfg.CheckPointSyncUrl != "" {
@@ -309,7 +310,7 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 			continue
 		}
 
-		// Every X slots we update the onchain validators and cleanup any stranded oracle validators
+		// Every X slots we update the onchain validators
 		if oracleInstance.State().LatestProcessedSlot%UpdateValidatorsIntervalSlots == 0 {
 			onchain.RefreshBeaconValidators()
 		}
