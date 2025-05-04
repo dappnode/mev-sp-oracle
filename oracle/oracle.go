@@ -291,7 +291,7 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 			}
 		}
 
-		// Get the latest validator information for all subscribed validators at once
+		// Get the latest validator information for all tracked validators at once
 		validatorInfo, err := or.getSetOfValidators(indices, strconv.FormatUint(slot, 10))
 		if err != nil {
 			return errors.Wrap(err, "could not get validators info")
@@ -305,6 +305,11 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 			// this means setting the validator rewards to 0 and sharing them among the pool
 			idx := uint64(validator.Index)
 
+			// Why checking if its subscribed? validatorInfo will already only contain tracked validators.
+			// New usecase: we want to cleanup ALL tracked validator now, not just the subscribed ones. Because a
+			// not subscribed validator could have pending rewards that we want to share among the pool.
+			// A validator that wasnt subscribed and was the target of a consolidation will be unsubscribed and have pending rewards.
+			// If it exits, we want to clean up the pending rewards and share them among the pool.
 			if !validator.Status.IsActive() && or.isSubscribed(idx) {
 				log.WithFields(log.Fields{
 					"OracleValidatorStatus":   or.state.Validators[idx].ValidatorStatus,
@@ -341,18 +346,12 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 							"TargetIndex":        targetIdx,
 							"PendingToAddTarget": or.state.Validators[idx].PendingRewardsWei,
 						}).Info("[CONSOLIDATION] Target is not subscribed, transfer rewards and not subscribe")
-						targetValidator, err := or.getSetOfValidators([]phase0.ValidatorIndex{
-							phase0.ValidatorIndex(targetIdx)},
-							strconv.FormatUint(slot, 10))
-						if err != nil {
-							return errors.Wrap(err, "could not get target validator info")
-						}
-
-						targetValidatorSingle, found := targetValidator[phase0.ValidatorIndex(targetIdx)]
-
+						//Reuse validatorInfo from above.
+						targetValidatorSingle, found := validatorInfo[phase0.ValidatorIndex(targetIdx)]
 						if !found {
-							return errors.New(fmt.Sprintf("expected validator not found. got: %v", targetValidator))
+							return errors.New(fmt.Sprintf("expected to find target validator %d in the map, but it was not found", targetIdx))
 						}
+
 						validatorWithdrawal, err := utils.GetCompatibleAddressByte(targetValidatorSingle.Validator.WithdrawalCredentials)
 						if err != nil {
 							// In theory impossible. Fail
