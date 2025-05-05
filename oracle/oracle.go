@@ -305,7 +305,7 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 			// this means setting the validator rewards to 0 and sharing them among the pool
 			idx := uint64(validator.Index)
 
-			if !validator.Status.IsActive() && or.isSubscribed(idx) {
+			if !validator.Status.IsActive() && (or.state.Validators[idx].PendingRewardsWei.Cmp(big.NewInt(0)) != 0) {
 				log.WithFields(log.Fields{
 					"OracleValidatorStatus":   or.state.Validators[idx].ValidatorStatus,
 					"OraclePendingRewardsWei": or.state.Validators[idx].PendingRewardsWei,
