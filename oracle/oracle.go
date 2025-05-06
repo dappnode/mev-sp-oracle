@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"sort"
 	"strconv"
 
 	"fmt"
@@ -300,7 +301,16 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 		// Iterate over all validators. If two or more validators exit or get slashed in the same slot,
 		// this cleanup will eventually set both of their pending rewards to 0 and share them among the pool
 		rewardsToDistribute := big.NewInt(0)
-		for _, validator := range validatorInfo {
+
+		keys := make([]int, 0, len(validatorInfo))
+		for k := range validatorInfo {
+			keys = append(keys, int(k))
+		}
+		sort.Ints(keys)
+		
+		for _, k := range keys {
+			validator := validatorInfo[phase0.ValidatorIndex(k)]
+		
 			// If a validator is subscribed but not active onchain, we have to unsubscribe it and treat it as a ban:
 			// this means setting the validator rewards to 0 and sharing them among the pool
 			idx := uint64(validator.Index)
@@ -316,6 +326,7 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 				}).Info("Cleaning up validator")
 
 				or.advanceStateMachine(idx, Unsubscribe)
+				
 				// sourceToTarget map will only be populated if the oracle is past the Electra fork and there are pending consolidations
 				if targetIdx, ok := sourceToTarget[idx]; ok {
 					log.WithFields(log.Fields{
