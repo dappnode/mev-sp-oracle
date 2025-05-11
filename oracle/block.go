@@ -504,7 +504,7 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 			tipFee.Mul(gasPrice, gasUsed)
 		case 1:
 			tipFee.Mul(gasPrice, gasUsed)
-		case 2, 3:
+		case 2, 3, 4:
 			// Sum gastipcap and basefee or saturate to gasfeecap
 			usedGasPrice := utils.SumAndSaturate(tx.GasTipCap(), b.ExecutionHeader.BaseFee, tx.GasFeeCap())
 			tipFee = new(big.Int).Mul(usedGasPrice, gasUsed)
