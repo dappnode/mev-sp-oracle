@@ -1568,7 +1568,7 @@ func (or *Oracle) handleElectraRewardDistribution(
 			"TotalEffectiveBalance":     totalBalance,
 			"RewardToDistribute":        toDistribute,
 			"Share":                     share,
-		}).Info("[ELECTRA] Validator share")
+		}).Trace("[ELECTRA] Validator share")
 
 		perValidatorRewards[uint64(v.Index)] = share
 		totalDistributed.Add(totalDistributed, share)
