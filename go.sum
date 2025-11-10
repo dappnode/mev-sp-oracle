@@ -8,8 +8,8 @@ github.com/agiledragon/gomonkey/v2 v2.9.0 h1:PDiKKybR596O6FHW+RVSG0Z7uGCBNbmbUXh
 github.com/agiledragon/gomonkey/v2 v2.9.0/go.mod h1:ap1AmDzcVOAz1YpeJ3TCzIgstoaWLA6jbbgxfB4w2iY=
 github.com/attestantio/go-builder-client v0.4.3 h1:K1m/PTqY01mfAPc0h+9iR2OivY3LOevbxHxEfvI4M8M=
 github.com/attestantio/go-builder-client v0.4.3/go.mod h1:yeJANU1O5P3b/4+iwShz9JMcgUnZABCh5RJBtZnLiDo=
-github.com/attestantio/go-eth2-client v0.24.2 h1:fMYpPtoA8ZavCpbO0VJLA7Op9z/BSJR7xJSBECtGC8g=
-github.com/attestantio/go-eth2-client v0.24.2/go.mod h1:fvULSL9WtNskkOB4i+Yyr6BKpNHXvmpGZj9969fCrfY=
+github.com/attestantio/go-eth2-client v0.27.1 h1:g7bm+gG/p+gfzYdEuxuAepVWYb8EO+2KojV5/Lo2BxM=
+github.com/attestantio/go-eth2-client v0.27.1/go.mod h1:fvULSL9WtNskkOB4i+Yyr6BKpNHXvmpGZj9969fCrfY=
 github.com/avast/retry-go/v4 v4.5.0 h1:QoRAZZ90cj5oni2Lsgl2GW8mNTnUCnmpx/iKpwVisHg=
 github.com/avast/retry-go/v4 v4.5.0/go.mod h1:7hLEXp0oku2Nir2xBAsg0PTphp9z71bN5Aq1fboC3+I=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

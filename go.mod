@@ -83,7 +83,7 @@ require (
 )
 
 require (
-	github.com/attestantio/go-eth2-client v0.24.2
+	github.com/attestantio/go-eth2-client v0.27.1
 	github.com/ethereum/go-ethereum v1.15.7
 	golang.org/x/sys v0.30.0 // indirect
 )
