@@ -107,6 +107,8 @@ func (b *FullBlock) SetConsensusBlock(consensusBlock *spec.VersionedSignedBeacon
 		proposerIndex = uint64(consensusBlock.Deneb.Message.ProposerIndex)
 	} else if consensusBlock.Electra != nil {
 		proposerIndex = uint64(consensusBlock.Electra.Message.ProposerIndex)
+	} else if consensusBlock.Fulu != nil {
+		proposerIndex = uint64(consensusBlock.Fulu.Message.ProposerIndex)
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
@@ -658,6 +660,8 @@ func (b *FullBlock) GetFeeRecipient() string {
 		feeRecipient = b.ConsensusBlock.Deneb.Message.Body.ExecutionPayload.FeeRecipient.String()
 	} else if b.ConsensusBlock.Electra != nil {
 		feeRecipient = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.FeeRecipient.String()
+	} else if b.ConsensusBlock.Fulu != nil {
+		feeRecipient = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.FeeRecipient.String()
 	} else {
 		log.Fatal("Block was empty, cant get fee recipient")
 	}
@@ -678,6 +682,8 @@ func (b *FullBlock) GetBlockTransactions() []bellatrix.Transaction {
 		transactions = b.ConsensusBlock.Deneb.Message.Body.ExecutionPayload.Transactions
 	} else if b.ConsensusBlock.Electra != nil {
 		transactions = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.Transactions
+	} else if b.ConsensusBlock.Fulu != nil {
+		transactions = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.Transactions
 	} else {
 		log.Fatal("Block was empty, cant get transactions")
 	}
@@ -698,6 +704,8 @@ func (b *FullBlock) GetBlockNumber() uint64 {
 		blockNumber = b.ConsensusBlock.Deneb.Message.Body.ExecutionPayload.BlockNumber
 	} else if b.ConsensusBlock.Electra != nil {
 		blockNumber = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.BlockNumber
+	} else if b.ConsensusBlock.Fulu != nil {
+		blockNumber = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.BlockNumber
 	} else {
 		log.Fatal("Block was empty, cant get block number")
 	}
@@ -723,6 +731,8 @@ func (b *FullBlock) GetSlot() phase0.Slot {
 		slot = b.ConsensusBlock.Deneb.Message.Slot
 	} else if b.ConsensusBlock.Electra != nil {
 		slot = b.ConsensusBlock.Electra.Message.Slot
+	} else if b.ConsensusBlock.Fulu != nil {
+		slot = b.ConsensusBlock.Fulu.Message.Slot
 	} else {
 		log.Fatal("Block was empty, cant get slot")
 	}
@@ -747,6 +757,8 @@ func (b *FullBlock) GetProposerIndex() phase0.ValidatorIndex {
 		proposerIndex = b.ConsensusBlock.Deneb.Message.ProposerIndex
 	} else if b.ConsensusBlock.Electra != nil {
 		proposerIndex = b.ConsensusBlock.Electra.Message.ProposerIndex
+	} else if b.ConsensusBlock.Fulu != nil {
+		proposerIndex = b.ConsensusBlock.Fulu.Message.ProposerIndex
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
@@ -771,6 +783,8 @@ func (b *FullBlock) GetGasUsed() uint64 {
 		gasUsed = b.ConsensusBlock.Deneb.Message.Body.ExecutionPayload.GasUsed
 	} else if b.ConsensusBlock.Electra != nil {
 		gasUsed = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.GasUsed
+	} else if b.ConsensusBlock.Fulu != nil {
+		gasUsed = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.GasUsed
 	} else {
 		log.Fatal("Block was empty, cant get gas used")
 	}
@@ -799,12 +813,13 @@ func (b *FullBlock) GetBaseFeePerGas() [32]byte {
 		}
 
 	} else if b.ConsensusBlock.Electra != nil {
-		// Due to this change: https://github.com/attestantio/go-eth2-client/commit/acadd726168dac047ab3b13b4aceaf2a6103dab5
-		// the base fee is no longer stored as a [32]byte little endian, but as a big endian. To avoid considering is as an special
-		// case, we convert it to little endian, so that the interface is respected.
 		baseFeePerGasBigEndian := b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.BaseFeePerGas.Bytes32()
+		for i := 0; i < 32; i++ {
+			baseFeePerGas[i] = baseFeePerGasBigEndian[32-1-i]
+		}
 
-		// big-endian to little-endian
+	} else if b.ConsensusBlock.Fulu != nil {
+		baseFeePerGasBigEndian := b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.BaseFeePerGas.Bytes32()
 		for i := 0; i < 32; i++ {
 			baseFeePerGas[i] = baseFeePerGasBigEndian[32-1-i]
 		}
