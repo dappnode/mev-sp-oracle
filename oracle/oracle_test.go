@@ -3306,29 +3306,30 @@ func Test_ValidatorCleanup_Consolidations(t *testing.T) {
 		require.Equal(t, big.NewInt(0), oracle.state.PoolAccumulatedFees)
 	})
 
-	t.Run("Test7: Consolidation target is exited – fallback to pool", func(t *testing.T) {
-		oracle := NewOracle(&Config{Network: "mainnet"})
-		oracle.state.Validators[80] = &ValidatorInfo{PendingRewardsWei: big.NewInt(999), ValidatorStatus: Active}
-		oracle.state.Validators[81] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
+	// TODO: this will never happen, a consolidation can not be done to a validator that is exited
+	// t.Run("Test7: Consolidation target is exited – fallback to pool", func(t *testing.T) {
+	// 	oracle := NewOracle(&Config{Network: "mainnet"})
+	// 	oracle.state.Validators[80] = &ValidatorInfo{PendingRewardsWei: big.NewInt(999), ValidatorStatus: Active}
+	// 	oracle.state.Validators[81] = &ValidatorInfo{PendingRewardsWei: big.NewInt(0), ValidatorStatus: Active}
 
-		oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
-			return map[phase0.ValidatorIndex]*v1.Validator{
-				80: {Index: 80, Status: v1.ValidatorStateExitedUnslashed},
-				81: {Index: 81, Status: v1.ValidatorStateExitedUnslashed},
-			}, nil
-		})
-		oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
-			return &PendingConsolidationsResponse{Data: []PendingConsolidation{
-				{SourceIndex: 80, TargetIndex: 81},
-			}}, nil
-		})
+	// 	oracle.SetGetSetOfValidatorsFunc(func(_ []phase0.ValidatorIndex, _ string, _ ...retry.Option) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+	// 		return map[phase0.ValidatorIndex]*v1.Validator{
+	// 			80: {Index: 80, Status: v1.ValidatorStateExitedUnslashed},
+	// 			81: {Index: 81, Status: v1.ValidatorStateExitedUnslashed},
+	// 		}, nil
+	// 	})
+	// 	oracle.GetPendingConsolidationsFunc(func(stateID string, opts ...retry.Option) (*PendingConsolidationsResponse, error) {
+	// 		return &PendingConsolidationsResponse{Data: []PendingConsolidation{
+	// 			{SourceIndex: 80, TargetIndex: 81},
+	// 		}}, nil
+	// 	})
 
-		err := oracle.ValidatorCleanup(mainnetElectra + 1)
-		require.NoError(t, err)
-		require.Equal(t, big.NewInt(0), oracle.state.Validators[80].PendingRewardsWei)
-		require.Equal(t, big.NewInt(999), oracle.state.PoolAccumulatedFees)
-		require.Equal(t, NotSubscribed, oracle.state.Validators[80].ValidatorStatus)
-	})
+	// 	err := oracle.ValidatorCleanup(mainnetElectra + 1)
+	// 	require.NoError(t, err)
+	// 	require.Equal(t, big.NewInt(0), oracle.state.Validators[80].PendingRewardsWei)
+	// 	require.Equal(t, big.NewInt(999), oracle.state.PoolAccumulatedFees)
+	// 	require.Equal(t, NotSubscribed, oracle.state.Validators[80].ValidatorStatus)
+	// })
 
 }
 
