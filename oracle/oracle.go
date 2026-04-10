@@ -1757,6 +1757,7 @@ func (or *Oracle) increaseAllPendingRewards(reward *big.Int) {
 	case RewardMethodElectra:
 		log.WithFields(log.Fields{
 			"AmountEligibleValidators": numEligibleValidators,
+			"PoolFeePercent":           fmt.Sprintf("%.2f%%", float64(or.state.PoolFeesPercentOver10000)/100),
 			"PoolFeesWei":              totalFees,
 			"TotalRewardWei":           reward,
 		}).Info("[PECTRA] Increasing pending rewards of eligible validators")
@@ -1768,6 +1769,7 @@ func (or *Oracle) increaseAllPendingRewards(reward *big.Int) {
 	case RewardMethodFork1, RewardMethodPreFork1:
 		log.WithFields(log.Fields{
 			"AmountEligibleValidators": numEligibleValidators,
+			"PoolFeePercent":           fmt.Sprintf("%.2f%%", float64(or.state.PoolFeesPercentOver10000)/100),
 			"RewardPerValidatorWei":    perValidatorReward,
 			"PoolFeesWei":              totalFees,
 			"TotalRewardWei":           reward,
