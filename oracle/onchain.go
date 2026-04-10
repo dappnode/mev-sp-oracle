@@ -28,6 +28,7 @@ import (
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -398,47 +399,84 @@ func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*ty
 
 // decodeInitialPoolFee extracts the _poolFee parameter from the initialize() transaction
 // in the deployment block. This works on full nodes since transaction data is stored in blocks.
+//
+// It handles two deployment patterns:
+//  1. Direct call: initialize() sent as a separate tx TO the pool address.
+//  2. Proxy constructor: a TransparentUpgradeableProxy is deployed in a single
+//     contract-creation tx; the initialize() calldata is embedded in the
+//     constructor arguments and executed via delegatecall during deployment.
 func decodeInitialPoolFee(block *types.Block, poolAddress string) (int, error) {
 	contractABI, err := contract.ContractMetaData.GetAbi()
 	if err != nil {
 		return 0, errors.Wrap(err, "could not parse contract ABI")
 	}
 
+	initMethod, ok := contractABI.Methods["initialize"]
+	if !ok {
+		return 0, errors.New("initialize method not found in contract ABI")
+	}
+	selector := initMethod.ID // 4-byte selector
+
 	poolAddr := common.HexToAddress(poolAddress)
 
 	for _, tx := range block.Transactions() {
-		if tx.To() == nil || *tx.To() != poolAddr {
-			continue
-		}
 		data := tx.Data()
 		if len(data) < 4 {
 			continue
 		}
 
-		method, err := contractABI.MethodById(data[:4])
-		if err != nil || method.Name != "initialize" {
-			continue
+		// Case 1: direct call to the pool address with initialize() selector.
+		if tx.To() != nil && *tx.To() == poolAddr {
+			method, err := contractABI.MethodById(data[:4])
+			if err != nil || method.Name != "initialize" {
+				continue
+			}
+			return decodePoolFeeFromInitArgs(initMethod, data[4:])
 		}
 
-		args, err := method.Inputs.Unpack(data[4:])
-		if err != nil {
-			return 0, errors.Wrap(err, "could not decode initialize() arguments")
+		// Case 2: contract-creation tx (proxy deployment). The initialize()
+		// calldata is passed as a constructor argument and appears embedded
+		// in the tx data. Scan for the 4-byte selector.
+		if tx.To() == nil {
+			if fee, err := findInitializeInCreationData(initMethod, selector, data); err == nil {
+				return fee, nil
+			}
 		}
-
-		// initialize(address _governance, uint256 _subscriptionCollateral, uint256 _poolFee, ...)
-		if len(args) < 3 {
-			return 0, errors.New("initialize() has fewer arguments than expected")
-		}
-
-		poolFee, ok := args[2].(*big.Int)
-		if !ok {
-			return 0, errors.New("could not cast _poolFee argument to *big.Int")
-		}
-
-		return int(poolFee.Int64()), nil
 	}
 
 	return 0, errors.New("initialize() transaction not found in deployment block")
+}
+
+// decodePoolFeeFromInitArgs ABI-decodes the initialize() arguments and returns _poolFee.
+func decodePoolFeeFromInitArgs(method abi.Method, argData []byte) (int, error) {
+	args, err := method.Inputs.Unpack(argData)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not decode initialize() arguments")
+	}
+	// initialize(address _governance, uint256 _subscriptionCollateral, uint256 _poolFee, ...)
+	if len(args) < 3 {
+		return 0, errors.New("initialize() has fewer arguments than expected")
+	}
+	poolFee, ok := args[2].(*big.Int)
+	if !ok {
+		return 0, errors.New("could not cast _poolFee argument to *big.Int")
+	}
+	return int(poolFee.Int64()), nil
+}
+
+// findInitializeInCreationData scans a contract-creation tx's data for an
+// embedded initialize() call (as seen in proxy constructor arguments).
+func findInitializeInCreationData(method abi.Method, selector []byte, data []byte) (int, error) {
+	for i := 0; i+4 <= len(data); i++ {
+		if data[i] == selector[0] && data[i+1] == selector[1] &&
+			data[i+2] == selector[2] && data[i+3] == selector[3] {
+			remaining := data[i+4:]
+			if fee, err := decodePoolFeeFromInitArgs(method, remaining); err == nil {
+				return fee, nil
+			}
+		}
+	}
+	return 0, errors.New("initialize() selector not found in contract creation data")
 }
 
 func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*v1.ProposerDuty, error) {
