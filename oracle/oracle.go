@@ -402,8 +402,47 @@ func (or *Oracle) ValidatorCleanup(slot uint64) error {
 	return nil
 }
 
+// Known fee schedule per network: maps the slot where an expected fee change takes effect to the new fee value.
+// When the oracle processes a slot listed here, it updates the config and state.
+// If an UpdatePoolFee event is seen at a slot NOT in this schedule, the oracle crashes.
+// Add new entries here when planning a fee change on-chain.
+var feeSchedule = map[string]map[uint64]int{
+	Mainnet: {
+		14082460: 500, // block 24848448: 7% -> 5%
+	},
+	Hoodi: {
+		2801050: 500, // block 2589876: 10% -> 5%
+	},
+}
+
+// getFeeSchedule returns the fee schedule for the given network, or an empty map if none.
+func getFeeSchedule(network string) map[uint64]int {
+	if schedule, ok := feeSchedule[network]; ok {
+		return schedule
+	}
+	return map[uint64]int{}
+}
+
+// applyFeeScheduleUpTo applies the latest fee schedule entry with slot <= upToSlot to the config.
+// When multiple entries qualify, the one with the highest slot wins (most recent change).
+func applyFeeScheduleUpTo(config *Config, upToSlot uint64) {
+	bestSlot := uint64(0)
+	bestFee := 0
+	found := false
+	for slot, fee := range getFeeSchedule(config.Network) {
+		if slot <= upToSlot && (!found || slot > bestSlot) {
+			bestSlot = slot
+			bestFee = fee
+			found = true
+		}
+	}
+	if found {
+		config.PoolFeesPercentOver10000 = bestFee
+	}
+}
+
 // We use the following events to validate that the config has not changed. Dynamic
-// parameters are not supported.
+// parameters are not supported, except for known fee changes listed in feeSchedule.
 // UpdatePoolFee: Indicates the cut in %*100 the pool gets
 // PoolFeeRecipient: Indicates the address that receives the pool fees
 // CheckpointSlotSize: Indicates the size of the checkpoint in slots
@@ -416,9 +455,19 @@ func (or *Oracle) validateFullBlockConfig(fullBlock *FullBlock, config *Config) 
 		return errors.New("more than one event of the same type in the same block, weird")
 	}
 
-	if len(fullBlock.Events.UpdatePoolFee) != 0 && big.NewInt(int64(config.PoolFeesPercentOver10000)).Cmp(fullBlock.Events.UpdatePoolFee[0].NewPoolFee) != 0 {
-		return errors.New(fmt.Sprintf("pool fee has changed. config: %d, block: %d",
-			config.PoolFeesPercentOver10000, fullBlock.Events.UpdatePoolFee[0].NewPoolFee))
+	// If an UpdatePoolFee event is found, check if it's expected in the fee schedule.
+	// If expected, apply the new fee from the event. If not, crash.
+	if len(fullBlock.Events.UpdatePoolFee) != 0 {
+		slot := uint64(fullBlock.ConsensusDuty.Slot)
+		newFee := int(fullBlock.Events.UpdatePoolFee[0].NewPoolFee.Int64())
+		expectedFee, expected := getFeeSchedule(config.Network)[slot]
+		if !expected || expectedFee != newFee {
+			return errors.New(fmt.Sprintf("unexpected pool fee change at slot %d. event fee: %d, expected: %d (scheduled: %v)",
+				slot, newFee, expectedFee, expected))
+		}
+		log.Info("Applying expected fee change from UpdatePoolFee event at slot ", slot, ": ", config.PoolFeesPercentOver10000, " -> ", newFee)
+		config.PoolFeesPercentOver10000 = newFee
+		or.state.PoolFeesPercentOver10000 = newFee
 	}
 
 	if len(fullBlock.Events.PoolFeeRecipient) != 0 && !utils.Equals(config.PoolFeesAddress, fullBlock.Events.PoolFeeRecipient[0].NewPoolFeeRecipient.String()) {
@@ -587,8 +636,13 @@ func (or *Oracle) LoadFromBytes(rawBytes []byte) (bool, error) {
 	}
 
 	if state.PoolFeesPercentOver10000 != or.cfg.PoolFeesPercentOver10000 {
-		return false, errors.New(fmt.Sprintf("pool fees percent mismatch, recovered: %d, expected: %d",
-			state.PoolFeesPercentOver10000, or.cfg.PoolFeesPercentOver10000))
+		// The config starts at initialPoolFee. If the state was saved after a
+		// scheduled fee change, apply the schedule up to the state's slot.
+		applyFeeScheduleUpTo(or.cfg, state.LatestProcessedSlot)
+		if state.PoolFeesPercentOver10000 != or.cfg.PoolFeesPercentOver10000 {
+			return false, errors.New(fmt.Sprintf("pool fees percent mismatch, recovered: %d, expected: %d",
+				state.PoolFeesPercentOver10000, or.cfg.PoolFeesPercentOver10000))
+		}
 	}
 
 	if state.CollateralInWei.Cmp(or.cfg.CollateralInWei) != 0 {

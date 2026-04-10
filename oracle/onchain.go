@@ -396,6 +396,51 @@ func (o *Onchain) BlockByNumber(blockNumber *big.Int, opts ...retry.Option) (*ty
 	return block, err
 }
 
+// decodeInitialPoolFee extracts the _poolFee parameter from the initialize() transaction
+// in the deployment block. This works on full nodes since transaction data is stored in blocks.
+func decodeInitialPoolFee(block *types.Block, poolAddress string) (int, error) {
+	contractABI, err := contract.ContractMetaData.GetAbi()
+	if err != nil {
+		return 0, errors.Wrap(err, "could not parse contract ABI")
+	}
+
+	poolAddr := common.HexToAddress(poolAddress)
+
+	for _, tx := range block.Transactions() {
+		if tx.To() == nil || *tx.To() != poolAddr {
+			continue
+		}
+		data := tx.Data()
+		if len(data) < 4 {
+			continue
+		}
+
+		method, err := contractABI.MethodById(data[:4])
+		if err != nil || method.Name != "initialize" {
+			continue
+		}
+
+		args, err := method.Inputs.Unpack(data[4:])
+		if err != nil {
+			return 0, errors.Wrap(err, "could not decode initialize() arguments")
+		}
+
+		// initialize(address _governance, uint256 _subscriptionCollateral, uint256 _poolFee, ...)
+		if len(args) < 3 {
+			return 0, errors.New("initialize() has fewer arguments than expected")
+		}
+
+		poolFee, ok := args[2].(*big.Int)
+		if !ok {
+			return 0, errors.New("could not cast _poolFee argument to *big.Int")
+		}
+
+		return int(poolFee.Int64()), nil
+	}
+
+	return 0, errors.New("initialize() transaction not found in deployment block")
+}
+
 func (o *Onchain) GetProposalDuty(slot uint64, opts ...retry.Option) (*v1.ProposerDuty, error) {
 	epoch := slot / constants.SlotsInEpoch
 	slotWithinEpoch := slot % constants.SlotsInEpoch
@@ -1132,17 +1177,30 @@ func (onchain *Onchain) GetConfigFromContract(
 
 	log.Info("[Loaded from contract] Contract deployed in slot: ", deployedSlot)
 
+	// Decode the initial pool fee from the initialize() transaction in the deployment block.
+	// This avoids hardcoding the initial fee and works on full nodes (no archive needed).
+	// If decoding fails, fall back to a network-specific default.
+	initialPoolFee, err := decodeInitialPoolFee(block, cliCfg.PoolAddress)
+	if err != nil {
+		defaultFees := map[string]int{
+			Mainnet: 700,  // 7%
+			Hoodi:   1000, // 10%
+		}
+		defaultFee, ok := defaultFees[network]
+		if !ok {
+			log.Fatal("Could not decode initial pool fee and no default configured for network ", network, ": ", err.Error())
+		}
+		initialPoolFee = defaultFee
+		log.Warn("Could not decode initial pool fee from deployment block (", err.Error(), "), using default for ", network, ": ", float64(initialPoolFee)/100, "%")
+	} else {
+		log.Info("[Decoded from deployment tx] Initial pool fees percent: ", float64(initialPoolFee)/100, "% (raw value: ", initialPoolFee, ")")
+	}
+
 	checkPointSizeInSlots, err := onchain.GetSlotCheckpointSize()
 	if err != nil {
 		log.Fatal("Could not get slot checkpoint size: " + err.Error())
 	}
 	log.Info("[Loaded from contract] Checkpoints will be created every ", checkPointSizeInSlots, " slots (", utils.SlotsToTime(checkPointSizeInSlots, constants.SecondsInSlot), ")")
-
-	poolFeesPercentTwoDecimals, err := onchain.GetPoolFee()
-	if err != nil {
-		log.Fatal("Could not get pool fee: " + err.Error())
-	}
-	log.Info("[Loaded from contract] Pool fees percent: ", float64(poolFeesPercentTwoDecimals.Uint64())/100, "% (raw value: ", poolFeesPercentTwoDecimals, ")")
 
 	poolFeesAddress, err := onchain.GetPoolFeeAddress()
 	if err != nil {
@@ -1184,7 +1242,7 @@ func (onchain *Onchain) GetConfigFromContract(
 		DeployedSlot:             deployedSlot,
 		DeployedBlock:            deployedBlock.Uint64(),
 		CheckPointSizeInSlots:    checkPointSizeInSlots,
-		PoolFeesPercentOver10000: int(poolFeesPercentTwoDecimals.Uint64()),
+		PoolFeesPercentOver10000: initialPoolFee,
 		PoolFeesAddress:          poolFeesAddress,
 		CollateralInWei:          ethCollateralInWei,
 		DryRun:                   cliCfg.DryRun,
