@@ -28,9 +28,31 @@ var WhitelistedBuilders = map[uint64][]string{
 	HoodiChainId:   {},
 }
 
-// See MevRewardInWei for more info
+// See MevRewardInWei for more info.
 // https://beaconcha.in/slot/10400574
 var ExceptionSlotMainnet1 = uint64(10400574)
+
+// https://beaconcha.in/slot/14677138
+var ExceptionSlotMainnet2 = uint64(14677138)
+
+type mevRewardException struct {
+	rewardWei string
+	recipient string
+}
+
+var mevRewardExceptions = map[uint64]map[uint64]mevRewardException{
+	MainnetChainId: {
+		// Self-destruct MEV payments to the pool do not trigger EtherReceived.
+		ExceptionSlotMainnet1: {
+			rewardWei: "177043568463114308",
+			recipient: "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
+		},
+		ExceptionSlotMainnet2: {
+			rewardWei: "9557629473261564",
+			recipient: "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
+		},
+	},
+}
 
 // Create a new block with the bare minimum information
 func NewFullBlock(
@@ -286,14 +308,17 @@ func (b *FullBlock) SetEvents(events *Events) {
 
 	b.Events = events
 
-	// Special case. Temporal fix. We artificially add the mev reward for this block.
+	// Special case. Temporal fix. We artificially add the MEV reward for blocks
+	// whose pool payment was forced through self-destruct and emitted no event.
 	// See: https://github.com/dappnode/mev-sp-oracle/pull/230
-	// See: https://beaconcha.in/slot/10400574
-	if b.ChainId == MainnetChainId && b.GetSlotUint64() == ExceptionSlotMainnet1 {
-		log.Warn("Special case: MEV reward hardcoded. See MevRewardInWei for more info")
+	if reward, _, isException := b.mevRewardException(); isException {
+		log.WithFields(log.Fields{
+			"Slot":               b.GetSlotUint64(),
+			"HardcodedMevReward": reward,
+		}).Warn("Special case: MEV reward hardcoded. See MevRewardInWei for more info")
 		b.Events.EtherReceived = append(b.Events.EtherReceived, &contract.ContractEtherReceived{
 			Sender:         common.Address{},
-			DonationAmount: big.NewInt(177043568463114308),
+			DonationAmount: reward,
 			Raw: types.Log{
 				Address:     common.Address{},
 				Topics:      []common.Hash{},
@@ -309,6 +334,25 @@ func (b *FullBlock) SetEvents(events *Events) {
 	}
 }
 
+func (b *FullBlock) mevRewardException() (*big.Int, string, bool) {
+	chainExceptions, found := mevRewardExceptions[b.ChainId]
+	if !found {
+		return nil, "", false
+	}
+
+	exception, found := chainExceptions[b.GetSlotUint64()]
+	if !found {
+		return nil, "", false
+	}
+
+	reward, ok := new(big.Int).SetString(exception.rewardWei, 10)
+	if !ok {
+		log.Fatal("Invalid hardcoded MEV reward: ", exception.rewardWei)
+	}
+
+	return reward, exception.recipient, true
+}
+
 // Returns if there was an mev reward and its amount and fee recipient if any
 // Example: https://prater.beaconcha.in/slot/5307417 (0.53166 Eth)
 func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
@@ -318,6 +362,17 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 	// Check if block is empty (no txs)
 	if len(txs) == 0 {
 		return big.NewInt(0), false, ""
+	}
+
+	if reward, recipient, isException := b.mevRewardException(); isException {
+		log.WithFields(log.Fields{
+			"Network":            b.ChainId,
+			"Slot":               b.GetSlotUint64(),
+			"HardcodedMevReward": reward,
+			"MevRecipient":       recipient,
+		}).Info("Special case: MEV reward hardcoded")
+
+		return reward, true, recipient
 	}
 
 	// Get the last tx which is the one that contains the mev reward
@@ -341,28 +396,6 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 	whitelistedBuilders, found := WhitelistedBuilders[b.ChainId]
 	if !found {
 		log.Fatal("Chain not found in whitelisted builders: ", b.ChainId)
-	}
-
-	// Special case. To be fixed.
-	// This block has a mev but the last contains a self destruct which
-	// makes the EtherReceived event to not be triggered.
-	// It could be solved with debug_traceTransaction but this call is expensive
-	// and requires an archival execution node running with debug.
-	// Since this is rare, we just hardcode the mev reward for this block by now.
-	// https://beaconcha.in/slot/10400574
-	if b.ChainId == MainnetChainId && b.GetSlotUint64() == ExceptionSlotMainnet1 {
-		hardcodedMevReward := big.NewInt(177043568463114308)
-		hardcodedMevRecipient := "0xAdFb8D27671F14f297eE94135e266aAFf8752e35"
-		log.WithFields(log.Fields{
-			"Network":            MainnetChainId,
-			"Slot":               ExceptionSlotMainnet1,
-			"HardcodedMevReward": hardcodedMevReward,
-			"MevRecipient":       hardcodedMevRecipient,
-		}).Info("Special case: MEV reward hardcoded")
-
-		return hardcodedMevReward,
-			true,
-			hardcodedMevRecipient
 	}
 
 	// Mev rewards are sent in the last tx. This tx sender

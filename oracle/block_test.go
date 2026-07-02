@@ -105,6 +105,65 @@ func Test_Getters_Capella(t *testing.T) {
 	require.Equal(t, "0x388C818CA8B9251b393131C08a736A67ccB19297", fullBlock.GetFeeRecipient())
 }
 
+func Test_MevRewardException_SelfdestructRewardToPool(t *testing.T) {
+	poolAddress := "0xAdFb8D27671F14f297eE94135e266aAFf8752e35"
+	withdrawalAddress := "0x1111111111111111111111111111111111111111"
+	validatorIndex := phase0.ValidatorIndex(2245778)
+
+	var feeRecipient [20]byte
+	copy(feeRecipient[:], common.HexToAddress("0x6c42a0b5d13059fa36d5567ab04f83bab57bbf0e").Bytes())
+
+	withdrawalCredentials := make([]byte, 32)
+	withdrawalCredentials[0] = 1
+	copy(withdrawalCredentials[12:], common.HexToAddress(withdrawalAddress).Bytes())
+
+	block := &spec.VersionedSignedBeaconBlock{
+		Version: spec.DataVersionBellatrix,
+		Bellatrix: &bellatrix.SignedBeaconBlock{
+			Message: &bellatrix.BeaconBlock{
+				Slot:          phase0.Slot(ExceptionSlotMainnet2),
+				ProposerIndex: validatorIndex,
+				Body: &bellatrix.BeaconBlockBody{
+					ExecutionPayload: &bellatrix.ExecutionPayload{
+						FeeRecipient: feeRecipient,
+						BlockNumber:  25441045,
+						Transactions: []bellatrix.Transaction{{1}},
+					},
+				},
+			},
+		},
+	}
+
+	fullBlock := NewFullBlock(&v1.ProposerDuty{
+		Slot:           phase0.Slot(ExceptionSlotMainnet2),
+		ValidatorIndex: validatorIndex,
+	}, &v1.Validator{
+		Index: validatorIndex,
+		Validator: &phase0.Validator{
+			WithdrawalCredentials: withdrawalCredentials,
+		},
+	}, MainnetChainId)
+	fullBlock.SetConsensusBlock(block)
+	fullBlock.SetEvents(&Events{})
+
+	expectedReward, ok := new(big.Int).SetString("9557629473261564", 10)
+	require.True(t, ok)
+
+	mevReward, isMev, recipient := fullBlock.MevRewardInWei()
+	require.True(t, isMev)
+	require.Equal(t, expectedReward, mevReward)
+	require.Equal(t, poolAddress, recipient)
+	require.Len(t, fullBlock.GetDonations(poolAddress), 0)
+
+	oracle := NewOracle(&Config{})
+	oracle.addSubscription(uint64(validatorIndex), withdrawalAddress, "0x")
+
+	summary := fullBlock.SummarizedBlock(oracle, poolAddress)
+	require.Equal(t, OkPoolProposal, summary.BlockType)
+	require.Equal(t, MevBlock, summary.RewardType)
+	require.Equal(t, expectedReward, summary.Reward)
+}
+
 // This test uses real mocked blocks that can be fetched and stores with this util:
 // Test_GetFullBlockAtSlot (see onchain_test.go)
 func Test_FullBlock_All(t *testing.T) {
