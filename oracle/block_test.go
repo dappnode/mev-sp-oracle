@@ -108,60 +108,86 @@ func Test_Getters_Capella(t *testing.T) {
 func Test_MevRewardException_SelfdestructRewardToPool(t *testing.T) {
 	poolAddress := "0xAdFb8D27671F14f297eE94135e266aAFf8752e35"
 	withdrawalAddress := "0x1111111111111111111111111111111111111111"
-	validatorIndex := phase0.ValidatorIndex(2245778)
-
-	var feeRecipient [20]byte
-	copy(feeRecipient[:], common.HexToAddress("0x6c42a0b5d13059fa36d5567ab04f83bab57bbf0e").Bytes())
 
 	withdrawalCredentials := make([]byte, 32)
 	withdrawalCredentials[0] = 1
 	copy(withdrawalCredentials[12:], common.HexToAddress(withdrawalAddress).Bytes())
 
-	block := &spec.VersionedSignedBeaconBlock{
-		Version: spec.DataVersionBellatrix,
-		Bellatrix: &bellatrix.SignedBeaconBlock{
-			Message: &bellatrix.BeaconBlock{
-				Slot:          phase0.Slot(ExceptionSlotMainnet2),
-				ProposerIndex: validatorIndex,
-				Body: &bellatrix.BeaconBlockBody{
-					ExecutionPayload: &bellatrix.ExecutionPayload{
-						FeeRecipient: feeRecipient,
-						BlockNumber:  25441045,
-						Transactions: []bellatrix.Transaction{{1}},
-					},
-				},
-			},
+	tests := []struct {
+		name           string
+		slot           uint64
+		blockNumber    uint64
+		validatorIndex phase0.ValidatorIndex
+		rewardWei      string
+	}{
+		{
+			name:           "slot 14677138",
+			slot:           ExceptionSlotMainnet2,
+			blockNumber:    25441045,
+			validatorIndex: 2245778,
+			rewardWei:      "9557629473261564",
+		},
+		{
+			name:           "slot 14805235",
+			slot:           ExceptionSlotMainnet3,
+			blockNumber:    25568643,
+			validatorIndex: 2245785,
+			rewardWei:      "125947079586393390",
 		},
 	}
 
-	fullBlock := NewFullBlock(&v1.ProposerDuty{
-		Slot:           phase0.Slot(ExceptionSlotMainnet2),
-		ValidatorIndex: validatorIndex,
-	}, &v1.Validator{
-		Index: validatorIndex,
-		Validator: &phase0.Validator{
-			WithdrawalCredentials: withdrawalCredentials,
-		},
-	}, MainnetChainId)
-	fullBlock.SetConsensusBlock(block)
-	fullBlock.SetEvents(&Events{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var feeRecipient [20]byte
+			copy(feeRecipient[:], common.HexToAddress("0x6c42a0b5d13059fa36d5567ab04f83bab57bbf0e").Bytes())
 
-	expectedReward, ok := new(big.Int).SetString("9557629473261564", 10)
-	require.True(t, ok)
+			block := &spec.VersionedSignedBeaconBlock{
+				Version: spec.DataVersionBellatrix,
+				Bellatrix: &bellatrix.SignedBeaconBlock{
+					Message: &bellatrix.BeaconBlock{
+						Slot:          phase0.Slot(tt.slot),
+						ProposerIndex: tt.validatorIndex,
+						Body: &bellatrix.BeaconBlockBody{
+							ExecutionPayload: &bellatrix.ExecutionPayload{
+								FeeRecipient: feeRecipient,
+								BlockNumber:  tt.blockNumber,
+								Transactions: []bellatrix.Transaction{{1}},
+							},
+						},
+					},
+				},
+			}
 
-	mevReward, isMev, recipient := fullBlock.MevRewardInWei()
-	require.True(t, isMev)
-	require.Equal(t, expectedReward, mevReward)
-	require.Equal(t, poolAddress, recipient)
-	require.Len(t, fullBlock.GetDonations(poolAddress), 0)
+			fullBlock := NewFullBlock(&v1.ProposerDuty{
+				Slot:           phase0.Slot(tt.slot),
+				ValidatorIndex: tt.validatorIndex,
+			}, &v1.Validator{
+				Index: tt.validatorIndex,
+				Validator: &phase0.Validator{
+					WithdrawalCredentials: withdrawalCredentials,
+				},
+			}, MainnetChainId)
+			fullBlock.SetConsensusBlock(block)
+			fullBlock.SetEvents(&Events{})
 
-	oracle := NewOracle(&Config{})
-	oracle.addSubscription(uint64(validatorIndex), withdrawalAddress, "0x")
+			expectedReward, ok := new(big.Int).SetString(tt.rewardWei, 10)
+			require.True(t, ok)
 
-	summary := fullBlock.SummarizedBlock(oracle, poolAddress)
-	require.Equal(t, OkPoolProposal, summary.BlockType)
-	require.Equal(t, MevBlock, summary.RewardType)
-	require.Equal(t, expectedReward, summary.Reward)
+			mevReward, isMev, recipient := fullBlock.MevRewardInWei()
+			require.True(t, isMev)
+			require.Equal(t, expectedReward, mevReward)
+			require.Equal(t, poolAddress, recipient)
+			require.Len(t, fullBlock.GetDonations(poolAddress), 0)
+
+			oracle := NewOracle(&Config{})
+			oracle.addSubscription(uint64(tt.validatorIndex), withdrawalAddress, "0x")
+
+			summary := fullBlock.SummarizedBlock(oracle, poolAddress)
+			require.Equal(t, OkPoolProposal, summary.BlockType)
+			require.Equal(t, MevBlock, summary.RewardType)
+			require.Equal(t, expectedReward, summary.Reward)
+		})
+	}
 }
 
 // This test uses real mocked blocks that can be fetched and stores with this util:

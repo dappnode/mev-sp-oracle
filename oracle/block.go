@@ -35,6 +35,10 @@ var ExceptionSlotMainnet1 = uint64(10400574)
 // https://beaconcha.in/slot/14677138
 var ExceptionSlotMainnet2 = uint64(14677138)
 
+// https://beaconcha.in/slot/14805235
+// https://etherscan.io/tx/0x4dfe43fdab0f06b1725123c6ddf72c029409b74980e474ec160539ed98e622db
+var ExceptionSlotMainnet3 = uint64(14805235)
+
 type mevRewardException struct {
 	rewardWei string
 	recipient string
@@ -49,6 +53,10 @@ var mevRewardExceptions = map[uint64]map[uint64]mevRewardException{
 		},
 		ExceptionSlotMainnet2: {
 			rewardWei: "9557629473261564",
+			recipient: "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
+		},
+		ExceptionSlotMainnet3: {
+			rewardWei: "125947079586393390",
 			recipient: "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
 		},
 	},
