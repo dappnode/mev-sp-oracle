@@ -134,6 +134,20 @@ func Test_MevRewardException_SelfdestructRewardToPool(t *testing.T) {
 			validatorIndex: 2245785,
 			rewardWei:      "125947079586393390",
 		},
+		{
+			name:           "slot 14969158",
+			slot:           ExceptionSlotMainnet4,
+			blockNumber:    25731973,
+			validatorIndex: 2245790,
+			rewardWei:      "40752704699988562",
+		},
+		{
+			name:           "slot 14969540",
+			slot:           ExceptionSlotMainnet5,
+			blockNumber:    25732353,
+			validatorIndex: 2245785,
+			rewardWei:      "15227018045697363",
+		},
 	}
 
 	for _, tt := range tests {

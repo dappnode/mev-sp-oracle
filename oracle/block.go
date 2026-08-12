@@ -39,6 +39,14 @@ var ExceptionSlotMainnet2 = uint64(14677138)
 // https://etherscan.io/tx/0x4dfe43fdab0f06b1725123c6ddf72c029409b74980e474ec160539ed98e622db
 var ExceptionSlotMainnet3 = uint64(14805235)
 
+// https://beaconcha.in/slot/14969158
+// https://etherscan.io/tx/0x67e362717f3f80b28e92034f4ef4aa81bfc894a2ebfe81fa3017c7cdbe020c71
+var ExceptionSlotMainnet4 = uint64(14969158)
+
+// https://beaconcha.in/slot/14969540
+// https://etherscan.io/tx/0xb3406038a10e07a6df7ab1795d05e0a7ba9a1e5d92d13e0114ae9eb06bfcc13e
+var ExceptionSlotMainnet5 = uint64(14969540)
+
 type mevRewardException struct {
 	rewardWei string
 	recipient string
@@ -57,6 +65,14 @@ var mevRewardExceptions = map[uint64]map[uint64]mevRewardException{
 		},
 		ExceptionSlotMainnet3: {
 			rewardWei: "125947079586393390",
+			recipient: "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
+		},
+		ExceptionSlotMainnet4: {
+			rewardWei: "40752704699988562",
+			recipient: "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
+		},
+		ExceptionSlotMainnet5: {
+			rewardWei: "15227018045697363",
 			recipient: "0xAdFb8D27671F14f297eE94135e266aAFf8752e35",
 		},
 	},
