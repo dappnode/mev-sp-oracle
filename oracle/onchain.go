@@ -1165,7 +1165,8 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 		// We only check this for subscribers, as that is the only case where we
 		// owe a reward and would otherwise ban the validator for not paying.
 		mevReward, isMev, mevRecipient := fullBlock.MevRewardInWei()
-		if isFromSubscriber &&
+		if fullBlock.IsForcedPaymentDetectionActive() &&
+			isFromSubscriber &&
 			isMev &&
 			!utils.Equals(mevRecipient, o.PoolAddress) &&
 			// Guard: if the pool were also the fee recipient it would collect

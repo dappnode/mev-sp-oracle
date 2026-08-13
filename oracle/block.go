@@ -47,6 +47,30 @@ var ExceptionSlotMainnet4 = uint64(14969158)
 // https://etherscan.io/tx/0xb3406038a10e07a6df7ab1795d05e0a7ba9a1e5d92d13e0114ae9eb06bfcc13e
 var ExceptionSlotMainnet5 = uint64(14969540)
 
+// Detecting forced payments changes how a block is classified, so enabling it
+// retroactively would rewrite already published history: a resync from the pool
+// deployment could allocate rewards that the roots onchain never included, and
+// claims settle as accumulated minus claimed, so a recomputed total below what
+// an address already claimed would brick its future claims.
+//
+// Apply the detection only from the slot where it was first deployed. Before it,
+// forced payments stay handled by the exception table above, exactly as the
+// oracle handled them when those roots were produced.
+var ForcedPaymentActivationSlot = map[uint64]uint64{
+	MainnetChainId: 14950448,
+}
+
+// Whether forced payment detection applies to this block. Chains with no
+// recorded activation slot have no published history to preserve, so it applies
+// from genesis.
+func (b *FullBlock) IsForcedPaymentDetectionActive() bool {
+	activationSlot, found := ForcedPaymentActivationSlot[b.ChainId]
+	if !found {
+		return true
+	}
+	return b.GetSlotUint64() >= activationSlot
+}
+
 type mevRewardException struct {
 	rewardWei string
 	recipient string
