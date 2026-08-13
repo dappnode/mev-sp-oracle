@@ -327,6 +327,60 @@ func Test_ForcedMevPayment_DonationInSameBlock(t *testing.T) {
 	require.Equal(t, reward, summary.Reward)
 }
 
+// A forced payment from a validator the pool does not know yet must auto
+// subscribe it and pay it, exactly as a direct payment to the pool does.
+// Gating detection on an existing subscription left the ETH in the pool with no
+// liability against it, which broke reconciliation by exactly that amount.
+func Test_ForcedMevPayment_AutoSubscribesUnknownValidator(t *testing.T) {
+	reward := big.NewInt(8645848622424368)
+	validatorIndex := phase0.ValidatorIndex(999999)
+
+	fullBlock := buildMevBlock(t, 15000000, 25739733, validatorIndex, titanForwarder, reward)
+
+	fullBlock.SetForcedMevPayment(&ForcedMevPayment{
+		Delivered:   true,
+		AmountWei:   reward,
+		Payer:       titanForwarder,
+		BlockNumber: 25739733,
+	}, testPoolAddress)
+
+	// Deliberately no addSubscription: this validator is unknown to the pool
+	oracle := NewOracle(&Config{})
+	require.False(t, oracle.isSubscribed(uint64(validatorIndex)))
+
+	// OkPoolProposal is what routes the block to handleCorrectBlockProposal,
+	// which calls addSubscription and allocates the reward. Classifying it as
+	// WrongFeeRecipient instead is what left the ETH unallocated.
+	summary := fullBlock.SummarizedBlock(oracle, testPoolAddress)
+	require.Equal(t, OkPoolProposal, summary.BlockType)
+	require.Equal(t, MevBlock, summary.RewardType)
+	require.Equal(t, reward, summary.Reward)
+}
+
+// A banned validator that pays through a forced transfer must also be seen,
+// otherwise the ETH arrives with nothing to allocate it to
+func Test_ForcedMevPayment_BannedValidatorStillDetected(t *testing.T) {
+	reward := big.NewInt(5127862812305962)
+	validatorIndex := phase0.ValidatorIndex(888888)
+
+	fullBlock := buildMevBlock(t, 15000000, 25740093, validatorIndex, titanForwarder, reward)
+	fullBlock.SetForcedMevPayment(&ForcedMevPayment{
+		Delivered:   true,
+		AmountWei:   reward,
+		Payer:       titanForwarder,
+		BlockNumber: 25740093,
+	}, testPoolAddress)
+
+	oracle := NewOracle(&Config{})
+	oracle.addSubscription(uint64(validatorIndex), "0x1111111111111111111111111111111111111111", "0x")
+	oracle.state.Validators[uint64(validatorIndex)].ValidatorStatus = Banned
+	require.False(t, oracle.isSubscribed(uint64(validatorIndex)))
+
+	summary := fullBlock.SummarizedBlock(oracle, testPoolAddress)
+	require.Equal(t, OkPoolProposal, summary.BlockType)
+	require.Equal(t, reward, summary.Reward)
+}
+
 // The detection must not apply before the slot it was deployed at, otherwise a
 // resync from the pool deployment would rewrite already published roots
 func Test_ForcedMevPayment_ActivationSlot(t *testing.T) {

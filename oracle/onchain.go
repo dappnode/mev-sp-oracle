@@ -1162,11 +1162,19 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 		// that executes no pool code and therefore emits no EtherReceived event,
 		// eg SELFDESTRUCT. Only the pool balance can prove it either way.
 		//
-		// We only check this for subscribers, as that is the only case where we
-		// owe a reward and would otherwise ban the validator for not paying.
+		// This deliberately does NOT require the proposer to be subscribed. The
+		// pool auto subscribes any validator whose reward reaches it, in
+		// handleCorrectBlockProposal, so gating on subscription would make a
+		// forced payment from a not yet subscribed or previously banned
+		// validator invisible: no reward allocated, no subscription created, and
+		// the ETH left in the pool with no liability against it, which breaks
+		// reconciliation by exactly that amount.
+		//
+		// The cost is two eth_getBalance calls on any MEV block whose payment
+		// recipient is not the pool. For unrelated blocks the delta will not
+		// match the expected reward and the verdict is simply false.
 		mevReward, isMev, mevRecipient := fullBlock.MevRewardInWei()
 		if fullBlock.IsForcedPaymentDetectionActive() &&
-			isFromSubscriber &&
 			isMev &&
 			!utils.Equals(mevRecipient, o.PoolAddress) &&
 			// Guard: if the pool were also the fee recipient it would collect
@@ -1182,6 +1190,19 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 			if err != nil {
 				log.Fatal("could not verify forced mev payment at slot ",
 					fullBlock.GetSlotUint64(), ": ", err)
+			}
+
+			// Receipts are only fetched above for blocks already known to be
+			// relevant, so a forced payment from a validator the pool does not
+			// know yet arrives here without them. Fetch them so the evidence
+			// carries the real tx hash rather than a zero one.
+			if delivered && fullBlock.GetLastReceipt() == nil {
+				header, receipts, err := o.GetExecHeaderAndReceipts(
+					fullBlock.GetBlockNumberBigInt(), fullBlock.GetBlockTransactions())
+				if err != nil {
+					log.Fatal("failed getting header and receipts for forced payment: ", err)
+				}
+				fullBlock.SetHeaderAndReceipts(header, receipts)
 			}
 
 			paymentTx := fullBlock.GetLastReceipt()
