@@ -432,12 +432,15 @@ func (b *FullBlock) SetForcedMevPayment(payment *ForcedMevPayment, poolAddress s
 	b.ForcedMevPayment = payment
 
 	if !payment.Delivered {
+		// Expected on almost every block: the candidate is the last tx of any
+		// block, so this fires for all the blocks that have nothing to do with
+		// the pool. Only the delivered case is worth reporting.
 		log.WithFields(log.Fields{
 			"Slot":        b.GetSlotUint64(),
 			"BlockNumber": payment.BlockNumber,
 			"Payer":       payment.Payer,
 			"AmountWei":   payment.AmountWei,
-		}).Warn("MEV payment did not reach the pool. Applying wrong fee policy")
+		}).Trace("Candidate payment did not reach the pool")
 		return
 	}
 
