@@ -382,6 +382,30 @@ func (b *FullBlock) SetEvents(events *Events) {
 	}
 }
 
+// Returns the value and recipient of the last tx of the block, which is where
+// the MEV payment is placed. Deliberately says nothing about who sent it: the
+// sender heuristic in MevRewardInWei misses payments routed through an address
+// that is neither the fee recipient nor a whitelisted builder, and whether the
+// pool was really paid is decided by the balance delta, not by the sender.
+// Returns zero and an empty recipient for empty blocks and contract creations.
+func (b *FullBlock) GetLastTxValueAndRecipient() (*big.Int, string) {
+	txs := b.GetBlockTransactions()
+	if len(txs) == 0 {
+		return big.NewInt(0), ""
+	}
+
+	tx, err := utils.DecodeTx(txs[len(txs)-1])
+	if err != nil {
+		log.Fatal("could not decode tx: ", err)
+	}
+
+	if tx.To() == nil {
+		return big.NewInt(0), ""
+	}
+
+	return tx.Value(), strings.ToLower(tx.To().String())
+}
+
 // Returns the receipt of the last tx of the block, which is the one carrying
 // the MEV payment. Nil if receipts were not fetched for this block.
 func (b *FullBlock) GetLastReceipt() *types.Receipt {
@@ -404,6 +428,7 @@ func (b *FullBlock) SetForcedMevPayment(payment *ForcedMevPayment, poolAddress s
 		log.Fatal("forced mev payment can't be nil")
 	}
 
+	payment.Recipient = strings.ToLower(poolAddress)
 	b.ForcedMevPayment = payment
 
 	if !payment.Delivered {
@@ -478,6 +503,14 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 		}).Info("Special case: MEV reward hardcoded")
 
 		return reward, true, recipient
+	}
+
+	// A payment proven to have reached the pool through a path that executes no
+	// pool code. The sender heuristic below cannot see these: builders pay
+	// through addresses that are neither the block fee recipient nor
+	// whitelisted, so the balance delta is the only evidence there is.
+	if b.ForcedMevPayment != nil && b.ForcedMevPayment.Delivered {
+		return new(big.Int).Set(b.ForcedMevPayment.AmountWei), true, b.ForcedMevPayment.Recipient
 	}
 
 	// Get the last tx which is the one that contains the mev reward

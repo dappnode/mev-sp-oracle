@@ -138,6 +138,9 @@ type ForcedMevPayment struct {
 	// ETH to the pool without emitting an event
 	Payer string `json:"payer"`
 
+	// Where the ETH actually landed, ie the pool
+	Recipient string `json:"recipient"`
+
 	// Provenance, so the evidence can be audited and replayed
 	TxHash      string `json:"tx_hash"`
 	BlockNumber uint64 `json:"block_number"`

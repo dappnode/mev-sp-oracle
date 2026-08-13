@@ -327,6 +327,55 @@ func Test_ForcedMevPayment_DonationInSameBlock(t *testing.T) {
 	require.Equal(t, reward, summary.Reward)
 }
 
+// The regression that cost 0.096 ETH on mainnet: builders route payouts through
+// an address that is neither the block fee recipient nor a whitelisted builder,
+// so MevRewardInWei reports no MEV at all and any detection gated on it is blind.
+// Observed on blocks 25739733, 25740093, 25740995, 25742610, 25746053 and
+// 25748681, all sent by 0x9fc3da86 while the fee recipient was Titan.
+func Test_ForcedMevPayment_SenderIsNotFeeRecipient(t *testing.T) {
+	reward := big.NewInt(61763804817999635)
+	validatorIndex := phase0.ValidatorIndex(2245778)
+
+	fullBlock := buildMevBlock(t, 15000000, 25748681, validatorIndex, titanForwarder, reward)
+
+	// Rewrite the fee recipient so it no longer matches the tx sender, which is
+	// exactly the shape of the six missed mainnet blocks
+	var otherFeeRecipient bellatrix.ExecutionAddress
+	copy(otherFeeRecipient[:], common.HexToAddress("0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97").Bytes())
+	fullBlock.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient = otherFeeRecipient
+
+	// The sender heuristic sees nothing here, which is the whole problem
+	_, isMev, _ := fullBlock.MevRewardInWei()
+	require.False(t, isMev, "sender heuristic should not recognise this payment")
+
+	// The candidate is taken from the last tx regardless of who sent it
+	candidate, recipient := fullBlock.GetLastTxValueAndRecipient()
+	require.Equal(t, reward, candidate)
+	require.Equal(t, titanForwarder, common.HexToAddress(recipient).Hex())
+
+	// Once the balance delta proves delivery, the block must be paid normally
+	fullBlock.SetForcedMevPayment(&ForcedMevPayment{
+		Delivered:   true,
+		AmountWei:   reward,
+		Payer:       titanForwarder,
+		BlockNumber: 25748681,
+	}, testPoolAddress)
+
+	reward2, isMev2, recipient2 := fullBlock.MevRewardInWei()
+	require.True(t, isMev2, "proven payment must be reported as MEV")
+	require.Equal(t, reward, reward2)
+	require.Equal(t, testPoolAddress, common.HexToAddress(recipient2).Hex())
+
+	oracle := NewOracle(&Config{})
+	oracle.addSubscription(uint64(validatorIndex), "0x1111111111111111111111111111111111111111", "0x")
+
+	summary := fullBlock.SummarizedBlock(oracle, testPoolAddress)
+	require.Equal(t, OkPoolProposal, summary.BlockType)
+	require.Equal(t, MevBlock, summary.RewardType)
+	require.Equal(t, reward, summary.Reward)
+	require.Len(t, fullBlock.GetDonations(testPoolAddress), 0)
+}
+
 // A forced payment from a validator the pool does not know yet must auto
 // subscribe it and pay it, exactly as a direct payment to the pool does.
 // Gating detection on an existing subscription left the ETH in the pool with no
