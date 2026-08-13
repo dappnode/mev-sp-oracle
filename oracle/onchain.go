@@ -901,6 +901,72 @@ func (o *Onchain) GetPoolEthBalance(blockNumber *big.Int, opts ...retry.Option) 
 	return balanceWei, nil
 }
 
+// Given the pool balance delta across a block and the events emitted in that
+// block, returns the amount of ETH that entered the pool without any event
+// explaining it. A positive result means ETH arrived through a path that does
+// not execute the pool code, eg a SELFDESTRUCT forced transfer.
+//
+// This is a pure function of canonical chain data, so every operator that can
+// read the block computes the same result, now and on any future resync.
+//
+// Note it does not model beacon chain withdrawals credited to the pool address.
+// That cannot happen with the current pool contract, and if it ever did the
+// result would be an unexpected value that fails the exact match below, which
+// is the safe direction: it never turns a missing payment into a valid one.
+func unexplainedPoolInflow(balanceDelta *big.Int, events *Events) *big.Int {
+
+	explained := big.NewInt(0)
+
+	// Inflows the pool told us about
+	for _, event := range events.EtherReceived {
+		explained.Add(explained, event.DonationAmount)
+	}
+	for _, event := range events.SubscribeValidator {
+		explained.Add(explained, event.SubscriptionCollateral)
+	}
+
+	// Outflows the pool told us about
+	for _, event := range events.ClaimRewards {
+		explained.Sub(explained, event.ClaimableBalance)
+	}
+
+	return new(big.Int).Sub(balanceDelta, explained)
+}
+
+// Returns whether the complete expected MEV reward reached the pool in this
+// block through a path that emitted no event. The pool balance is read before
+// and after the block and every event-explained flow is subtracted, so what is
+// left must match the expected reward exactly. No tolerance is applied.
+//
+// The returned bool is decisive: true means pay the validator, false means the
+// reward did not arrive and wrong-fee policy applies. A non-nil error is NOT a
+// verdict, it means the chain could not be read and the caller must not decide.
+func (o *Onchain) WasForcedMevPaymentDelivered(
+	blockNumber uint64,
+	expectedReward *big.Int,
+	events *Events,
+	opts ...retry.Option) (bool, error) {
+
+	if blockNumber == 0 {
+		return false, errors.New("cant verify forced mev payment for block 0")
+	}
+
+	balanceAfter, err := o.GetPoolEthBalance(new(big.Int).SetUint64(blockNumber), opts...)
+	if err != nil {
+		return false, errors.Wrap(err, "could not get pool balance at block "+strconv.FormatUint(blockNumber, 10))
+	}
+
+	balanceBefore, err := o.GetPoolEthBalance(new(big.Int).SetUint64(blockNumber-1), opts...)
+	if err != nil {
+		return false, errors.Wrap(err, "could not get pool balance at block "+strconv.FormatUint(blockNumber-1, 10))
+	}
+
+	delta := new(big.Int).Sub(balanceAfter, balanceBefore)
+	unexplained := unexplainedPoolInflow(delta, events)
+
+	return unexplained.Cmp(expectedReward) == 0, nil
+}
+
 func (o *Onchain) GetAddressEthBalance(account common.Address, opts ...retry.Option) (*big.Int, error) {
 	var err error
 	var balanceWei *big.Int
@@ -1020,11 +1086,17 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 			log.Fatal("failed getting unban validator events: ", err)
 		}
 
+		// Needed to explain pool balance outflows when verifying forced payments
+		claimRewards, err := o.GetClaimRewardsEvents(fullBlock.GetBlockNumber())
+		if err != nil {
+			log.Fatal("failed getting claim rewards events: ", err)
+		}
+
 		// Not all events are fetched as they are not needed
 		events := &Events{
 			EtherReceived:      etherReceived,
 			SubscribeValidator: subscribeValidator,
-			//ClaimRewards: claimRewards,
+			ClaimRewards:       claimRewards,
 			//SetRewardRecipient: setRewardRecipient,
 			UnsubscribeValidator: unsubscribeValidator,
 			//InitSmoothingPool: initSmoothingPool,
@@ -1083,6 +1155,47 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 				log.Fatal("failed getting header and receipts: ", err)
 			}
 			fullBlock.SetHeaderAndReceipts(header, receipts)
+		}
+
+		// A MEV payment whose apparent recipient is not the pool may still have
+		// reached the pool, forwarded by an intermediate contract through a path
+		// that executes no pool code and therefore emits no EtherReceived event,
+		// eg SELFDESTRUCT. Only the pool balance can prove it either way.
+		//
+		// We only check this for subscribers, as that is the only case where we
+		// owe a reward and would otherwise ban the validator for not paying.
+		mevReward, isMev, mevRecipient := fullBlock.MevRewardInWei()
+		if isFromSubscriber &&
+			isMev &&
+			!utils.Equals(mevRecipient, o.PoolAddress) &&
+			// Guard: if the pool were also the fee recipient it would collect
+			// the block tips too, and they would pollute the balance delta
+			!utils.Equals(fullBlock.GetFeeRecipient(), o.PoolAddress) {
+
+			delivered, err := o.WasForcedMevPaymentDelivered(
+				fullBlock.GetBlockNumber(), mevReward, fullBlock.Events)
+
+			// An error is not a verdict. Retries already happened inside, so the
+			// chain is genuinely unreadable and we must not decide this slot.
+			// Stopping is what keeps every operator and every resync in sync.
+			if err != nil {
+				log.Fatal("could not verify forced mev payment at slot ",
+					fullBlock.GetSlotUint64(), ": ", err)
+			}
+
+			paymentTx := fullBlock.GetLastReceipt()
+			forcedPayment := &ForcedMevPayment{
+				Delivered:   delivered,
+				AmountWei:   mevReward,
+				Payer:       mevRecipient,
+				BlockNumber: fullBlock.GetBlockNumber(),
+			}
+			if paymentTx != nil {
+				forcedPayment.TxHash = paymentTx.TxHash.String()
+				forcedPayment.BlockHash = paymentTx.BlockHash.String()
+			}
+
+			fullBlock.SetForcedMevPayment(forcedPayment, o.PoolAddress)
 		}
 	}
 
@@ -1369,9 +1482,35 @@ func (o *Onchain) GetClaimRewardsEvents(
 	blockNumber uint64,
 	opts ...retry.Option) ([]*contract.ContractClaimRewards, error) {
 
-	var events []*contract.ContractClaimRewards
-	log.Fatal("Not implemented: GetClaimRewardsEvents is not implemented")
+	startBlock := uint64(blockNumber)
+	endBlock := uint64(blockNumber)
 
+	filterOpts := &bind.FilterOpts{Context: context.Background(), Start: startBlock, End: &endBlock}
+
+	var err error
+	var itr *contract.ContractClaimRewardsIterator
+
+	err = retry.Do(func() error {
+		itr, err = o.Contract.FilterClaimRewards(filterOpts)
+		if err != nil {
+			log.Warn("Failed attempt GetClaimRewardsEvents for block ", strconv.FormatUint(blockNumber, 10), ": ", err.Error(), " Retrying...")
+			return err
+		}
+		return nil
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get ClaimRewards events")
+	}
+
+	var events []*contract.ContractClaimRewards
+	for itr.Next() {
+		events = append(events, itr.Event)
+	}
+	err = itr.Close()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not close ClaimRewards iterator")
+	}
 	return events, nil
 }
 
