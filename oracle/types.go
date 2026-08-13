@@ -122,6 +122,28 @@ type Events struct {
 
 // Information of every block from the blockchain. Some fields are optional
 // eg: if the block is not relevant to the pool
+// Evidence that a MEV reward reached the pool through a path that emits no
+// EtherReceived event, eg when an intermediate contract forwards the ETH with
+// SELFDESTRUCT. The pool code is never executed in that case, so the only proof
+// available is the pool balance delta across the block. See
+// WasForcedMevPaymentDelivered for how Delivered is calculated.
+type ForcedMevPayment struct {
+	// True only when the complete expected reward provably reached the pool
+	Delivered bool `json:"delivered"`
+
+	// The expected reward, ie the value of the payment tx
+	AmountWei *big.Int `json:"amount_wei"`
+
+	// The apparent recipient of the payment tx: the contract that forwarded the
+	// ETH to the pool without emitting an event
+	Payer string `json:"payer"`
+
+	// Provenance, so the evidence can be audited and replayed
+	TxHash      string `json:"tx_hash"`
+	BlockNumber uint64 `json:"block_number"`
+	BlockHash   string `json:"block_hash"`
+}
+
 type FullBlock struct {
 
 	// consensus data: duty (mandatory, who should propose the block)
@@ -139,6 +161,10 @@ type FullBlock struct {
 
 	// execution data: events (optional, only when the block was not missed)
 	Events *Events `json:"events"`
+
+	// Set only when the block needed forced-payment verification, ie when a MEV
+	// payment was detected but its apparent recipient was not the pool
+	ForcedMevPayment *ForcedMevPayment `json:"forced_mev_payment,omitempty"`
 
 	// Populated with the validators if there are sub/unsub events
 	ValidatorsSubs   []*v1.Validator `json:"validators_subs"`

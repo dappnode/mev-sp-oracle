@@ -358,6 +358,63 @@ func (b *FullBlock) SetEvents(events *Events) {
 	}
 }
 
+// Returns the receipt of the last tx of the block, which is the one carrying
+// the MEV payment. Nil if receipts were not fetched for this block.
+func (b *FullBlock) GetLastReceipt() *types.Receipt {
+	if len(b.ExecutionReceipts) == 0 {
+		return nil
+	}
+	return b.ExecutionReceipts[len(b.ExecutionReceipts)-1]
+}
+
+// Records the evidence about a MEV payment that was forwarded to the pool
+// without emitting an event. When the payment was delivered we also add the
+// matching EtherReceived event, since the rest of the oracle tracks pool
+// inflows through those events: GetDonations filters the MEV reward out of the
+// donations with it, and RunOffchainReconciliation counts it as an asset.
+//
+// Unlike the hardcoded exceptions above, this event carries the real tx hash,
+// block hash and sender, so the audit trail points at the actual payment.
+func (b *FullBlock) SetForcedMevPayment(payment *ForcedMevPayment, poolAddress string) {
+	if payment == nil {
+		log.Fatal("forced mev payment can't be nil")
+	}
+
+	b.ForcedMevPayment = payment
+
+	if !payment.Delivered {
+		log.WithFields(log.Fields{
+			"Slot":        b.GetSlotUint64(),
+			"BlockNumber": payment.BlockNumber,
+			"Payer":       payment.Payer,
+			"AmountWei":   payment.AmountWei,
+		}).Warn("MEV payment did not reach the pool. Applying wrong fee policy")
+		return
+	}
+
+	log.WithFields(log.Fields{
+		"Slot":        b.GetSlotUint64(),
+		"BlockNumber": payment.BlockNumber,
+		"TxHash":      payment.TxHash,
+		"Payer":       payment.Payer,
+		"AmountWei":   payment.AmountWei,
+	}).Info("Forced MEV payment reached the pool, proven by the pool balance delta")
+
+	b.Events.EtherReceived = append(b.Events.EtherReceived, &contract.ContractEtherReceived{
+		Sender:         common.HexToAddress(payment.Payer),
+		DonationAmount: new(big.Int).Set(payment.AmountWei),
+		Raw: types.Log{
+			Address:     common.HexToAddress(poolAddress),
+			Topics:      []common.Hash{},
+			Data:        []byte{},
+			BlockNumber: payment.BlockNumber,
+			TxHash:      common.HexToHash(payment.TxHash),
+			BlockHash:   common.HexToHash(payment.BlockHash),
+			Removed:     false,
+		},
+	})
+}
+
 func (b *FullBlock) mevRewardException() (*big.Int, string, bool) {
 	chainExceptions, found := mevRewardExceptions[b.ChainId]
 	if !found {
@@ -476,6 +533,14 @@ func (b *FullBlock) GetSentRewardAndType(
 
 		// if the mev reward was sent to the pool address
 		if utils.Equals(mevRecipient, poolAddress) {
+			wasRewardSent = true
+		}
+
+		// The reward may have reached the pool through an intermediate contract
+		// that forwarded it without emitting any event, eg with SELFDESTRUCT. In
+		// that case the apparent recipient is not the pool, and the only proof is
+		// the pool balance delta, verified in WasForcedMevPaymentDelivered
+		if !wasRewardSent && b.ForcedMevPayment != nil && b.ForcedMevPayment.Delivered {
 			wasRewardSent = true
 		}
 
