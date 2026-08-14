@@ -327,6 +327,162 @@ func Test_ForcedMevPayment_DonationInSameBlock(t *testing.T) {
 	require.Equal(t, reward, summary.Reward)
 }
 
+// The regression that cost 0.096 ETH on mainnet: builders route payouts through
+// an address that is neither the block fee recipient nor a whitelisted builder,
+// so MevRewardInWei reports no MEV at all and any detection gated on it is blind.
+// Observed on blocks 25739733, 25740093, 25740995, 25742610, 25746053 and
+// 25748681, all sent by 0x9fc3da86 while the fee recipient was Titan.
+func Test_ForcedMevPayment_SenderIsNotFeeRecipient(t *testing.T) {
+	reward := big.NewInt(61763804817999635)
+	validatorIndex := phase0.ValidatorIndex(2245778)
+
+	fullBlock := buildMevBlock(t, 15000000, 25748681, validatorIndex, titanForwarder, reward)
+
+	// Rewrite the fee recipient so it no longer matches the tx sender, which is
+	// exactly the shape of the six missed mainnet blocks
+	var otherFeeRecipient bellatrix.ExecutionAddress
+	copy(otherFeeRecipient[:], common.HexToAddress("0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97").Bytes())
+	fullBlock.ConsensusBlock.Bellatrix.Message.Body.ExecutionPayload.FeeRecipient = otherFeeRecipient
+
+	// The sender heuristic sees nothing here, which is the whole problem
+	_, isMev, _ := fullBlock.MevRewardInWei()
+	require.False(t, isMev, "sender heuristic should not recognise this payment")
+
+	// The candidate is taken from the last tx regardless of who sent it
+	candidate, recipient := fullBlock.GetLastTxValueAndRecipient()
+	require.Equal(t, reward, candidate)
+	require.Equal(t, titanForwarder, common.HexToAddress(recipient).Hex())
+
+	// Once the balance delta proves delivery, the block must be paid normally
+	fullBlock.SetForcedMevPayment(&ForcedMevPayment{
+		Delivered:   true,
+		AmountWei:   reward,
+		Payer:       titanForwarder,
+		BlockNumber: 25748681,
+	}, testPoolAddress)
+
+	reward2, isMev2, recipient2 := fullBlock.MevRewardInWei()
+	require.True(t, isMev2, "proven payment must be reported as MEV")
+	require.Equal(t, reward, reward2)
+	require.Equal(t, testPoolAddress, common.HexToAddress(recipient2).Hex())
+
+	oracle := NewOracle(&Config{})
+	oracle.addSubscription(uint64(validatorIndex), "0x1111111111111111111111111111111111111111", "0x")
+
+	summary := fullBlock.SummarizedBlock(oracle, testPoolAddress)
+	require.Equal(t, OkPoolProposal, summary.BlockType)
+	require.Equal(t, MevBlock, summary.RewardType)
+	require.Equal(t, reward, summary.Reward)
+	require.Len(t, fullBlock.GetDonations(testPoolAddress), 0)
+}
+
+// A forced payment from a validator the pool does not know yet must auto
+// subscribe it and pay it, exactly as a direct payment to the pool does.
+// Gating detection on an existing subscription left the ETH in the pool with no
+// liability against it, which broke reconciliation by exactly that amount.
+func Test_ForcedMevPayment_AutoSubscribesUnknownValidator(t *testing.T) {
+	reward := big.NewInt(8645848622424368)
+	validatorIndex := phase0.ValidatorIndex(999999)
+
+	fullBlock := buildMevBlock(t, 15000000, 25739733, validatorIndex, titanForwarder, reward)
+
+	fullBlock.SetForcedMevPayment(&ForcedMevPayment{
+		Delivered:   true,
+		AmountWei:   reward,
+		Payer:       titanForwarder,
+		BlockNumber: 25739733,
+	}, testPoolAddress)
+
+	// Deliberately no addSubscription: this validator is unknown to the pool
+	oracle := NewOracle(&Config{})
+	require.False(t, oracle.isSubscribed(uint64(validatorIndex)))
+
+	// OkPoolProposal is what routes the block to handleCorrectBlockProposal,
+	// which calls addSubscription and allocates the reward. Classifying it as
+	// WrongFeeRecipient instead is what left the ETH unallocated.
+	summary := fullBlock.SummarizedBlock(oracle, testPoolAddress)
+	require.Equal(t, OkPoolProposal, summary.BlockType)
+	require.Equal(t, MevBlock, summary.RewardType)
+	require.Equal(t, reward, summary.Reward)
+}
+
+// A banned validator that pays through a forced transfer must also be seen,
+// otherwise the ETH arrives with nothing to allocate it to
+func Test_ForcedMevPayment_BannedValidatorStillDetected(t *testing.T) {
+	reward := big.NewInt(5127862812305962)
+	validatorIndex := phase0.ValidatorIndex(888888)
+
+	fullBlock := buildMevBlock(t, 15000000, 25740093, validatorIndex, titanForwarder, reward)
+	fullBlock.SetForcedMevPayment(&ForcedMevPayment{
+		Delivered:   true,
+		AmountWei:   reward,
+		Payer:       titanForwarder,
+		BlockNumber: 25740093,
+	}, testPoolAddress)
+
+	oracle := NewOracle(&Config{})
+	oracle.addSubscription(uint64(validatorIndex), "0x1111111111111111111111111111111111111111", "0x")
+	oracle.state.Validators[uint64(validatorIndex)].ValidatorStatus = Banned
+	require.False(t, oracle.isSubscribed(uint64(validatorIndex)))
+
+	summary := fullBlock.SummarizedBlock(oracle, testPoolAddress)
+	require.Equal(t, OkPoolProposal, summary.BlockType)
+	require.Equal(t, reward, summary.Reward)
+}
+
+// The detection must not apply before the slot it was deployed at, otherwise a
+// resync from the pool deployment would rewrite already published roots
+func Test_ForcedMevPayment_ActivationSlot(t *testing.T) {
+	activation := ForcedPaymentActivationSlot[MainnetChainId]
+	reward := big.NewInt(125947079586393390)
+
+	tests := []struct {
+		name   string
+		slot   uint64
+		active bool
+	}{
+		{"long before activation", activation - 100000, false},
+		{"one slot before activation", activation - 1, false},
+		{"exactly at activation", activation, true},
+		{"one slot after activation", activation + 1, true},
+		{"long after activation", activation + 100000, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fullBlock := buildMevBlock(t, tt.slot, 25568643, phase0.ValidatorIndex(2245785),
+				titanForwarder, reward)
+			require.Equal(t, tt.active, fullBlock.IsForcedPaymentDetectionActive())
+		})
+	}
+}
+
+// Chains with no recorded activation have no published history to preserve
+func Test_ForcedMevPayment_ActivationUnknownChain(t *testing.T) {
+	_, found := ForcedPaymentActivationSlot[HoleskyChainId]
+	require.False(t, found, "test assumes holesky has no activation slot")
+
+	fullBlock := buildMevBlock(t, 1, 100, phase0.ValidatorIndex(1), titanForwarder, big.NewInt(1))
+	fullBlock.ChainId = HoleskyChainId
+	require.True(t, fullBlock.IsForcedPaymentDetectionActive())
+}
+
+// The activation slot must not sit after the range the fix has to repair,
+// otherwise the payments that halted the oracle would stay unallocated
+func Test_ForcedMevPayment_ActivationCoversKnownExceptions(t *testing.T) {
+	activation := ForcedPaymentActivationSlot[MainnetChainId]
+
+	// Exceptions 4 and 5 are inside the window the oracle must replay, so the
+	// detection has to be live by then even though they short circuit
+	require.Less(t, activation, ExceptionSlotMainnet4)
+	require.Less(t, activation, ExceptionSlotMainnet5)
+
+	// Exceptions 1 to 3 predate it and stay handled by the exception table
+	require.Greater(t, activation, ExceptionSlotMainnet1)
+	require.Greater(t, activation, ExceptionSlotMainnet2)
+	require.Greater(t, activation, ExceptionSlotMainnet3)
+}
+
 // The five hardcoded exceptions must keep producing the exact same state, since
 // changing them would change the historical oracle root
 func Test_ForcedMevPayment_ExceptionsStillShortCircuit(t *testing.T) {

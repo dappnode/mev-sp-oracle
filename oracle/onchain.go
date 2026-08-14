@@ -1162,18 +1162,29 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 		// that executes no pool code and therefore emits no EtherReceived event,
 		// eg SELFDESTRUCT. Only the pool balance can prove it either way.
 		//
-		// We only check this for subscribers, as that is the only case where we
-		// owe a reward and would otherwise ban the validator for not paying.
-		mevReward, isMev, mevRecipient := fullBlock.MevRewardInWei()
-		if isFromSubscriber &&
-			isMev &&
-			!utils.Equals(mevRecipient, o.PoolAddress) &&
+		// The candidate is the last tx of the block whatever its sender. We do
+		// NOT reuse MevRewardInWei here: it only recognises a payment sent by
+		// the block fee recipient or a whitelisted builder, and builders route
+		// payouts through other addresses. On mainnet, six payments were missed
+		// this way in a single day, all sent by 0x9fc3da86 while the fee
+		// recipient was Titan at 0x4838b106.
+		//
+		// We also do not require the proposer to be subscribed, since the pool
+		// auto subscribes any validator whose reward reaches it.
+		//
+		// Whether the pool was actually paid is decided by the balance delta
+		// alone. For unrelated blocks it will not match the candidate value and
+		// the verdict is simply false, at the cost of two eth_getBalance calls.
+		candidateReward, candidateRecipient := fullBlock.GetLastTxValueAndRecipient()
+		if fullBlock.IsForcedPaymentDetectionActive() &&
+			candidateReward.Sign() > 0 &&
+			!utils.Equals(candidateRecipient, o.PoolAddress) &&
 			// Guard: if the pool were also the fee recipient it would collect
 			// the block tips too, and they would pollute the balance delta
 			!utils.Equals(fullBlock.GetFeeRecipient(), o.PoolAddress) {
 
 			delivered, err := o.WasForcedMevPaymentDelivered(
-				fullBlock.GetBlockNumber(), mevReward, fullBlock.Events)
+				fullBlock.GetBlockNumber(), candidateReward, fullBlock.Events)
 
 			// An error is not a verdict. Retries already happened inside, so the
 			// chain is genuinely unreadable and we must not decide this slot.
@@ -1183,11 +1194,24 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 					fullBlock.GetSlotUint64(), ": ", err)
 			}
 
+			// Receipts are only fetched above for blocks already known to be
+			// relevant, so a forced payment from a validator the pool does not
+			// know yet arrives here without them. Fetch them so the evidence
+			// carries the real tx hash rather than a zero one.
+			if delivered && fullBlock.GetLastReceipt() == nil {
+				header, receipts, err := o.GetExecHeaderAndReceipts(
+					fullBlock.GetBlockNumberBigInt(), fullBlock.GetBlockTransactions())
+				if err != nil {
+					log.Fatal("failed getting header and receipts for forced payment: ", err)
+				}
+				fullBlock.SetHeaderAndReceipts(header, receipts)
+			}
+
 			paymentTx := fullBlock.GetLastReceipt()
 			forcedPayment := &ForcedMevPayment{
 				Delivered:   delivered,
-				AmountWei:   mevReward,
-				Payer:       mevRecipient,
+				AmountWei:   candidateReward,
+				Payer:       candidateRecipient,
 				BlockNumber: fullBlock.GetBlockNumber(),
 			}
 			if paymentTx != nil {

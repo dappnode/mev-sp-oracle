@@ -47,6 +47,30 @@ var ExceptionSlotMainnet4 = uint64(14969158)
 // https://etherscan.io/tx/0xb3406038a10e07a6df7ab1795d05e0a7ba9a1e5d92d13e0114ae9eb06bfcc13e
 var ExceptionSlotMainnet5 = uint64(14969540)
 
+// Detecting forced payments changes how a block is classified, so enabling it
+// retroactively would rewrite already published history: a resync from the pool
+// deployment could allocate rewards that the roots onchain never included, and
+// claims settle as accumulated minus claimed, so a recomputed total below what
+// an address already claimed would brick its future claims.
+//
+// Apply the detection only from the slot where it was first deployed. Before it,
+// forced payments stay handled by the exception table above, exactly as the
+// oracle handled them when those roots were produced.
+var ForcedPaymentActivationSlot = map[uint64]uint64{
+	MainnetChainId: 14950448,
+}
+
+// Whether forced payment detection applies to this block. Chains with no
+// recorded activation slot have no published history to preserve, so it applies
+// from genesis.
+func (b *FullBlock) IsForcedPaymentDetectionActive() bool {
+	activationSlot, found := ForcedPaymentActivationSlot[b.ChainId]
+	if !found {
+		return true
+	}
+	return b.GetSlotUint64() >= activationSlot
+}
+
 type mevRewardException struct {
 	rewardWei string
 	recipient string
@@ -358,6 +382,30 @@ func (b *FullBlock) SetEvents(events *Events) {
 	}
 }
 
+// Returns the value and recipient of the last tx of the block, which is where
+// the MEV payment is placed. Deliberately says nothing about who sent it: the
+// sender heuristic in MevRewardInWei misses payments routed through an address
+// that is neither the fee recipient nor a whitelisted builder, and whether the
+// pool was really paid is decided by the balance delta, not by the sender.
+// Returns zero and an empty recipient for empty blocks and contract creations.
+func (b *FullBlock) GetLastTxValueAndRecipient() (*big.Int, string) {
+	txs := b.GetBlockTransactions()
+	if len(txs) == 0 {
+		return big.NewInt(0), ""
+	}
+
+	tx, err := utils.DecodeTx(txs[len(txs)-1])
+	if err != nil {
+		log.Fatal("could not decode tx: ", err)
+	}
+
+	if tx.To() == nil {
+		return big.NewInt(0), ""
+	}
+
+	return tx.Value(), strings.ToLower(tx.To().String())
+}
+
 // Returns the receipt of the last tx of the block, which is the one carrying
 // the MEV payment. Nil if receipts were not fetched for this block.
 func (b *FullBlock) GetLastReceipt() *types.Receipt {
@@ -380,15 +428,19 @@ func (b *FullBlock) SetForcedMevPayment(payment *ForcedMevPayment, poolAddress s
 		log.Fatal("forced mev payment can't be nil")
 	}
 
+	payment.Recipient = strings.ToLower(poolAddress)
 	b.ForcedMevPayment = payment
 
 	if !payment.Delivered {
+		// Expected on almost every block: the candidate is the last tx of any
+		// block, so this fires for all the blocks that have nothing to do with
+		// the pool. Only the delivered case is worth reporting.
 		log.WithFields(log.Fields{
 			"Slot":        b.GetSlotUint64(),
 			"BlockNumber": payment.BlockNumber,
 			"Payer":       payment.Payer,
 			"AmountWei":   payment.AmountWei,
-		}).Warn("MEV payment did not reach the pool. Applying wrong fee policy")
+		}).Trace("Candidate payment did not reach the pool")
 		return
 	}
 
@@ -454,6 +506,14 @@ func (b *FullBlock) MevRewardInWei() (*big.Int, bool, string) {
 		}).Info("Special case: MEV reward hardcoded")
 
 		return reward, true, recipient
+	}
+
+	// A payment proven to have reached the pool through a path that executes no
+	// pool code. The sender heuristic below cannot see these: builders pay
+	// through addresses that are neither the block fee recipient nor
+	// whitelisted, so the balance delta is the only evidence there is.
+	if b.ForcedMevPayment != nil && b.ForcedMevPayment.Delivered {
+		return new(big.Int).Set(b.ForcedMevPayment.AmountWei), true, b.ForcedMevPayment.Recipient
 	}
 
 	// Get the last tx which is the one that contains the mev reward
