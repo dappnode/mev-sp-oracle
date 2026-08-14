@@ -328,25 +328,37 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 				"DeployedSlot":          oracleInstance.State().DeployedSlot,
 			}).Info("Checkpoint reached")
 
-			// TODO: Temporally commented. Doesn't work well with non archival node
-			//log.Info("Running onchain reconciliation. Last one was: ", lastReconciliationTime)
-			//lastReconciliationTime = time.Now().Unix()
+			// Reconcile against the real pool balance before freezing and
+			// publishing a root. RunOffchainReconciliation below only compares
+			// the oracle's books against themselves, so it passes whenever they
+			// are internally consistent, even when they disagree with the chain.
+			// It cannot see a reward credited for money that never arrived, nor
+			// money that arrived and was never allocated. This is the only check
+			// that can, and a root must never be submitted without it passing.
+			//
+			// This needs execution state at the processed block, which is why it
+			// used to be disabled: a non archival node cannot serve it while the
+			// oracle is catching up, and it would fail with "missing trie node".
+			// Point --execution-endpoint at a node that keeps state history.
+			log.Info("Running onchain reconciliation before freezing the checkpoint")
+			finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
+			uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
 
-			// If we are up to date, this is the latest finalized block. Run this only in the last block, otherwise
-			// a non archival node will error "missing trie node". Non archival nodes don't store much before last
-			// finalized block.
-			//finalizedBlock := big.NewInt(0).SetUint64(oracleInstance.State().LatestProcessedBlock)
-			//uniqueAddresses := oracleInstance.GetUniqueWithdrawalAddresses()
-			//poolEthBalanceWei, err := onchain.GetPoolEthBalance(finalizedBlock)
-			//if err != nil {
-			//	log.Fatal("Could not get pool eth balance for reconciliation: ", err)
-			//}
+			poolEthBalanceWei, err := onchain.GetPoolEthBalance(finalizedBlock)
+			if err != nil {
+				log.Fatal("Could not get pool eth balance for reconciliation: ", err)
+			}
 
-			//claimedPerAccount := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock)
-			//err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
-			//if err != nil {
-			//	log.Fatal("Reconciliation failed, state was not commited: ", err)
-			//}
+			claimedPerAccount, err := onchain.GetClaimedPerWithdrawalAddress(uniqueAddresses, finalizedBlock)
+			if err != nil {
+				log.Fatal("Could not get claimed amounts for reconciliation: ", err)
+			}
+
+			err = oracleInstance.RunOnchainReconciliation(poolEthBalanceWei, claimedPerAccount)
+			if err != nil {
+				log.Fatal("Onchain reconciliation failed, checkpoint was not frozen: ", err)
+			}
+			lastReconciliationTime = time.Now().Unix()
 
 			err = oracleInstance.RunOffchainReconciliation()
 			if err != nil {
