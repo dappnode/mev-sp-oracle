@@ -933,38 +933,35 @@ func unexplainedPoolInflow(balanceDelta *big.Int, events *Events) *big.Int {
 	return new(big.Int).Sub(balanceDelta, explained)
 }
 
-// Returns whether the complete expected MEV reward reached the pool in this
-// block through a path that emitted no event. The pool balance is read before
-// and after the block and every event-explained flow is subtracted, so what is
-// left must match the expected reward exactly. No tolerance is applied.
+// Returns the amount of ETH that reached the pool in this block through a path
+// that emitted no event. The pool balance is read before and after the block and
+// every event-explained flow is subtracted. A forced MEV payment is delivered
+// only when a candidate tx matches this amount exactly, see MatchForcedPayment.
+// No tolerance is applied.
 //
-// The returned bool is decisive: true means pay the validator, false means the
-// reward did not arrive and wrong-fee policy applies. A non-nil error is NOT a
-// verdict, it means the chain could not be read and the caller must not decide.
-func (o *Onchain) WasForcedMevPaymentDelivered(
+// A non-nil error is NOT a verdict, it means the chain could not be read and the
+// caller must not decide.
+func (o *Onchain) GetUnexplainedPoolInflow(
 	blockNumber uint64,
-	expectedReward *big.Int,
 	events *Events,
-	opts ...retry.Option) (bool, error) {
+	opts ...retry.Option) (*big.Int, error) {
 
 	if blockNumber == 0 {
-		return false, errors.New("cant verify forced mev payment for block 0")
+		return nil, errors.New("cant verify forced mev payment for block 0")
 	}
 
 	balanceAfter, err := o.GetPoolEthBalance(new(big.Int).SetUint64(blockNumber), opts...)
 	if err != nil {
-		return false, errors.Wrap(err, "could not get pool balance at block "+strconv.FormatUint(blockNumber, 10))
+		return nil, errors.Wrap(err, "could not get pool balance at block "+strconv.FormatUint(blockNumber, 10))
 	}
 
 	balanceBefore, err := o.GetPoolEthBalance(new(big.Int).SetUint64(blockNumber-1), opts...)
 	if err != nil {
-		return false, errors.Wrap(err, "could not get pool balance at block "+strconv.FormatUint(blockNumber-1, 10))
+		return nil, errors.Wrap(err, "could not get pool balance at block "+strconv.FormatUint(blockNumber-1, 10))
 	}
 
 	delta := new(big.Int).Sub(balanceAfter, balanceBefore)
-	unexplained := unexplainedPoolInflow(delta, events)
-
-	return unexplained.Cmp(expectedReward) == 0, nil
+	return unexplainedPoolInflow(delta, events), nil
 }
 
 func (o *Onchain) GetAddressEthBalance(account common.Address, opts ...retry.Option) (*big.Int, error) {
@@ -1162,29 +1159,33 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 		// that executes no pool code and therefore emits no EtherReceived event,
 		// eg SELFDESTRUCT. Only the pool balance can prove it either way.
 		//
-		// The candidate is the last tx of the block whatever its sender. We do
-		// NOT reuse MevRewardInWei here: it only recognises a payment sent by
-		// the block fee recipient or a whitelisted builder, and builders route
-		// payouts through other addresses. On mainnet, six payments were missed
-		// this way in a single day, all sent by 0x9fc3da86 while the fee
-		// recipient was Titan at 0x4838b106.
+		// Candidates are the txs of the block that send value somewhere other
+		// than the pool, whatever their sender. We do NOT reuse
+		// MevRewardInWei here: it only recognises a payment sent by the block fee
+		// recipient or a whitelisted builder, and builders route payouts through
+		// other addresses. On mainnet, six payments were missed this way in a
+		// single day, all sent by 0x9fc3da86 while the fee recipient was Titan at
+		// 0x4838b106.
+		//
+		// From AnyPositionForcedPaymentActivationSlot we also do not require the
+		// payment to be the last tx. On mainnet block 25956850 it was tx 227 of
+		// 241, so a last tx only check never ran, the proposer was banned and the
+		// ETH was left unallocated, which halted the oracle at reconciliation.
 		//
 		// We also do not require the proposer to be subscribed, since the pool
 		// auto subscribes any validator whose reward reaches it.
 		//
 		// Whether the pool was actually paid is decided by the balance delta
-		// alone. For unrelated blocks it will not match the candidate value and
-		// the verdict is simply false, at the cost of two eth_getBalance calls.
-		candidateReward, candidateRecipient := fullBlock.GetLastTxValueAndRecipient()
+		// alone, at the cost of two eth_getBalance calls per block. Candidates
+		// are only looked for when some ETH arrived that no event explains,
+		// which almost no block has.
 		if fullBlock.IsForcedPaymentDetectionActive() &&
-			candidateReward.Sign() > 0 &&
-			!utils.Equals(candidateRecipient, o.PoolAddress) &&
 			// Guard: if the pool were also the fee recipient it would collect
 			// the block tips too, and they would pollute the balance delta
 			!utils.Equals(fullBlock.GetFeeRecipient(), o.PoolAddress) {
 
-			delivered, err := o.WasForcedMevPaymentDelivered(
-				fullBlock.GetBlockNumber(), candidateReward, fullBlock.Events)
+			unexplainedInflow, err := o.GetUnexplainedPoolInflow(
+				fullBlock.GetBlockNumber(), fullBlock.Events)
 
 			// An error is not a verdict. Retries already happened inside, so the
 			// chain is genuinely unreadable and we must not decide this slot.
@@ -1194,32 +1195,63 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 					fullBlock.GetSlotUint64(), ": ", err)
 			}
 
-			// Receipts are only fetched above for blocks already known to be
-			// relevant, so a forced payment from a validator the pool does not
-			// know yet arrives here without them. Fetch them so the evidence
-			// carries the real tx hash rather than a zero one.
-			if delivered && fullBlock.GetLastReceipt() == nil {
-				header, receipts, err := o.GetExecHeaderAndReceipts(
-					fullBlock.GetBlockNumberBigInt(), fullBlock.GetBlockTransactions())
-				if err != nil {
-					log.Fatal("failed getting header and receipts for forced payment: ", err)
+			var payment *ForcedPaymentCandidate
+			if unexplainedInflow.Sign() != 0 {
+				payment = MatchForcedPayment(fullBlock.GetForcedPaymentCandidates(o.PoolAddress), unexplainedInflow)
+			}
+
+			if payment == nil && unexplainedInflow.Sign() != 0 {
+				// Nothing to allocate this to, so reconciliation will fail by
+				// exactly this amount. Say so here, where the cause is visible.
+				log.WithFields(log.Fields{
+					"Slot":              fullBlock.GetSlotUint64(),
+					"BlockNumber":       fullBlock.GetBlockNumber(),
+					"UnexplainedInflow": unexplainedInflow,
+				}).Warn("Pool balance changed without an event and no tx in the block matches the amount")
+			}
+
+			if payment != nil {
+				// Receipts are only fetched above for blocks already known to be
+				// relevant, so a forced payment from a validator the pool does
+				// not know yet arrives here without them. Fetch them so the
+				// evidence carries the real block hash rather than a zero one.
+				if len(fullBlock.ExecutionReceipts) == 0 {
+					header, receipts, err := o.GetExecHeaderAndReceipts(
+						fullBlock.GetBlockNumberBigInt(), fullBlock.GetBlockTransactions())
+					if err != nil {
+						log.Fatal("failed getting header and receipts for forced payment: ", err)
+					}
+					fullBlock.SetHeaderAndReceipts(header, receipts)
 				}
-				fullBlock.SetHeaderAndReceipts(header, receipts)
-			}
 
-			paymentTx := fullBlock.GetLastReceipt()
-			forcedPayment := &ForcedMevPayment{
-				Delivered:   delivered,
-				AmountWei:   candidateReward,
-				Payer:       candidateRecipient,
-				BlockNumber: fullBlock.GetBlockNumber(),
-			}
-			if paymentTx != nil {
-				forcedPayment.TxHash = paymentTx.TxHash.String()
-				forcedPayment.BlockHash = paymentTx.BlockHash.String()
-			}
+				forcedPayment := &ForcedMevPayment{
+					Delivered:   true,
+					AmountWei:   payment.AmountWei,
+					Payer:       payment.Recipient,
+					TxHash:      payment.TxHash,
+					BlockNumber: fullBlock.GetBlockNumber(),
+				}
+				if payment.TxIndex < len(fullBlock.ExecutionReceipts) {
+					forcedPayment.BlockHash = fullBlock.ExecutionReceipts[payment.TxIndex].BlockHash.String()
+				}
 
-			fullBlock.SetForcedMevPayment(forcedPayment, o.PoolAddress)
+				// Legit when a validator's first reward reaches the pool this way,
+				// but it is also what a forced transfer that is not a MEV payment
+				// would look like, so leave a trail to audit it. A sender equal to
+				// the fee recipient means the builder itself paid.
+				if !isFromSubscriber {
+					log.WithFields(log.Fields{
+						"Slot":         fullBlock.GetSlotUint64(),
+						"ValIndex":     fullBlock.GetProposerIndexUint64(),
+						"AmountWei":    payment.AmountWei,
+						"TxHash":       payment.TxHash,
+						"TxSender":     payment.Sender,
+						"FeeRecipient": strings.ToLower(fullBlock.GetFeeRecipient()),
+					}).Warn("Forced MEV payment from a validator not subscribed to the pool, it will be auto subscribed unless banned")
+				}
+
+				fullBlock.SetForcedMevPayment(forcedPayment, o.PoolAddress)
+			}
 		}
 	}
 

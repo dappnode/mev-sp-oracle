@@ -126,12 +126,12 @@ type Events struct {
 // EtherReceived event, eg when an intermediate contract forwards the ETH with
 // SELFDESTRUCT. The pool code is never executed in that case, so the only proof
 // available is the pool balance delta across the block. See
-// WasForcedMevPaymentDelivered for how Delivered is calculated.
+// GetUnexplainedPoolInflow and MatchForcedPayment for how Delivered is calculated.
 type ForcedMevPayment struct {
 	// True only when the complete expected reward provably reached the pool
 	Delivered bool `json:"delivered"`
 
-	// The expected reward, ie the value of the payment tx
+	// The expected reward, ie the value of the payment tx, wherever it sits in the block
 	AmountWei *big.Int `json:"amount_wei"`
 
 	// The apparent recipient of the payment tx: the contract that forwarded the

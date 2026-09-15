@@ -16,16 +16,35 @@ import (
 )
 
 // The contract Titan uses to forward the MEV payment to the pool. It receives
-// the ETH in the last tx of the block and forwards it with SELFDESTRUCT, which
-// never executes the pool code and therefore emits no EtherReceived event
+// the ETH in a tx of the block, usually but not always the last one, and
+// forwards it with SELFDESTRUCT to the address in its calldata, which never
+// executes the pool code and therefore emits no EtherReceived event
 const titanForwarder = "0xFEEEEEE44046c3f61a8CC081E0918eF0de0a7ffC"
 
 const testPoolAddress = "0xAdFb8D27671F14f297eE94135e266aAFf8752e35"
+
+// A tx to place in a test block
+type testTx struct {
+	to    string
+	value *big.Int
+
+	// Sent by an unrelated account rather than the block fee recipient
+	notFromBuilder bool
+}
 
 // Builds a block whose last tx sends `reward` to `to`, sent by the block fee
 // recipient, which is what makes the oracle consider it a MEV payment
 func buildMevBlock(t *testing.T, slot uint64, blockNumber uint64,
 	validatorIndex phase0.ValidatorIndex, to string, reward *big.Int) *FullBlock {
+
+	t.Helper()
+	return buildBlockWithTxs(t, slot, blockNumber, validatorIndex, []testTx{{to: to, value: reward}})
+}
+
+// Builds a block with the given txs in order, sent by the block fee recipient
+// unless marked otherwise
+func buildBlockWithTxs(t *testing.T, slot uint64, blockNumber uint64,
+	validatorIndex phase0.ValidatorIndex, txs []testTx) *FullBlock {
 
 	t.Helper()
 
@@ -35,21 +54,32 @@ func buildMevBlock(t *testing.T, slot uint64, blockNumber uint64,
 	require.NoError(t, err)
 	builderAddress := crypto.PubkeyToAddress(builderKey.PublicKey)
 
-	toAddress := common.HexToAddress(to)
-	signer := types.LatestSignerForChainID(new(big.Int).SetUint64(MainnetChainId))
-	tx, err := types.SignNewTx(builderKey, signer, &types.DynamicFeeTx{
-		ChainID:   new(big.Int).SetUint64(MainnetChainId),
-		Nonce:     0,
-		GasTipCap: big.NewInt(0),
-		GasFeeCap: big.NewInt(0),
-		Gas:       21000,
-		To:        &toAddress,
-		Value:     reward,
-	})
+	otherKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 
-	rawTx, err := tx.MarshalBinary()
-	require.NoError(t, err)
+	signer := types.LatestSignerForChainID(new(big.Int).SetUint64(MainnetChainId))
+	rawTxs := make([]bellatrix.Transaction, 0, len(txs))
+	for nonce, testTx := range txs {
+		senderKey := builderKey
+		if testTx.notFromBuilder {
+			senderKey = otherKey
+		}
+		toAddress := common.HexToAddress(testTx.to)
+		tx, err := types.SignNewTx(senderKey, signer, &types.DynamicFeeTx{
+			ChainID:   new(big.Int).SetUint64(MainnetChainId),
+			Nonce:     uint64(nonce),
+			GasTipCap: big.NewInt(0),
+			GasFeeCap: big.NewInt(0),
+			Gas:       21000,
+			To:        &toAddress,
+			Value:     testTx.value,
+		})
+		require.NoError(t, err)
+
+		rawTx, err := tx.MarshalBinary()
+		require.NoError(t, err)
+		rawTxs = append(rawTxs, rawTx)
+	}
 
 	var feeRecipient bellatrix.ExecutionAddress
 	copy(feeRecipient[:], builderAddress.Bytes())
@@ -78,7 +108,7 @@ func buildMevBlock(t *testing.T, slot uint64, blockNumber uint64,
 					ExecutionPayload: &bellatrix.ExecutionPayload{
 						FeeRecipient: feeRecipient,
 						BlockNumber:  blockNumber,
-						Transactions: []bellatrix.Transaction{rawTx},
+						Transactions: rawTxs,
 					},
 				},
 			},
@@ -348,10 +378,11 @@ func Test_ForcedMevPayment_SenderIsNotFeeRecipient(t *testing.T) {
 	_, isMev, _ := fullBlock.MevRewardInWei()
 	require.False(t, isMev, "sender heuristic should not recognise this payment")
 
-	// The candidate is taken from the last tx regardless of who sent it
-	candidate, recipient := fullBlock.GetLastTxValueAndRecipient()
-	require.Equal(t, reward, candidate)
-	require.Equal(t, titanForwarder, common.HexToAddress(recipient).Hex())
+	// The candidate is taken regardless of who sent it
+	candidates := fullBlock.GetForcedPaymentCandidates(testPoolAddress)
+	require.Len(t, candidates, 1)
+	require.Equal(t, reward, candidates[0].AmountWei)
+	require.Equal(t, titanForwarder, common.HexToAddress(candidates[0].Recipient).Hex())
 
 	// Once the balance delta proves delivery, the block must be paid normally
 	fullBlock.SetForcedMevPayment(&ForcedMevPayment{
@@ -374,6 +405,131 @@ func Test_ForcedMevPayment_SenderIsNotFeeRecipient(t *testing.T) {
 	require.Equal(t, MevBlock, summary.RewardType)
 	require.Equal(t, reward, summary.Reward)
 	require.Len(t, fullBlock.GetDonations(testPoolAddress), 0)
+}
+
+// The shape of mainnet block 25956850: four payouts through the forwarder, the
+// one to the pool being the fourth, followed by unrelated txs
+func incidentBlockTxs(reward *big.Int) []testTx {
+	return []testTx{
+		{to: titanForwarder, value: big.NewInt(4622541964425610)},
+		{to: titanForwarder, value: big.NewInt(527426380532538)},
+		{to: titanForwarder, value: big.NewInt(6206743076091)},
+		{to: titanForwarder, value: reward},
+		{to: "0xf4e8b391eae59bc848848a73230b7b174a785d5c", value: big.NewInt(137183620275739076), notFromBuilder: true},
+		{to: "0x5f2876944247f302dff857431e26951c2b8dfa33", value: big.NewInt(0), notFromBuilder: true},
+	}
+}
+
+// The regression that halted the oracle at reconciliation on mainnet block
+// 25956850, slot 15194839. The builder paid four parties through the forwarder
+// in txs 224 to 227, the one to the pool being 227, and other txs landed after
+// them. The last tx had no value and forwarded a donation to the pool, which
+// emitted EtherReceived. A last tx only check never ran, the proposer was banned
+// and 13131532323905851 wei were left unallocated.
+func Test_ForcedMevPayment_PaymentIsNotLastTx(t *testing.T) {
+	reward, _ := new(big.Int).SetString("13131532323905851", 10)
+	donation := big.NewInt(103797680070839)
+	balanceDelta, _ := new(big.Int).SetString("13235330003976690", 10)
+	validatorIndex := phase0.ValidatorIndex(2245769)
+
+	fullBlock := buildBlockWithTxs(t, 15194839, 25956850, validatorIndex, incidentBlockTxs(reward))
+	fullBlock.Events.EtherReceived = append(fullBlock.Events.EtherReceived, etherReceivedEvent(donation))
+
+	// The last tx is not from the builder, so the sender heuristic sees nothing
+	_, isMev, _ := fullBlock.MevRewardInWei()
+	require.False(t, isMev)
+
+	// Every tx with value is a candidate, zero value txs are not
+	candidates := fullBlock.GetForcedPaymentCandidates(testPoolAddress)
+	require.Len(t, candidates, 5)
+
+	// Once the donation is explained away, what is left matches tx 3 exactly
+	unexplained := unexplainedPoolInflow(balanceDelta, fullBlock.Events)
+	require.Zero(t, unexplained.Cmp(reward))
+
+	payment := MatchForcedPayment(candidates, unexplained)
+	require.NotNil(t, payment)
+	require.Equal(t, 3, payment.TxIndex)
+	require.Equal(t, reward, payment.AmountWei)
+
+	// The builder paid, and it is also the block fee recipient
+	require.Equal(t, common.HexToAddress(fullBlock.GetFeeRecipient()), common.HexToAddress(payment.Sender))
+	require.NotEqual(t, common.HexToAddress(candidates[4].Sender), common.HexToAddress(payment.Sender))
+
+	fullBlock.SetForcedMevPayment(&ForcedMevPayment{
+		Delivered:   true,
+		AmountWei:   payment.AmountWei,
+		Payer:       payment.Recipient,
+		TxHash:      payment.TxHash,
+		BlockNumber: 25956850,
+	}, testPoolAddress)
+
+	oracle := NewOracle(&Config{})
+	oracle.addSubscription(uint64(validatorIndex), "0x1111111111111111111111111111111111111111", "0x")
+
+	summary := fullBlock.SummarizedBlock(oracle, testPoolAddress)
+	require.Equal(t, OkPoolProposal, summary.BlockType)
+	require.Equal(t, MevBlock, summary.RewardType)
+	require.Equal(t, reward, summary.Reward)
+
+	// The donation stays a donation
+	donations := fullBlock.GetDonations(testPoolAddress)
+	require.Len(t, donations, 1)
+	require.Equal(t, donation, donations[0].DonationAmount)
+}
+
+func Test_MatchForcedPayment(t *testing.T) {
+	candidates := []*ForcedPaymentCandidate{
+		{TxIndex: 0, AmountWei: big.NewInt(500)},
+		{TxIndex: 1, AmountWei: big.NewInt(1000)},
+		{TxIndex: 2, AmountWei: big.NewInt(700)},
+		{TxIndex: 3, AmountWei: big.NewInt(1000)},
+		{TxIndex: 4, AmountWei: big.NewInt(300)},
+	}
+
+	tests := []struct {
+		name        string
+		unexplained *big.Int
+		expectedIdx int // -1 for no match
+	}{
+		{"nothing unexplained", big.NewInt(0), -1},
+		{"negative is never a payment", big.NewInt(-500), -1},
+		{"no candidate matches", big.NewInt(999), -1},
+		{"the sum of two candidates is not a match", big.NewInt(1200), -1},
+		{"single match in the middle", big.NewInt(700), 2},
+		{"first tx", big.NewInt(500), 0},
+		{"last tx", big.NewInt(300), 4},
+		{"ties pick the last one", big.NewInt(1000), 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MatchForcedPayment(candidates, tt.unexplained)
+			if tt.expectedIdx == -1 {
+				require.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			require.Equal(t, tt.expectedIdx, got.TxIndex)
+		})
+	}
+
+	require.Nil(t, MatchForcedPayment([]*ForcedPaymentCandidate{}, big.NewInt(1000)))
+}
+
+// Txs straight to the pool emit EtherReceived, so they are never candidates,
+// and neither are zero value txs
+func Test_GetForcedPaymentCandidates_ExcludesPoolAndZeroValue(t *testing.T) {
+	fullBlock := buildBlockWithTxs(t, 15194839, 25956850, phase0.ValidatorIndex(1), []testTx{
+		{to: testPoolAddress, value: big.NewInt(1000)},
+		{to: titanForwarder, value: big.NewInt(0)},
+		{to: titanForwarder, value: big.NewInt(2000)},
+	})
+
+	candidates := fullBlock.GetForcedPaymentCandidates(testPoolAddress)
+	require.Len(t, candidates, 1)
+	require.Equal(t, 2, candidates[0].TxIndex)
+	require.Equal(t, big.NewInt(2000), candidates[0].AmountWei)
 }
 
 // A forced payment from a validator the pool does not know yet must auto
@@ -481,6 +637,78 @@ func Test_ForcedMevPayment_ActivationCoversKnownExceptions(t *testing.T) {
 	require.Greater(t, activation, ExceptionSlotMainnet1)
 	require.Greater(t, activation, ExceptionSlotMainnet2)
 	require.Greater(t, activation, ExceptionSlotMainnet3)
+}
+
+// Searching every tx must not apply before the slot that needed it, otherwise a
+// resync could decide already published blocks differently
+func Test_AnyPositionForcedPayment_ActivationSlot(t *testing.T) {
+	activation := AnyPositionForcedPaymentActivationSlot[MainnetChainId]
+
+	tests := []struct {
+		name   string
+		slot   uint64
+		active bool
+	}{
+		{"long before activation", activation - 100000, false},
+		{"one slot before activation", activation - 1, false},
+		{"exactly at activation", activation, true},
+		{"one slot after activation", activation + 1, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fullBlock := buildMevBlock(t, tt.slot, 25956850, phase0.ValidatorIndex(2245769),
+				titanForwarder, big.NewInt(1))
+			require.Equal(t, tt.active, fullBlock.IsAnyPositionForcedPaymentActive())
+		})
+	}
+
+	// It must cover the block that halted the oracle, and can only narrow the
+	// forced payment detection, never start before it
+	require.LessOrEqual(t, activation, uint64(15194839))
+	require.GreaterOrEqual(t, activation, ForcedPaymentActivationSlot[MainnetChainId])
+
+	_, found := AnyPositionForcedPaymentActivationSlot[HoleskyChainId]
+	require.False(t, found, "test assumes holesky has no activation slot")
+	holeskyBlock := buildMevBlock(t, 1, 100, phase0.ValidatorIndex(1), titanForwarder, big.NewInt(1))
+	holeskyBlock.ChainId = HoleskyChainId
+	require.True(t, holeskyBlock.IsAnyPositionForcedPaymentActive())
+}
+
+// Before activation only the last tx is a candidate, exactly as the detector
+// that produced the published roots. The same block one slot earlier must be
+// decided as it was then: nothing matches and wrong fee policy applies.
+func Test_AnyPositionForcedPayment_LastTxOnlyBeforeActivation(t *testing.T) {
+	activation := AnyPositionForcedPaymentActivationSlot[MainnetChainId]
+	reward, _ := new(big.Int).SetString("13131532323905851", 10)
+
+	// The last tx has no value, so there are no candidates and the balance is
+	// never read, as before
+	before := buildBlockWithTxs(t, activation-1, 25956850, phase0.ValidatorIndex(2245769), incidentBlockTxs(reward))
+	require.Empty(t, before.GetForcedPaymentCandidates(testPoolAddress))
+	require.Nil(t, MatchForcedPayment(before.GetForcedPaymentCandidates(testPoolAddress), reward))
+
+	after := buildBlockWithTxs(t, activation, 25956850, phase0.ValidatorIndex(2245769), incidentBlockTxs(reward))
+	require.Len(t, after.GetForcedPaymentCandidates(testPoolAddress), 5)
+	require.NotNil(t, MatchForcedPayment(after.GetForcedPaymentCandidates(testPoolAddress), reward))
+
+	// When the last tx does carry value, it is the only candidate
+	lastTxPays := buildBlockWithTxs(t, activation-1, 25956850, phase0.ValidatorIndex(2245769), []testTx{
+		{to: titanForwarder, value: big.NewInt(1000)},
+		{to: titanForwarder, value: big.NewInt(2000)},
+	})
+	candidates := lastTxPays.GetForcedPaymentCandidates(testPoolAddress)
+	require.Len(t, candidates, 1)
+	require.Equal(t, 1, candidates[0].TxIndex)
+	require.Nil(t, MatchForcedPayment(candidates, big.NewInt(1000)))
+	require.NotNil(t, MatchForcedPayment(candidates, big.NewInt(2000)))
+
+	// A last tx to the pool is not a candidate either
+	lastTxToPool := buildBlockWithTxs(t, activation-1, 25956850, phase0.ValidatorIndex(2245769), []testTx{
+		{to: titanForwarder, value: big.NewInt(1000)},
+		{to: testPoolAddress, value: big.NewInt(2000)},
+	})
+	require.Empty(t, lastTxToPool.GetForcedPaymentCandidates(testPoolAddress))
 }
 
 // The five hardcoded exceptions must keep producing the exact same state, since
