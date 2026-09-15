@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"math/big"
+	"strings"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -509,4 +510,12 @@ func Test_ForcedMevPayment_ExceptionsStillShortCircuit(t *testing.T) {
 		require.Equal(t, testPoolAddress, recipient)
 		require.Nil(t, fullBlock.ForcedMevPayment)
 	}
+}
+
+// The sender is only logged, but it must point at the tx that paid, which in
+// buildMevBlock is the block fee recipient
+func Test_ForcedMevPayment_GetTxSender(t *testing.T) {
+	fullBlock := buildMevBlock(t, 15195000, 123, 42, titanForwarder, big.NewInt(1000))
+	require.Equal(t, strings.ToLower(fullBlock.GetFeeRecipient()), fullBlock.GetTxSender(0))
+	require.Equal(t, "", fullBlock.GetTxSender(1))
 }

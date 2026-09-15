@@ -393,6 +393,24 @@ func (b *FullBlock) SetEvents(events *Events) {
 	}
 }
 
+// Returns the lowercase sender of the tx at the given index of the block, or an
+// empty string if it cannot be recovered. Only meant for logging.
+func (b *FullBlock) GetTxSender(index uint) string {
+	txs := b.GetBlockTransactions()
+	if int(index) >= len(txs) {
+		return ""
+	}
+	tx, err := utils.DecodeTx(txs[index])
+	if err != nil {
+		return ""
+	}
+	sender, err := utils.GetTxSender(tx, b.ChainId)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(sender.String())
+}
+
 // Returns the value and recipient of the last tx of the block, which is where
 // the MEV payment is placed. Deliberately says nothing about who sent it: the
 // sender heuristic in MevRewardInWei misses payments routed through an address
