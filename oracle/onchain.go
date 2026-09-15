@@ -1157,26 +1157,16 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 			fullBlock.SetHeaderAndReceipts(header, receipts)
 		}
 
-		// A MEV payment whose apparent recipient is not the pool may still have
-		// reached the pool, forwarded by an intermediate contract through a path
-		// that executes no pool code and therefore emits no EtherReceived event,
-		// eg SELFDESTRUCT. Only the pool balance can prove it either way.
-		//
-		// The candidate is the last tx of the block whatever its sender. We do
-		// NOT reuse MevRewardInWei here: it only recognises a payment sent by
-		// the block fee recipient or a whitelisted builder, and builders route
-		// payouts through other addresses. On mainnet, six payments were missed
-		// this way in a single day, all sent by 0x9fc3da86 while the fee
-		// recipient was Titan at 0x4838b106.
-		//
-		// We also do not require the proposer to be subscribed, since the pool
-		// auto subscribes any validator whose reward reaches it.
-		//
-		// Whether the pool was actually paid is decided by the balance delta
-		// alone. For unrelated blocks it will not match the candidate value and
-		// the verdict is simply false, at the cost of two eth_getBalance calls.
+		// Forced transfers emit no EtherReceived. The new detector checks the
+		// unexplained balance once and searches the whole block, regardless of
+		// sender or subscription. Retain the last-tx detector below exclusively
+		// for history before activation, so published allocations stay stable.
 		candidateReward, candidateRecipient := fullBlock.GetLastTxValueAndRecipient()
-		if fullBlock.IsForcedPaymentDetectionActive() &&
+		if fullBlock.IsForcedPaymentDetectionActive() && fullBlock.IsAnyPositionForcedPaymentDetectionActive() {
+			if err := o.DetectForcedMevPayment(fullBlock); err != nil {
+				log.Fatal("could not verify forced mev payment at slot ", fullBlock.GetSlotUint64(), ": ", err)
+			}
+		} else if fullBlock.IsForcedPaymentDetectionActive() &&
 			candidateReward.Sign() > 0 &&
 			!utils.Equals(candidateRecipient, o.PoolAddress) &&
 			// Guard: if the pool were also the fee recipient it would collect
