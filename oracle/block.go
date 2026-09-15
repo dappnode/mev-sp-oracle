@@ -60,6 +60,17 @@ var ForcedPaymentActivationSlot = map[uint64]uint64{
 	MainnetChainId: 14950448,
 }
 
+// Preserve the detector used for published history. From the first affected
+// slot onwards, a forced payment can occur anywhere in the block.
+var AnyPositionForcedPaymentActivationSlot = map[uint64]uint64{
+	MainnetChainId: 15194839,
+}
+
+func (b *FullBlock) IsAnyPositionForcedPaymentDetectionActive() bool {
+	activation, found := AnyPositionForcedPaymentActivationSlot[b.ChainId]
+	return !found || b.GetSlotUint64() >= activation
+}
+
 // Whether forced payment detection applies to this block. Chains with no
 // recorded activation slot have no published history to preserve, so it applies
 // from genesis.
@@ -382,6 +393,24 @@ func (b *FullBlock) SetEvents(events *Events) {
 	}
 }
 
+// Returns the lowercase sender of the tx at the given index of the block, or an
+// empty string if it cannot be recovered. Only meant for logging.
+func (b *FullBlock) GetTxSender(index uint) string {
+	txs := b.GetBlockTransactions()
+	if int(index) >= len(txs) {
+		return ""
+	}
+	tx, err := utils.DecodeTx(txs[index])
+	if err != nil {
+		return ""
+	}
+	sender, err := utils.GetTxSender(tx, b.ChainId)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(sender.String())
+}
+
 // Returns the value and recipient of the last tx of the block, which is where
 // the MEV payment is placed. Deliberately says nothing about who sent it: the
 // sender heuristic in MevRewardInWei misses payments routed through an address
@@ -461,6 +490,7 @@ func (b *FullBlock) SetForcedMevPayment(payment *ForcedMevPayment, poolAddress s
 			Data:        []byte{},
 			BlockNumber: payment.BlockNumber,
 			TxHash:      common.HexToHash(payment.TxHash),
+			TxIndex:     payment.TxIndex,
 			BlockHash:   common.HexToHash(payment.BlockHash),
 			Removed:     false,
 		},
@@ -759,6 +789,20 @@ func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherRe
 	filteredEvents := make([]*contract.ContractEtherReceived, 0)
 	foundMev := false
 	for _, etherRxEvent := range b.Events.EtherReceived {
+		// Forced payments have a synthetic event with no topics. Match its
+		// provenance as well as its amount so an equal-sized real donation is
+		// not discarded. Keep the historical filtering before activation.
+		if b.IsAnyPositionForcedPaymentDetectionActive() && b.ForcedMevPayment != nil && b.ForcedMevPayment.Delivered {
+			if !foundMev && len(etherRxEvent.Raw.Topics) == 0 &&
+				etherRxEvent.Raw.TxHash == common.HexToHash(b.ForcedMevPayment.TxHash) &&
+				etherRxEvent.Raw.TxIndex == b.ForcedMevPayment.TxIndex &&
+				etherRxEvent.DonationAmount.Cmp(mevReward) == 0 {
+				foundMev = true
+				continue
+			}
+			filteredEvents = append(filteredEvents, etherRxEvent)
+			continue
+		}
 		if etherRxEvent.DonationAmount.Cmp(mevReward) == 0 {
 			foundMev = true
 			continue

@@ -143,6 +143,7 @@ type ForcedMevPayment struct {
 
 	// Provenance, so the evidence can be audited and replayed
 	TxHash      string `json:"tx_hash"`
+	TxIndex     uint   `json:"tx_index"`
 	BlockNumber uint64 `json:"block_number"`
 	BlockHash   string `json:"block_hash"`
 }
