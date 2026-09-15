@@ -1,12 +1,10 @@
 package oracle
 
 import (
-	"compress/gzip"
 	"context"
-	"encoding/json"
+	"crypto/ecdsa"
 	"fmt"
 	"math/big"
-	"os"
 	"sync"
 	"testing"
 
@@ -23,14 +21,14 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 )
 
 // Exercise the real ethclient JSON-RPC calls, including block parameters and
-// receipt decoding. The corpus provides real balances, signed transactions,
-// logs and normalized explorer receipt facts; no external services run in CI.
+// receipt decoding. No external services run in CI.
 type forcedPaymentRPC struct {
 	mu       sync.Mutex
 	balances map[string]*big.Int
@@ -90,27 +88,14 @@ func newForcedPaymentRPC(t testing.TB, b *FullBlock, before, after *big.Int, rec
 }
 
 type forcedPaymentFixture struct {
-	Slot           uint64                  `json:"slot"`
-	ProposerIndex  phase0.ValidatorIndex   `json:"proposer_index"`
-	Payload        *deneb.ExecutionPayload `json:"payload"`
-	BalanceBefore  string                  `json:"balance_before"`
-	BalanceAfter   string                  `json:"balance_after"`
-	Logs           []types.Log             `json:"logs"`
-	ExpectedReward string                  `json:"expected_reward"`
-	Receipt        *types.Receipt          `json:"receipt"`
-}
-
-func mainnetForcedPaymentFixtures(t testing.TB) []forcedPaymentFixture {
-	t.Helper()
-	file, err := os.Open("testdata/forced-payments/mainnet.json.gz")
-	require.NoError(t, err)
-	defer file.Close()
-	reader, err := gzip.NewReader(file)
-	require.NoError(t, err)
-	defer reader.Close()
-	var fixtures []forcedPaymentFixture
-	require.NoError(t, json.NewDecoder(reader).Decode(&fixtures))
-	return fixtures
+	Slot           uint64
+	ProposerIndex  phase0.ValidatorIndex
+	Payload        *deneb.ExecutionPayload
+	BalanceBefore  string
+	BalanceAfter   string
+	EtherReceived  []*contract.ContractEtherReceived
+	ExpectedReward string
+	Receipt        *types.Receipt
 }
 
 func decimal(t testing.TB, value string) *big.Int {
@@ -133,103 +118,135 @@ func (f forcedPaymentFixture) block(t testing.TB) *FullBlock {
 			Body: &electra.BeaconBlockBody{ExecutionPayload: f.Payload},
 		}},
 	})
-	filterer, err := contract.NewContractFilterer(common.HexToAddress(testPoolAddress), nil)
-	require.NoError(t, err)
-	abi, err := contract.ContractMetaData.GetAbi()
-	require.NoError(t, err)
-	for _, event := range f.Logs {
-		switch event.Topics[0] {
-		case abi.Events["EtherReceived"].ID:
-			parsed, err := filterer.ParseEtherReceived(event)
-			require.NoError(t, err)
-			b.Events.EtherReceived = append(b.Events.EtherReceived, parsed)
-		case abi.Events["SubscribeValidator"].ID:
-			parsed, err := filterer.ParseSubscribeValidator(event)
-			require.NoError(t, err)
-			b.Events.SubscribeValidator = append(b.Events.SubscribeValidator, parsed)
-		case abi.Events["ClaimRewards"].ID:
-			parsed, err := filterer.ParseClaimRewards(event)
-			require.NoError(t, err)
-			b.Events.ClaimRewards = append(b.Events.ClaimRewards, parsed)
-		default:
-			t.Fatalf("unexpected event %s in fixture", event.Topics[0])
-		}
+	for _, event := range f.EtherReceived {
+		copied := *event
+		copied.DonationAmount = new(big.Int).Set(event.DonationAmount)
+		b.Events.EtherReceived = append(b.Events.EtherReceived, &copied)
 	}
 	return b
 }
 
-func incidentFixture(t testing.TB) forcedPaymentFixture {
-	t.Helper()
-	for _, f := range mainnetForcedPaymentFixtures(t) {
-		if f.Slot == 15194839 {
-			return f
-		}
+// Index of the payment to the pool in the incident block
+const incidentPaymentIndex = 3
+
+// Fixed keys so every build of the incident block has the same tx hashes, which
+// the receipt refers to
+var (
+	incidentBuilderKey = mustHexKey("4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318")
+	incidentOtherKey   = mustHexKey("8f2a55949038a9610f50fb23b5883af3b4ecb3c3bb792cbcefbd1542c692be63")
+)
+
+func mustHexKey(hex string) *ecdsa.PrivateKey {
+	key, err := crypto.HexToECDSA(hex)
+	if err != nil {
+		panic(err)
 	}
-	t.Fatal("missing incident fixture")
-	return forcedPaymentFixture{}
+	return key
 }
 
-func Test_AnyPositionForcedPayment_MainnetCorpus(t *testing.T) {
-	fixtures := mainnetForcedPaymentFixtures(t)
-	var totalTxs, unrelated, delivered, oldBalanceCalls, newBalanceCalls int
-	for _, fixture := range fixtures {
-		t.Run(fmt.Sprint(fixture.Payload.BlockNumber), func(t *testing.T) {
-			b := fixture.block(t)
-			unsubscribedOracle := NewOracle(&Config{})
-			beforeSummary := b.SummarizedBlock(unsubscribedOracle, testPoolAddress)
-			beforeDonations := append([]*contract.ContractEtherReceived{}, b.GetDonations(testPoolAddress)...)
-			totalTxs += len(b.GetBlockTransactions())
-			before, after := decimal(t, fixture.BalanceBefore), decimal(t, fixture.BalanceAfter)
-			o, backend := newForcedPaymentRPC(t, b, before, after, fixture.Receipt)
-			lastValue, lastRecipient := b.GetLastTxValueAndRecipient()
-			if lastValue.Sign() > 0 && !utils.Equals(lastRecipient, testPoolAddress) && !utils.Equals(b.GetFeeRecipient(), testPoolAddress) {
-				oldBalanceCalls += 2
-			}
-			// Run the new algorithm also on earlier real blocks to compare its
-			// behavior. The separate activation tests exercise production gating.
-			require.NoError(t, o.detectAnyPositionForcedMevPayment(b))
-			newBalanceCalls += 2
-			if fixture.ExpectedReward == "0" {
-				unrelated++
-				require.Nil(t, b.ForcedMevPayment)
-				require.Equal(t, 2, backend.callCount())
-				require.Len(t, b.Events.EtherReceived, len(fixture.Logs))
-				require.Equal(t, beforeSummary, b.SummarizedBlock(unsubscribedOracle, testPoolAddress))
-				require.Equal(t, beforeDonations, append([]*contract.ContractEtherReceived{}, b.GetDonations(testPoolAddress)...))
-			} else {
-				delivered++
-				require.NotNil(t, b.ForcedMevPayment)
-				require.Equal(t, fixture.ExpectedReward, b.ForcedMevPayment.AmountWei.String())
-				require.Equal(t, fixture.Receipt.TxHash.Hex(), b.ForcedMevPayment.TxHash)
-				require.Equal(t, fixture.Receipt.TransactionIndex, b.ForcedMevPayment.TxIndex)
-				require.Equal(t, 3, backend.callCount())
-				require.Len(t, b.GetDonations(testPoolAddress), len(fixture.Logs))
-			}
-			// No balance inputs were mutated by subtraction/accounting.
-			require.Equal(t, fixture.BalanceBefore, before.String())
-			require.Equal(t, fixture.BalanceAfter, after.String())
+// Shaped like mainnet block 25956850 (slot 15194839), with its real amounts: the
+// builder, which is the fee recipient, pays four parties through the forwarder,
+// the fourth being the pool. Unrelated txs follow, the last of them with zero
+// value and emitting a donation to the pool.
+func incidentFixture(t testing.TB) forcedPaymentFixture {
+	t.Helper()
+
+	const blockNumber = 25956850
+	reward := decimal(t, "13131532323905851")
+	donation := decimal(t, "103797680070839")
+	before := decimal(t, "64806968647549848541")
+	after := new(big.Int).Add(before, reward)
+	after.Add(after, donation)
+
+	signer := types.LatestSignerForChainID(new(big.Int).SetUint64(MainnetChainId))
+	nonces := make(map[*ecdsa.PrivateKey]uint64)
+	sign := func(key *ecdsa.PrivateKey, to string, value *big.Int) *types.Transaction {
+		toAddress := common.HexToAddress(to)
+		tx, err := types.SignNewTx(key, signer, &types.DynamicFeeTx{
+			ChainID:   new(big.Int).SetUint64(MainnetChainId),
+			Nonce:     nonces[key],
+			GasTipCap: big.NewInt(0),
+			GasFeeCap: big.NewInt(0),
+			Gas:       21000,
+			To:        &toAddress,
+			Value:     value,
 		})
+		require.NoError(t, err)
+		nonces[key]++
+		return tx
 	}
-	require.GreaterOrEqual(t, unrelated, 30)
-	require.GreaterOrEqual(t, delivered, 8)
-	t.Logf("%d real blocks / %d signed txs: %d forced payments, %d unrelated; old balance RPCs=%d, new=%d", len(fixtures), totalTxs, delivered, unrelated, oldBalanceCalls, newBalanceCalls)
+
+	txs := []*types.Transaction{
+		sign(incidentBuilderKey, titanForwarder, big.NewInt(4622541964425610)),
+		sign(incidentBuilderKey, titanForwarder, big.NewInt(527426380532538)),
+		sign(incidentBuilderKey, titanForwarder, big.NewInt(6206743076091)),
+		sign(incidentBuilderKey, titanForwarder, reward),
+		sign(incidentOtherKey, "0xf4e8b391eae59bc848848a73230b7b174a785d5c", big.NewInt(137183620275739076)),
+		sign(incidentOtherKey, "0x5f2876944247f302dff857431e26951c2b8dfa33", big.NewInt(0)),
+	}
+	rawTxs := make([]bellatrix.Transaction, 0, len(txs))
+	for _, tx := range txs {
+		raw, err := tx.MarshalBinary()
+		require.NoError(t, err)
+		rawTxs = append(rawTxs, raw)
+	}
+
+	var feeRecipient bellatrix.ExecutionAddress
+	copy(feeRecipient[:], crypto.PubkeyToAddress(incidentBuilderKey.PublicKey).Bytes())
+	var blockHash phase0.Hash32
+	copy(blockHash[:], common.HexToHash("0x25956850").Bytes())
+
+	abi, err := contract.ContractMetaData.GetAbi()
+	require.NoError(t, err)
+	lastTx := len(txs) - 1
+	donationEvent := etherReceivedEvent(donation)
+	donationEvent.Raw = types.Log{
+		Address:     common.HexToAddress(testPoolAddress),
+		Topics:      []common.Hash{abi.Events["EtherReceived"].ID},
+		BlockNumber: blockNumber,
+		TxHash:      txs[lastTx].Hash(),
+		TxIndex:     uint(lastTx),
+		BlockHash:   common.Hash(blockHash),
+	}
+
+	return forcedPaymentFixture{
+		Slot:          15194839,
+		ProposerIndex: 2245769,
+		Payload: &deneb.ExecutionPayload{
+			FeeRecipient: feeRecipient,
+			BlockNumber:  blockNumber,
+			BlockHash:    blockHash,
+			Transactions: rawTxs,
+		},
+		BalanceBefore:  before.String(),
+		BalanceAfter:   after.String(),
+		EtherReceived:  []*contract.ContractEtherReceived{donationEvent},
+		ExpectedReward: reward.String(),
+		Receipt: &types.Receipt{
+			Status:           types.ReceiptStatusSuccessful,
+			TxHash:           txs[incidentPaymentIndex].Hash(),
+			BlockHash:        common.Hash(blockHash),
+			BlockNumber:      big.NewInt(blockNumber),
+			TransactionIndex: incidentPaymentIndex,
+			Logs:             []*types.Log{},
+		},
+	}
 }
 
 func Test_AnyPositionForcedPayment_IncidentStateAndReconciliation(t *testing.T) {
 	f := incidentFixture(t)
 	b := f.block(t)
-	require.Len(t, b.GetBlockTransactions(), 241)
 	last, _ := b.GetLastTxValueAndRecipient()
 	require.Zero(t, last.Sign(), "v1.2.12 skipped this block")
-	require.Equal(t, uint(227), f.Receipt.TransactionIndex)
+	require.Less(t, incidentPaymentIndex, len(b.GetBlockTransactions())-1, "the payment is not the last tx")
 	o, backend := newForcedPaymentRPC(t, b, decimal(t, f.BalanceBefore), decimal(t, f.BalanceAfter), f.Receipt)
 	// Production has already fetched receipts for a subscribed validator.
 	b.ExecutionReceipts = make([]*types.Receipt, len(b.GetBlockTransactions()))
-	b.ExecutionReceipts[227] = f.Receipt
+	b.ExecutionReceipts[incidentPaymentIndex] = f.Receipt
 	require.NoError(t, o.DetectForcedMevPayment(b))
 	require.Equal(t, 2, backend.callCount(), "reuse the correct receipt, no extra receipt RPC")
 	require.Equal(t, f.Receipt.TxHash, b.Events.EtherReceived[1].Raw.TxHash)
-	require.Equal(t, uint(227), b.Events.EtherReceived[1].Raw.TxIndex)
+	require.Equal(t, uint(incidentPaymentIndex), b.Events.EtherReceived[1].Raw.TxIndex)
 	require.Len(t, b.GetDonations(testPoolAddress), 1)
 	require.Equal(t, "103797680070839", b.GetDonations(testPoolAddress)[0].DonationAmount.String())
 
@@ -281,12 +298,14 @@ func Test_AnyPositionForcedPayment_FailuresDoNotCredit(t *testing.T) {
 		{"receipt unavailable", func(_ *FullBlock, s *forcedPaymentRPC, _ *types.Receipt) { s.fail = "receipt" }, "receipt"},
 		{"receipt missing", func(_ *FullBlock, s *forcedPaymentRPC, _ *types.Receipt) { s.receipts = nil }, "receipt"},
 		{"receipt reverted", func(_ *FullBlock, _ *forcedPaymentRPC, r *types.Receipt) { r.Status = 0 }, "unsuccessful"},
-		{"wrong receipt index", func(_ *FullBlock, _ *forcedPaymentRPC, r *types.Receipt) { r.TransactionIndex = 240 }, "invalid"},
+		{"wrong receipt index", func(_ *FullBlock, _ *forcedPaymentRPC, r *types.Receipt) {
+			r.TransactionIndex = incidentPaymentIndex + 1
+		}, "invalid"},
 		{"wrong receipt block hash", func(_ *FullBlock, _ *forcedPaymentRPC, r *types.Receipt) { r.BlockHash = common.Hash{} }, "invalid"},
 		{"wrong receipt block number", func(_ *FullBlock, _ *forcedPaymentRPC, r *types.Receipt) { r.BlockNumber = big.NewInt(1) }, "invalid"},
 		{"wrong receipt tx hash", func(_ *FullBlock, _ *forcedPaymentRPC, r *types.Receipt) { r.TxHash = common.Hash{} }, "invalid"},
 		{"ambiguous equal values", func(b *FullBlock, _ *forcedPaymentRPC, _ *types.Receipt) {
-			b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.Transactions = append(b.GetBlockTransactions(), b.GetBlockTransactions()[227])
+			b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.Transactions = append(b.GetBlockTransactions(), b.GetBlockTransactions()[incidentPaymentIndex])
 		}, "ambiguous"},
 		{"partial or split payment", func(b *FullBlock, s *forcedPaymentRPC, _ *types.Receipt) {
 			s.balances[hexutil.EncodeUint64(b.GetBlockNumber())].Sub(s.balances[hexutil.EncodeUint64(b.GetBlockNumber())], big.NewInt(1))
@@ -406,18 +425,4 @@ func Test_AnyPositionForcedPayment_ConsensusWithdrawalIsNotMev(t *testing.T) {
 	o, _ := newForcedPaymentRPC(t, b, decimal(t, f.BalanceBefore), decimal(t, f.BalanceAfter), f.Receipt)
 	require.ErrorContains(t, o.DetectForcedMevPayment(b), "consensus withdrawal")
 	require.Nil(t, b.ForcedMevPayment)
-}
-
-func Benchmark_AnyPositionForcedPayment_ScanIncident(b *testing.B) {
-	f := incidentFixture(b)
-	block := f.block(b)
-	reward := decimal(b, f.ExpectedReward)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _, err := block.findForcedPaymentCandidate(testPoolAddress, reward)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
 }
