@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/gloas"
@@ -205,4 +206,76 @@ func (b *FullBlock) checkGloasForkSlot(blockVersion spec.DataVersion, slot uint6
 			"GloasForkConfigured": configured,
 		}).Fatal("Beacon block version does not match the configured Gloas fork slot, update GloasForkSlot")
 	}
+}
+
+// How a Gloas proposal went for the pool
+type gloasProposal struct {
+	// Counts as missed: nothing reached the pool and no execution payload was
+	// included, so the proposer's beacon block was most likely late
+	missed bool
+
+	// The proposer pointed its proposal at the pool
+	correctFeeRecipient bool
+
+	// Everything the proposal sent to the pool, and its type
+	reward     *big.Int
+	rewardType RewardType
+
+	// The part of reward paid from the builder's deposit, nil if none. It
+	// reaches the pool as a withdrawal instead of through the payload
+	builderPaymentWei *big.Int
+}
+
+// Classifies a Gloas proposal and adds up what it sent to the pool. The
+// proposer is accountable for what it chose: the bid and where it pays, or the
+// fee recipient when it built its own payload. It is not for what the builder
+// failed to do, like withholding the payload or skipping a promised payment.
+func (b *FullBlock) gloasProposal(poolAddress string, isSubscriber bool) gloasProposal {
+	if b.IsSelfBuilt() {
+		// The proposer's own payload, judged as before Gloas
+		if !b.HasExecutionPayload() {
+			return gloasProposal{missed: true, reward: big.NewInt(0)}
+		}
+		reward, sent, rewardType := b.GetSentRewardAndType(poolAddress, isSubscriber)
+		return gloasProposal{correctFeeRecipient: sent, reward: reward, rewardType: rewardType}
+	}
+
+	proposal := gloasProposal{reward: big.NewInt(0), rewardType: MevBlock}
+
+	if b.BuilderPayment != nil && b.BuilderPayment.Paid {
+		proposal.builderPaymentWei = new(big.Int).Set(b.BuilderPayment.AmountWei)
+		proposal.reward.Add(proposal.reward, proposal.builderPaymentWei)
+	}
+
+	// Whatever the payload itself sent to the pool: a tx paying the bid's
+	// execution_payment, or the tips if the builder made the pool its fee
+	// recipient. Builders keep the tips otherwise, so they don't count
+	payloadPaidPool := false
+	if b.HasExecutionPayload() {
+		payloadReward, sent, payloadRewardType := b.GetSentRewardAndType(poolAddress, false)
+		if sent {
+			payloadPaidPool = true
+			proposal.reward.Add(proposal.reward, payloadReward)
+			proposal.rewardType = payloadRewardType
+		}
+	}
+
+	bid := b.GetExecutionPayloadBid()
+	if utils.Equals(bid.FeeRecipient.String(), poolAddress) {
+		// A withheld payload whose payment was dropped sent nothing
+		if !b.HasExecutionPayload() && proposal.builderPaymentWei == nil {
+			return gloasProposal{missed: true, reward: big.NewInt(0)}
+		}
+		proposal.correctFeeRecipient = true
+		return proposal
+	}
+
+	// The bid paid someone else. Should the payload still have paid the pool,
+	// that ETH is credited as before Gloas, otherwise it would be left
+	// unallocated
+	if payloadPaidPool {
+		proposal.correctFeeRecipient = true
+		return proposal
+	}
+	return gloasProposal{correctFeeRecipient: false, reward: utils.GweiToWei(uint64(bid.Value)), rewardType: MevBlock}
 }

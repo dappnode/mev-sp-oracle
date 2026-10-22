@@ -217,6 +217,12 @@ type SummarizedBlock struct {
 	Reward            *big.Int   `json:"reward_wei"`
 	RewardType        RewardType `json:"reward_type"`
 	WithdrawalAddress string     `json:"withdrawal_address"`
+
+	// Gloas only: the part of Reward the protocol paid from the builder's
+	// deposit, which reaches the pool as a withdrawal instead of through the
+	// execution payload. RewardType then describes the rest of Reward. Omitted
+	// when nil, so states saved before Gloas keep their hash
+	BuilderPaymentWei *big.Int `json:"builder_payment_wei,omitempty"`
 }
 
 // Represents all the information that is stored of a validator

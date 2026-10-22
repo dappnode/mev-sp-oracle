@@ -925,9 +925,17 @@ func (or *Oracle) RunOffchainReconciliation() error {
 	for _, subs := range or.state.SubscriptionEvents {
 		assets.Add(assets, subs.SubscriptionCollateral)
 	}
-	for _, vanilaBlock := range or.state.ProposedBlocks {
-		if vanilaBlock.RewardType == VanilaBlock {
-			assets.Add(assets, vanilaBlock.Reward)
+	for _, block := range or.state.ProposedBlocks {
+		// Paid from the builder's deposit, without any event
+		executionReward := block.Reward
+		if block.BuilderPaymentWei != nil {
+			assets.Add(assets, block.BuilderPaymentWei)
+			executionReward = new(big.Int).Sub(block.Reward, block.BuilderPaymentWei)
+		}
+		// Tips reach the pool without any event either. MEV paid through the
+		// execution payload is already counted with the EtherReceived events
+		if block.RewardType == VanilaBlock {
+			assets.Add(assets, executionReward)
 		}
 	}
 

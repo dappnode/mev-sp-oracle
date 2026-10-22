@@ -28,9 +28,9 @@ type chargedTx struct {
 
 // Signs one tx of every type the oracle supports. Fee caps are chosen so that
 // some txs pay their full tip and others are capped by the fee cap
-func txsOfEveryType(t *testing.T, key *ecdsa.PrivateKey) []chargedTx {
+func txsOfEveryType(t *testing.T, key *ecdsa.PrivateKey, chain uint64) []chargedTx {
 	t.Helper()
-	chainId := new(big.Int).SetUint64(MainnetChainId)
+	chainId := new(big.Int).SetUint64(chain)
 	signer := types.LatestSignerForChainID(chainId)
 	to := common.HexToAddress("0x5555555555555555555555555555555555555555")
 
@@ -46,10 +46,10 @@ func txsOfEveryType(t *testing.T, key *ecdsa.PrivateKey) []chargedTx {
 		sign(&types.DynamicFeeTx{ChainID: chainId, Nonce: 2, GasTipCap: big.NewInt(2 * gwei), GasFeeCap: big.NewInt(50 * gwei), Gas: 90000, To: &to}),
 		// Tip capped by the fee cap
 		sign(&types.DynamicFeeTx{ChainID: chainId, Nonce: 3, GasTipCap: big.NewInt(9 * gwei), GasFeeCap: big.NewInt(12 * gwei), Gas: 50000, To: &to}),
-		sign(&types.BlobTx{ChainID: uint256.NewInt(MainnetChainId), Nonce: 4, GasTipCap: uint256.NewInt(uint64(3 * gwei)),
+		sign(&types.BlobTx{ChainID: uint256.NewInt(chain), Nonce: 4, GasTipCap: uint256.NewInt(uint64(3 * gwei)),
 			GasFeeCap: uint256.NewInt(uint64(40 * gwei)), Gas: 21000, To: to, BlobFeeCap: uint256.NewInt(1),
 			BlobHashes: []common.Hash{{0x01}}}),
-		sign(&types.SetCodeTx{ChainID: uint256.NewInt(MainnetChainId), Nonce: 5, GasTipCap: uint256.NewInt(uint64(1 * gwei)),
+		sign(&types.SetCodeTx{ChainID: uint256.NewInt(chain), Nonce: 5, GasTipCap: uint256.NewInt(uint64(1 * gwei)),
 			GasFeeCap: uint256.NewInt(uint64(30 * gwei)), Gas: 60000, To: to}),
 	}
 	gasUsed := []uint64{21000, 25400, 61234, 50000, 21000, 47311}
@@ -122,7 +122,7 @@ func formerProposerTip(txs []chargedTx, baseFee *big.Int, blockGasUsed uint64) *
 func Test_GetProposerTip_MatchesFormerCalculationBeforeGlamsterdam(t *testing.T) {
 	key, err := crypto.GenerateKey()
 	require.NoError(t, err)
-	txs := txsOfEveryType(t, key)
+	txs := txsOfEveryType(t, key, MainnetChainId)
 
 	for _, baseFeeGwei := range []int64{1, 7, 10} {
 		baseFee := big.NewInt(baseFeeGwei * gwei)
@@ -139,7 +139,7 @@ func Test_GetProposerTip_MatchesFormerCalculationBeforeGlamsterdam(t *testing.T)
 func Test_GetProposerTip_BlockGasUsedIncludesRefunds(t *testing.T) {
 	key, err := crypto.GenerateKey()
 	require.NoError(t, err)
-	txs := txsOfEveryType(t, key)
+	txs := txsOfEveryType(t, key, MainnetChainId)
 	baseFee := big.NewInt(7 * gwei)
 	refunds := uint64(19_800)
 	fullBlock := blockWithReceipts(t, txs, baseFee.Int64(), sumGasUsed(txs)+refunds)
@@ -166,7 +166,7 @@ func Test_GetProposerTip_BlockGasUsedIncludesRefunds(t *testing.T) {
 func Test_GetProposerTip_Errors(t *testing.T) {
 	key, err := crypto.GenerateKey()
 	require.NoError(t, err)
-	txs := txsOfEveryType(t, key)
+	txs := txsOfEveryType(t, key, MainnetChainId)
 
 	t.Run("no receipts", func(t *testing.T) {
 		fullBlock := blockWithReceipts(t, txs, 7*gwei, sumGasUsed(txs))
@@ -202,6 +202,6 @@ func Test_GetProposerTip_Errors(t *testing.T) {
 func Test_GetBaseFeePerGasBigInt(t *testing.T) {
 	key, err := crypto.GenerateKey()
 	require.NoError(t, err)
-	fullBlock := blockWithReceipts(t, txsOfEveryType(t, key), 1_234_567_891, 0)
+	fullBlock := blockWithReceipts(t, txsOfEveryType(t, key, MainnetChainId), 1_234_567_891, 0)
 	require.Equal(t, big.NewInt(1_234_567_891), fullBlock.GetBaseFeePerGasBigInt())
 }

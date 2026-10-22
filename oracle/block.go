@@ -839,19 +839,32 @@ func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Summariz
 		poolBlock.BlockType = MissedProposal
 		return poolBlock
 
-	} else if b.IsGloas() {
-		log.Fatal("Gloas proposals can't be classified yet, slot: ", b.GetSlotUint64())
 	} else {
 		// Check if the proposer is subscribed to the pool
 		isFromSubscriber := oracle.isSubscribed(b.GetProposerIndexUint64())
 
 		// Fetch block information
-		reward, correctFeeRec, rewardType := b.GetSentRewardAndType(poolAddress, isFromSubscriber)
+		var reward *big.Int
+		var correctFeeRec bool
+		var rewardType RewardType
+		if b.IsGloas() {
+			proposal := b.gloasProposal(poolAddress, isFromSubscriber)
+			if proposal.missed {
+				poolBlock.BlockType = MissedProposal
+				return poolBlock
+			}
+			reward, correctFeeRec, rewardType = proposal.reward, proposal.correctFeeRecipient, proposal.rewardType
+			poolBlock.BuilderPaymentWei = proposal.builderPaymentWei
+		} else {
+			reward, correctFeeRec, rewardType = b.GetSentRewardAndType(poolAddress, isFromSubscriber)
+		}
 
 		// Populate common parameters
 		poolBlock.Reward = reward
 		poolBlock.RewardType = rewardType
-		poolBlock.Block = b.GetBlockNumber()
+		if b.HasExecutionPayload() {
+			poolBlock.Block = b.GetBlockNumber()
+		}
 
 		if correctFeeRec {
 			// If the fee recipient was correct
