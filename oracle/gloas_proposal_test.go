@@ -54,11 +54,12 @@ type gloasScenario struct {
 	bidValueGwei    uint64
 	bidFeeRecipient string
 
-	// Whether the next beacon block built on the payload, and when it did
-	// not, whether the protocol still paid the bid
-	included      bool
-	withheldPaid  bool
-	bidPaidToPool bool
+	// Whether the next beacon block built on the payload, and whether the
+	// protocol paid the bid: when it did, unless its payment was cancelled,
+	// and when it did not, if its beacon block got the votes
+	included         bool
+	paymentCancelled bool
+	withheldPaid     bool
 
 	// Payload contents, for full slots
 	payloadFeeRecipient string
@@ -85,7 +86,11 @@ func (s gloasScenario) block(t *testing.T) *FullBlock {
 	fullBlock := gloasFullBlock(t, slot, testProposer, bid)
 
 	if fullBlock.BidPromisesPaymentTo(testPoolAddress) {
-		fullBlock.SetBuilderPayment(s.included || s.withheldPaid)
+		paid := s.withheldPaid
+		if s.included {
+			paid = !s.paymentCancelled
+		}
+		fullBlock.SetBuilderPayment(paid)
 	}
 	if !s.included {
 		return fullBlock
@@ -192,6 +197,18 @@ func Test_SummarizedBlock_GloasProposals(t *testing.T) {
 			scenario:  gloasScenario{builder: 42, bidValueGwei: testBidValueGwei, bidFeeRecipient: testPoolAddress},
 			blockType: MissedProposal,
 			reward:    func(*FullBlock) *big.Int { return big.NewInt(0) },
+		},
+		{
+			// The proposer was slashed in its own beacon block, which cancels
+			// the payment. Nothing reached the pool, but the proposer chose a
+			// bid paying it, so it is not banned
+			name: "bid paid to the pool, payment cancelled",
+			scenario: gloasScenario{builder: 42, bidValueGwei: testBidValueGwei, bidFeeRecipient: testPoolAddress, included: true,
+				paymentCancelled: true, payloadFeeRecipient: testBuilderAddress},
+			blockType:         OkPoolProposal,
+			rewardType:        MevBlock,
+			reward:            func(*FullBlock) *big.Int { return big.NewInt(0) },
+			hasExecutionBlock: true,
 		},
 		{
 			name: "bid and execution payment, both to the pool",

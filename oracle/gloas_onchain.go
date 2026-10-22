@@ -14,6 +14,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
+	"github.com/dappnode/mev-sp-oracle/constants"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
@@ -46,11 +47,12 @@ func (o *Onchain) GetExecutionPayloadEnvelope(slot uint64, opts ...retry.Option)
 }
 
 // Returns whether the execution payload the bid of the given slot committed to
-// became part of the chain, ie whether the slot is full rather than empty
-func (o *Onchain) IsExecutionPayloadIncluded(slot uint64, bid *gloas.ExecutionPayloadBid, opts ...retry.Option) (bool, error) {
+// became part of the chain, ie whether the slot is full rather than empty, and
+// the slot of the next beacon block, which decided it
+func (o *Onchain) IsExecutionPayloadIncluded(slot uint64, bid *gloas.ExecutionPayloadBid, opts ...retry.Option) (bool, uint64, error) {
 	finalized, err := o.FinalizedBeaconBlockHeader(opts...)
 	if err != nil {
-		return false, errors.Wrap(err, "could not get finalized beacon block header")
+		return false, 0, errors.Wrap(err, "could not get finalized beacon block header")
 	}
 	blockAtSlot := func(slot uint64) (*spec.VersionedSignedBeaconBlock, error) {
 		return o.GetConsensusBlockAtSlot(slot, opts...)
@@ -66,24 +68,24 @@ func isExecutionPayloadIncluded(
 	slot uint64,
 	finalizedSlot uint64,
 	bid *gloas.ExecutionPayloadBid,
-	blockAtSlot func(uint64) (*spec.VersionedSignedBeaconBlock, error)) (bool, error) {
+	blockAtSlot func(uint64) (*spec.VersionedSignedBeaconBlock, error)) (bool, uint64, error) {
 
 	for nextSlot := slot + 1; nextSlot <= finalizedSlot; nextSlot++ {
 		nextBlock, err := blockAtSlot(nextSlot)
 		if err != nil {
-			return false, errors.Wrap(err, fmt.Sprintf("could not get beacon block at slot %d", nextSlot))
+			return false, 0, errors.Wrap(err, fmt.Sprintf("could not get beacon block at slot %d", nextSlot))
 		}
 		// Missed slot, keep looking
 		if nextBlock == nil {
 			continue
 		}
 		if nextBlock.Gloas == nil {
-			return false, errors.New(fmt.Sprintf("beacon block at slot %d is not a Gloas one", nextSlot))
+			return false, 0, errors.New(fmt.Sprintf("beacon block at slot %d is not a Gloas one", nextSlot))
 		}
 		nextBid := nextBlock.Gloas.Message.Body.SignedExecutionPayloadBid.Message
-		return nextBid.ParentBlockHash == bid.BlockHash, nil
+		return nextBid.ParentBlockHash == bid.BlockHash, nextSlot, nil
 	}
-	return false, errors.New(fmt.Sprintf("no finalized beacon block after slot %d yet, "+
+	return false, 0, errors.New(fmt.Sprintf("no finalized beacon block after slot %d yet, "+
 		"cant tell whether its execution payload was included", slot))
 }
 
@@ -95,23 +97,22 @@ func (o *Onchain) fetchGloasSlot(fullBlock *FullBlock) bool {
 	slot := fullBlock.GetSlotUint64()
 	bid := fullBlock.GetExecutionPayloadBid()
 
-	included, err := o.IsExecutionPayloadIncluded(slot, bid)
+	included, nextBlockSlot, err := o.IsExecutionPayloadIncluded(slot, bid)
 	if err != nil {
 		log.Fatal("could not tell whether the execution payload of slot ", slot, " was included: ", err)
 	}
 
+	// Whether the payment is made has to be exact: a payment credited but never
+	// made would be counted in flight forever, hiding that the pool lacks it
 	if fullBlock.BidPromisesPaymentTo(o.PoolAddress) {
-		// A payload the next beacon block builds on is paid: that block settles
-		// the payment before processing anything else. Before that, only the
-		// proposer's slashing included in its own beacon block could cancel it,
-		// which no proposer would do. If it ever happened, the payment would
-		// never arrive and the onchain reconciliation would stop the oracle
-		paid := included
-		if !included {
+		var paid bool
+		if included {
+			paid, err = o.IsIncludedBidPaid(fullBlock, nextBlockSlot)
+		} else {
 			paid, err = o.IsWithheldBidPaid(fullBlock)
-			if err != nil {
-				log.Fatal("could not tell whether the withheld bid of slot ", slot, " is paid: ", err)
-			}
+		}
+		if err != nil {
+			log.Fatal("could not tell whether the bid of slot ", slot, " is paid: ", err)
 		}
 		fullBlock.SetBuilderPayment(paid)
 	}
@@ -130,6 +131,23 @@ func (o *Onchain) fetchGloasSlot(fullBlock *FullBlock) bool {
 	}
 	fullBlock.SetExecutionPayload(envelope)
 	return true
+}
+
+// Returns whether the protocol pays the bid of a full slot, reading the beacon
+// state right after its beacon block. See isIncludedBidPaid
+func (o *Onchain) IsIncludedBidPaid(fullBlock *FullBlock, nextBlockSlot uint64, opts ...retry.Option) (bool, error) {
+	slot := fullBlock.GetSlotUint64()
+	var pendingPayments []*gloas.BuilderPendingPayment
+
+	// When the payment is made regardless of the state, don't read it
+	if nextBlockSlot/constants.SlotsInEpoch < slot/constants.SlotsInEpoch+2 {
+		var err error
+		pendingPayments, err = o.GetBuilderPendingPayments(strconv.FormatUint(slot, 10), opts...)
+		if err != nil {
+			return false, err
+		}
+	}
+	return isIncludedBidPaid(fullBlock.GetExecutionPayloadBid(), fullBlock.GetProposerIndex(), nextBlockSlot, pendingPayments)
 }
 
 // Returns whether the protocol pays the bid of an empty slot, reading the

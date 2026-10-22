@@ -316,3 +316,19 @@ func Test_StateHash_BuilderPaymentFields(t *testing.T) {
 		require.Equal(t, utils.GweiToWei(48_200_000), oracle.state.InFlightBuilderPayments[0].AmountWei)
 	})
 }
+
+// A cancelled payment is never tracked, so the onchain reconciliation does not
+// count ETH that will never come
+func Test_AdvanceStateToNextSlot_CancelledPaymentIsNotTracked(t *testing.T) {
+	oracle := gloasTestOracle(t)
+	oracle.addSubscription(uint64(testProposer), "0x1111111111111111111111111111111111111111", "0x")
+
+	fullBlock := gloasScenario{builder: 42, bidValueGwei: testBidValueGwei, bidFeeRecipient: testPoolAddress, included: true,
+		paymentCancelled: true, payloadFeeRecipient: testBuilderAddress}.block(t)
+	_, err := oracle.AdvanceStateToNextSlot(fullBlock)
+	require.NoError(t, err)
+
+	require.Empty(t, oracle.state.InFlightBuilderPayments)
+	require.NoError(t, oracle.RunOffchainReconciliation())
+	require.NoError(t, oracle.RunOnchainReconciliation(big.NewInt(0), nil))
+}

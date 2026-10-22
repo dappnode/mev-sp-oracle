@@ -206,3 +206,63 @@ func Test_TotalActiveBalance(t *testing.T) {
 	require.Equal(t, (32+2048+31)*ethInGwei, totalActiveBalance(validators))
 	require.Zero(t, totalActiveBalance(nil))
 }
+
+// Right after the bid's beacon block, its payment is in the second half of the
+// builder pending payments, which holds the current epoch
+func pendingPaymentsAfterBlock(slot uint64, payment *gloas.BuilderPendingPayment) []*gloas.BuilderPendingPayment {
+	payments := pendingPaymentsWith(slot, &gloas.BuilderPendingPayment{Withdrawal: &gloas.BuilderPendingWithdrawal{}})
+	payments[constants.SlotsInEpoch+slot%constants.SlotsInEpoch] = payment
+	return payments
+}
+
+func Test_IsIncludedBidPaid(t *testing.T) {
+	slot := testGloasSlot + 5
+	proposer := phase0.ValidatorIndex(1000)
+	bid := gloasBid(slot, 42, 48_200_000, testPoolAddress, 0xaa, 0xbb)
+	pending := &gloas.BuilderPendingPayment{
+		ProposerIndex: proposer,
+		Withdrawal: &gloas.BuilderPendingWithdrawal{
+			FeeRecipient: bid.FeeRecipient,
+			Amount:       bid.Value,
+			BuilderIndex: bid.BuilderIndex,
+		},
+	}
+	// What slashing the proposer leaves behind
+	cancelled := &gloas.BuilderPendingPayment{Withdrawal: &gloas.BuilderPendingWithdrawal{}}
+	epochAfterNext := (slot/constants.SlotsInEpoch + 2) * constants.SlotsInEpoch
+
+	tests := []struct {
+		name          string
+		nextBlockSlot uint64
+		payments      []*gloas.BuilderPendingPayment
+		paid          bool
+		err           string
+	}{
+		{"next slot builds on it", slot + 1, pendingPaymentsAfterBlock(slot, pending), true, ""},
+		{"next epoch builds on it", epochAfterNext - 1, pendingPaymentsAfterBlock(slot, pending), true, ""},
+		{"cancelled in its own beacon block", slot + 1, pendingPaymentsAfterBlock(slot, cancelled), false, ""},
+		{"cancelled, next epoch builds on it", epochAfterNext - 1, pendingPaymentsAfterBlock(slot, cancelled), false, ""},
+		// apply_parent_execution_payload appends a parent older than the
+		// previous epoch directly, whatever its pending payment entry says
+		{"two epochs later builds on it", epochAfterNext, nil, true, ""},
+		{"previous epoch half is not this bid's", slot + 1, pendingPaymentsWith(slot, pending), false, ""},
+		{"does not match the bid", slot + 1, pendingPaymentsAfterBlock(slot, func() *gloas.BuilderPendingPayment {
+			p := *pending
+			p.ProposerIndex = 1001
+			return &p
+		}()), false, "does not match its bid"},
+		{"not a full vector", slot + 1, pendingPaymentsAfterBlock(slot, pending)[:32], false, "expected 64"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paid, err := isIncludedBidPaid(bid, proposer, tt.nextBlockSlot, tt.payments)
+			if tt.err != "" {
+				require.ErrorContains(t, err, tt.err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.paid, paid)
+		})
+	}
+}

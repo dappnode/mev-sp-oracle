@@ -289,32 +289,35 @@ func Test_IsExecutionPayloadIncluded(t *testing.T) {
 	}
 
 	t.Run("next beacon block builds on the payload", func(t *testing.T) {
-		included, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
+		included, nextSlot, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
 			slot + 1: buildsOnThisPayload,
 		}))
 		require.NoError(t, err)
 		require.True(t, included)
+		require.Equal(t, slot+1, nextSlot)
 	})
 
 	t.Run("next beacon block skips the payload", func(t *testing.T) {
-		included, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
+		included, nextSlot, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
 			slot + 1: skipsThisPayload,
 		}))
 		require.NoError(t, err)
 		require.False(t, included)
+		require.Equal(t, slot+1, nextSlot)
 	})
 
 	t.Run("missed slots are skipped until the next beacon block", func(t *testing.T) {
 		buildsAfterMissedSlots := gloasBeaconBlock(slot+4, 8, gloasBid(slot+4, 43, 1, testPoolAddress, 0xbb, 0xcc))
-		included, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
+		included, nextSlot, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
 			slot + 4: buildsAfterMissedSlots,
 		}))
 		require.NoError(t, err)
 		require.True(t, included)
+		require.Equal(t, slot+4, nextSlot)
 	})
 
 	t.Run("only the first next beacon block decides", func(t *testing.T) {
-		included, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
+		included, _, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
 			slot + 1: skipsThisPayload,
 			slot + 2: gloasBeaconBlock(slot+2, 9, gloasBid(slot+2, 44, 1, testPoolAddress, 0xbb, 0xdd)),
 		}))
@@ -323,21 +326,21 @@ func Test_IsExecutionPayloadIncluded(t *testing.T) {
 	})
 
 	t.Run("no finalized beacon block after the slot yet", func(t *testing.T) {
-		_, err := isExecutionPayloadIncluded(slot, slot+3, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
+		_, _, err := isExecutionPayloadIncluded(slot, slot+3, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
 			slot + 4: buildsOnThisPayload,
 		}))
 		require.ErrorContains(t, err, "no finalized beacon block after slot")
 	})
 
 	t.Run("beacon node error", func(t *testing.T) {
-		_, err := isExecutionPayloadIncluded(slot, slot+64, bid, func(uint64) (*spec.VersionedSignedBeaconBlock, error) {
+		_, _, err := isExecutionPayloadIncluded(slot, slot+64, bid, func(uint64) (*spec.VersionedSignedBeaconBlock, error) {
 			return nil, errors.New("connection refused")
 		})
 		require.ErrorContains(t, err, "connection refused")
 	})
 
 	t.Run("next beacon block is not a Gloas one", func(t *testing.T) {
-		_, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
+		_, _, err := isExecutionPayloadIncluded(slot, slot+64, bid, chain(map[uint64]*spec.VersionedSignedBeaconBlock{
 			slot + 1: {Version: spec.DataVersionFulu, Fulu: &electra.SignedBeaconBlock{}},
 		}))
 		require.ErrorContains(t, err, "not a Gloas one")

@@ -99,6 +99,63 @@ func builderPaymentQuorum(totalActiveBalance phase0.Gwei) phase0.Gwei {
 	return perSlotBalance * builderPaymentThresholdNumerator / builderPaymentThresholdDenominator
 }
 
+// Returns the pending payment of the bid, read from the beacon state's
+// builder_pending_payments: the first half holds the payments of the previous
+// epoch, the second half those of the current one. Nil if its entry is empty,
+// which is what cancelling a payment does, as slashing the proposer does.
+func pendingPaymentOfBid(bid *gloas.ExecutionPayloadBid, proposerIndex phase0.ValidatorIndex,
+	pendingPayments []*gloas.BuilderPendingPayment, ofCurrentEpoch bool) (*gloas.BuilderPendingPayment, error) {
+
+	if uint64(len(pendingPayments)) != 2*constants.SlotsInEpoch {
+		return nil, errors.New(fmt.Sprintf("expected %d builder pending payments, got %d",
+			2*constants.SlotsInEpoch, len(pendingPayments)))
+	}
+
+	index := uint64(bid.Slot) % constants.SlotsInEpoch
+	if ofCurrentEpoch {
+		index += constants.SlotsInEpoch
+	}
+	payment := pendingPayments[index]
+
+	if payment == nil || payment.Withdrawal == nil || payment.Withdrawal.Amount == 0 {
+		return nil, nil
+	}
+
+	if payment.Withdrawal.BuilderIndex != bid.BuilderIndex ||
+		payment.Withdrawal.Amount != bid.Value ||
+		payment.Withdrawal.FeeRecipient != bid.FeeRecipient ||
+		payment.ProposerIndex != proposerIndex {
+		return nil, errors.New(fmt.Sprintf("builder pending payment of slot %d does not match its bid. "+
+			"payment: %s, bid: %s", bid.Slot, payment.String(), bid.String()))
+	}
+	return payment, nil
+}
+
+// Whether the protocol pays the bid of a full slot, whose execution payload the
+// next beacon block built on. That block settles the payment before processing
+// anything else (apply_parent_execution_payload), so it is paid unless it was
+// cancelled before: only a slashing of the proposer included in its own beacon
+// block can do that, which happens to validators running on two machines, whose
+// slashing evidence their own node then includes.
+//
+// pendingPayments must come from the beacon state right after the beacon block
+// of the bid's slot. When the next beacon block is two epochs later or more,
+// the protocol appends the payment directly, regardless of that state.
+func isIncludedBidPaid(bid *gloas.ExecutionPayloadBid, proposerIndex phase0.ValidatorIndex,
+	nextBlockSlot uint64, pendingPayments []*gloas.BuilderPendingPayment) (bool, error) {
+
+	bidEpoch := uint64(bid.Slot) / constants.SlotsInEpoch
+	if nextBlockSlot/constants.SlotsInEpoch >= bidEpoch+2 {
+		return true, nil
+	}
+
+	payment, err := pendingPaymentOfBid(bid, proposerIndex, pendingPayments, true)
+	if err != nil {
+		return false, err
+	}
+	return payment != nil, nil
+}
+
 // Whether the protocol pays a bid whose execution payload was withheld. It
 // does if the votes its beacon block got in its own slot reach the quorum,
 // unless the payment was cancelled before, as slashing the proposer does.
@@ -110,27 +167,11 @@ func builderPaymentQuorum(totalActiveBalance phase0.Gwei) phase0.Gwei {
 func isWithheldBidPaid(bid *gloas.ExecutionPayloadBid, proposerIndex phase0.ValidatorIndex,
 	pendingPayments []*gloas.BuilderPendingPayment, totalActiveBalance phase0.Gwei) (bool, error) {
 
-	if uint64(len(pendingPayments)) != 2*constants.SlotsInEpoch {
-		return false, errors.New(fmt.Sprintf("expected %d builder pending payments, got %d",
-			2*constants.SlotsInEpoch, len(pendingPayments)))
+	// By then the bid's epoch is the previous one
+	payment, err := pendingPaymentOfBid(bid, proposerIndex, pendingPayments, false)
+	if err != nil || payment == nil {
+		return false, err
 	}
-
-	// The first half holds the payments of the previous epoch, the bid's one
-	payment := pendingPayments[uint64(bid.Slot)%constants.SlotsInEpoch]
-
-	// An empty entry means the payment was cancelled
-	if payment == nil || payment.Withdrawal == nil || payment.Withdrawal.Amount == 0 {
-		return false, nil
-	}
-
-	if payment.Withdrawal.BuilderIndex != bid.BuilderIndex ||
-		payment.Withdrawal.Amount != bid.Value ||
-		payment.Withdrawal.FeeRecipient != bid.FeeRecipient ||
-		payment.ProposerIndex != proposerIndex {
-		return false, errors.New(fmt.Sprintf("builder pending payment of slot %d does not match its bid. "+
-			"payment: %s, bid: %s", bid.Slot, payment.String(), bid.String()))
-	}
-
 	return payment.Weight >= builderPaymentQuorum(totalActiveBalance), nil
 }
 
