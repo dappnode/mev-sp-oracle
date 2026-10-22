@@ -910,9 +910,10 @@ func (o *Onchain) GetPoolEthBalance(blockNumber *big.Int, opts ...retry.Option) 
 // read the block computes the same result, now and on any future resync.
 //
 // Note it does not model beacon chain withdrawals credited to the pool address.
-// That cannot happen with the current pool contract, and if it ever did the
-// result would be an unexpected value that fails the exact match below, which
-// is the safe direction: it never turns a missing payment into a valid one.
+// From Gloas, builder payments arrive that way, and DetectForcedMevPayment
+// subtracts them. Any other withdrawal to the pool would be an unexpected value
+// that fails the exact match, which is the safe direction: it never turns a
+// missing payment into a valid one.
 func unexplainedPoolInflow(balanceDelta *big.Int, events *Events) *big.Int {
 
 	explained := big.NewInt(0)
@@ -1039,6 +1040,13 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 		// Sanity check to ensure the block is the one we requested
 		if fullBlock.GetSlotUint64() != slot {
 			log.Fatal("slot does not match requested slot: ", fullBlock.GetSlotUint64(), " vs ", slot)
+		}
+
+		// From Gloas on, the beacon block carries a bid and the execution payload
+		// is published separately. An empty slot has no execution block, so
+		// there are no events, txs or receipts to fetch
+		if fullBlock.IsGloas() && !o.fetchGloasSlot(fullBlock) {
+			return fullBlock
 		}
 
 		etherReceived, err := o.GetEtherReceivedEvents(fullBlock.GetBlockNumber())

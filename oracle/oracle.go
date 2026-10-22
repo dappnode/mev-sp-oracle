@@ -183,6 +183,12 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 		return 0, errors.Wrap(err, "Error validating full block config")
 	}
 
+	// Builder payments credited in earlier slots may reach the pool in this one
+	err = or.settleArrivedBuilderPayments(fullBlock)
+	if err != nil {
+		return 0, errors.Wrap(err, "Error settling builder payments")
+	}
+
 	// Full block is too heavy to be stored in the state, so we summarize it
 	summarizedBlock := fullBlock.SummarizedBlock(or, or.cfg.PoolAddress)
 
@@ -224,6 +230,12 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 		or.handleBanValidator(summarizedBlock)
 	}
 
+	// Credited above, but only reaches the pool in a later slot
+	if summarizedBlock.BuilderPaymentWei != nil {
+		or.trackBuilderPayment(fullBlock.BuilderPayment)
+	}
+	or.warnAboutLateBuilderPayments(summarizedBlock.Slot)
+
 	// Handle unsubscriptions the last thing after distributing rewards
 	or.handleManualUnsubscriptions(fullBlock.Events.UnsubscribeValidator, fullBlock.ValidatorsUnsubs)
 
@@ -251,7 +263,8 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	processedSlot := or.state.NextSlotToProcess
 	or.state.LatestProcessedSlot = processedSlot
 	or.state.NextSlotToProcess++
-	if summarizedBlock.BlockType != MissedProposal {
+	// Missed and empty slots have no execution block
+	if fullBlock.HasExecutionPayload() {
 		or.state.LatestProcessedBlock = summarizedBlock.Block
 	}
 	return processedSlot, nil
@@ -897,12 +910,19 @@ func (or *Oracle) RunOnchainReconciliation(
 
 	log.Info("[Reconciliation] Total pool balance (what we have): ", contractBalanceWei)
 
-	if totalLiabilities.Cmp(contractBalanceWei) != 0 {
-		return errors.New(fmt.Sprintf("[Reconciliation] Liabilities and balance dont match: %d vs %d",
-			totalLiabilities, contractBalanceWei))
+	// Builder payments already credited but not in the pool yet. The pool
+	// will hold them once their withdrawal is processed
+	inFlight := or.inFlightBuilderPaymentsWei()
+	assets := new(big.Int).Add(contractBalanceWei, inFlight)
+
+	log.Info("[Reconciliation] Builder payments on their way to the pool: ", inFlight)
+
+	if totalLiabilities.Cmp(assets) != 0 {
+		return errors.New(fmt.Sprintf("[Reconciliation] Liabilities and balance dont match: %d vs %d (balance %d + in flight %d)",
+			totalLiabilities, assets, contractBalanceWei, inFlight))
 	}
 
-	log.Info("[Reconciliation] Success! Liabilities and balance match: ", totalLiabilities, " vs ", contractBalanceWei)
+	log.Info("[Reconciliation] Success! Liabilities and balance match: ", totalLiabilities, " vs ", assets)
 
 	return nil
 }
@@ -924,9 +944,17 @@ func (or *Oracle) RunOffchainReconciliation() error {
 	for _, subs := range or.state.SubscriptionEvents {
 		assets.Add(assets, subs.SubscriptionCollateral)
 	}
-	for _, vanilaBlock := range or.state.ProposedBlocks {
-		if vanilaBlock.RewardType == VanilaBlock {
-			assets.Add(assets, vanilaBlock.Reward)
+	for _, block := range or.state.ProposedBlocks {
+		// Paid from the builder's deposit, without any event
+		executionReward := block.Reward
+		if block.BuilderPaymentWei != nil {
+			assets.Add(assets, block.BuilderPaymentWei)
+			executionReward = new(big.Int).Sub(block.Reward, block.BuilderPaymentWei)
+		}
+		// Tips reach the pool without any event either. MEV paid through the
+		// execution payload is already counted with the EtherReceived events
+		if block.RewardType == VanilaBlock {
+			assets.Add(assets, executionReward)
 		}
 	}
 

@@ -314,3 +314,33 @@ func Test_ApiEndpoint(t *testing.T) {
 		require.Equal(t, 1, 1)
 	*/
 }
+
+func Test_SyncDistance(t *testing.T) {
+	inSync, distance := syncDistance(1000, 1000)
+	require.True(t, inSync)
+	require.Zero(t, distance)
+
+	inSync, distance = syncDistance(1000, 960)
+	require.False(t, inSync)
+	require.Equal(t, uint64(40), distance)
+}
+
+// From Gloas on, an oracle that processed every settled slot is in sync even if
+// it trails finality, and its distance is counted from the latest settled slot
+func Test_SyncDistance_FromGloas(t *testing.T) {
+	forkSlot := oracle.GloasForkSlot[oracle.HoodiChainId]
+	finalized := forkSlot + 64
+	latestSettled := oracle.LatestSettledSlot(oracle.HoodiChainId, finalized)
+	require.Equal(t, finalized-33, latestSettled)
+
+	inSync, distance := syncDistance(latestSettled, latestSettled)
+	require.True(t, inSync)
+	require.Zero(t, distance)
+
+	inSync, distance = syncDistance(latestSettled, latestSettled-10)
+	require.False(t, inSync)
+	require.Equal(t, uint64(10), distance)
+
+	// Before the fork nothing changes: the finalized slot is the settled one
+	require.Equal(t, forkSlot-100, oracle.LatestSettledSlot(oracle.HoodiChainId, forkSlot-100))
+}

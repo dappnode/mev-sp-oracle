@@ -20,7 +20,7 @@ import (
 // candidate. Ambiguous or unsupported inflows stop processing instead of
 // silently banning a validator or allocating an arbitrary amount.
 func (o *Onchain) DetectForcedMevPayment(b *FullBlock, opts ...retry.Option) error {
-	if b.ConsensusBlock == nil || !b.IsForcedPaymentDetectionActive() ||
+	if !b.HasExecutionPayload() || !b.IsForcedPaymentDetectionActive() ||
 		!b.IsAnyPositionForcedPaymentDetectionActive() {
 		return nil
 	}
@@ -52,6 +52,10 @@ func (o *Onchain) detectAnyPositionForcedMevPayment(b *FullBlock, opts ...retry.
 		return err
 	}
 	inflow := unexplainedPoolInflow(new(big.Int).Sub(after, before), b.Events)
+	// From Gloas, builder payments reach the pool as withdrawals, without any
+	// event. They are matched to the credited payments when the slot is
+	// processed, see settleArrivedBuilderPayments
+	inflow.Sub(inflow, b.BuilderWithdrawalsWeiTo(o.PoolAddress))
 	if inflow.Sign() == 0 {
 		return nil
 	}
@@ -64,12 +68,12 @@ func (o *Onchain) detectAnyPositionForcedMevPayment(b *FullBlock, opts ...retry.
 	// A consensus withdrawal can credit any address, including the pool. It
 	// must not be mistaken for a proposer payment of the same value.
 	if b.ConsensusBlock.Version >= spec.DataVersionCapella {
-		withdrawals, err := b.ConsensusBlock.Withdrawals()
+		withdrawals, err := b.GetWithdrawals()
 		if err != nil {
 			return fmt.Errorf("read withdrawals at block %d: %w", blockNumber, err)
 		}
 		for _, withdrawal := range withdrawals {
-			if withdrawal.Amount > 0 && utils.Equals(withdrawal.Address.String(), o.PoolAddress) {
+			if withdrawal.Amount > 0 && utils.Equals(withdrawal.Address.String(), o.PoolAddress) && !isBuilderWithdrawal(withdrawal) {
 				return fmt.Errorf("block %d credits a consensus withdrawal to the pool; cannot attribute unexplained inflow %s wei to MEV", blockNumber, inflow)
 			}
 		}
@@ -136,7 +140,7 @@ func (o *Onchain) forcedPaymentReceipt(b *FullBlock, tx *types.Transaction, inde
 			return nil, fmt.Errorf("read forced payment receipt %s: %w", tx.Hash(), err)
 		}
 	}
-	blockHash, err := b.ConsensusBlock.ExecutionBlockHash()
+	blockHash, err := b.GetExecutionBlockHash()
 	if err != nil {
 		return nil, err
 	}

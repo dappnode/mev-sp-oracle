@@ -462,10 +462,9 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 
 	finalizedSlot := uint64(finality.Header.Message.Slot)
 
-	oracleSync := false
-	if m.oracle.State().LatestProcessedSlot-finalizedSlot == 0 {
-		oracleSync = true
-	}
+	// From Gloas on the oracle trails finality by design, see LatestSettledSlot
+	latestSettledSlot := oracle.LatestSettledSlot(m.Onchain.ChainId, finalizedSlot)
+	oracleSync, oracleDistance := syncDistance(latestSettledSlot, m.oracle.State().LatestProcessedSlot)
 
 	_, onchainSlot, err := m.Onchain.GetOnchainSlotAndRoot(apiRetryOpts...)
 	if err != nil {
@@ -476,8 +475,8 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 	// If the oracle is not in sync, we cant really calculate the slots till the next checkpoint
 	// because we are behind. So we just set it to 0
 	nextCheckpointInSlots := uint64(0)
-	if finalizedSlot < (onchainSlot + m.cfg.CheckPointSizeInSlots) {
-		nextCheckpointInSlots = onchainSlot + m.cfg.CheckPointSizeInSlots - finalizedSlot
+	if latestSettledSlot < (onchainSlot + m.cfg.CheckPointSizeInSlots) {
+		nextCheckpointInSlots = onchainSlot + m.cfg.CheckPointSizeInSlots - latestSettledSlot
 	}
 
 	status := httpOkStatus{
@@ -488,7 +487,7 @@ func (m *ApiService) handleStatus(w http.ResponseWriter, req *http.Request) {
 		LatestProcessedBlock:        m.oracle.State().LatestProcessedBlock,
 		LatestFinalizedEpoch:        finalizedSlot / 32,
 		LatestFinalizedSlot:         finalizedSlot,
-		OracleHeadDistance:          finalizedSlot - m.oracle.State().LatestProcessedSlot,
+		OracleHeadDistance:          oracleDistance,
 		NextCheckpointSlot:          onchainSlot + m.cfg.CheckPointSizeInSlots,
 		NextCheckpointTime:          "", // TODO:
 		NextCheckpointRemaining:     utils.SlotsToTime(nextCheckpointInSlots, constants.SecondsInSlot),
@@ -1259,23 +1258,20 @@ func (m *ApiService) OracleReady(maxSlotsBehind uint64) bool {
 	}
 
 	finalizedSlot := uint64(finality.Header.Message.Slot)
-	if err != nil {
-		return false
-	}
+	latestSettledSlot := oracle.LatestSettledSlot(m.Onchain.ChainId, finalizedSlot)
 
-	slotsFromFinalized := finalizedSlot - m.oracle.State().LatestProcessedSlot
+	_, slotsBehind := syncDistance(latestSettledSlot, m.oracle.State().LatestProcessedSlot)
+	return slotsBehind <= maxSlotsBehind
+}
 
-	// Use this if we want full in sync to latest finalized
-	/*oracleInSync := false
-	if slotsFromFinalized == 0 {
-		oracleInSync = true
+// Returns whether the oracle processed every slot it can, and how many slots
+// it still has to. It can process up to the latest settled slot, which before
+// Gloas is the latest finalized one
+func syncDistance(latestSettledSlot uint64, latestProcessedSlot uint64) (bool, uint64) {
+	if latestProcessedSlot >= latestSettledSlot {
+		return true, 0
 	}
-	_ = oracleInSync*/
-
-	if slotsFromFinalized > maxSlotsBehind {
-		return false
-	}
-	return true
+	return false, latestSettledSlot - latestProcessedSlot
 }
 
 func GetSubInBlock(subs []Subscription, block uint64) []Subscription {

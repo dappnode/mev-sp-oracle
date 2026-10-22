@@ -9,6 +9,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/dappnode/mev-sp-oracle/utils"
@@ -190,9 +191,13 @@ func (b *FullBlock) SetConsensusBlock(consensusBlock *spec.VersionedSignedBeacon
 		proposerIndex = uint64(consensusBlock.Electra.Message.ProposerIndex)
 	} else if consensusBlock.Fulu != nil {
 		proposerIndex = uint64(consensusBlock.Fulu.Message.ProposerIndex)
+	} else if consensusBlock.Gloas != nil {
+		proposerIndex = uint64(consensusBlock.Gloas.Message.ProposerIndex)
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
+
+	b.checkGloasForkSlot(consensusBlock.Version, uint64(cBlockSlot))
 
 	// Sanity check
 	if uint64(b.ConsensusDuty.ValidatorIndex) != proposerIndex {
@@ -671,18 +676,20 @@ func (b *FullBlock) isAddressRewarded(address string) bool {
 	return false
 }
 
-// The reward for vanila block has to be calculated by iterating all
-// txs and getting the individual tips as per EIP1559. Note that to
-// calculate this we need the execution header and receipts
+// The reward for vanila block is the sum of the priority fee of every tx: what
+// it paid per unit of gas above the base fee, times the gas it was charged for.
+// The receipts are needed since only they hold the gas each tx was charged for.
+//
+// This used to be calculated as all the fees paid minus gas_used * base fee,
+// which relies on the block gas_used being the sum of the gas charged to each
+// tx. Glamsterdam breaks that: EIP-7778 no longer subtracts refunds from the
+// block gas_used and EIP-8037 makes it the largest of two gas dimensions. Before
+// Glamsterdam both calculations give the same result, so past rewards hold.
 func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 
 	// Ensure non nil
 	if b.ExecutionReceipts == nil {
 		return nil, errors.New("receipts of full block are nil, cant calculate tip")
-	}
-
-	if b.ExecutionHeader == nil {
-		return nil, errors.New("header of full block are nil, cant calculate tip")
 	}
 
 	// Ensure tx and their receipts have the same size
@@ -691,13 +698,7 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 			len(b.GetBlockTransactions()), len(b.ExecutionReceipts)))
 	}
 
-	// little-endian to big-endian
-	var baseFeePerGasBEBytes [32]byte
-	for i := 0; i < 32; i++ {
-		baseFeePerGasBEBytes[i] = b.GetBaseFeePerGas()[32-1-i]
-	}
-	baseFeePerGas := new(big.Int).SetBytes(baseFeePerGasBEBytes[:])
-
+	baseFeePerGas := b.GetBaseFeePerGasBigInt()
 	tips := big.NewInt(0)
 
 	for i, rawTx := range b.GetBlockTransactions() {
@@ -706,31 +707,29 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 			return nil, errors.Wrap(err, "could not decode tx")
 		}
 		if tx.Hash() != b.ExecutionReceipts[i].TxHash {
-			return nil, errors.Wrap(err, "tx hash does not match receipt hash")
+			return nil, errors.New(fmt.Sprintf("tx hash does not match receipt hash. tx: %s, receipt: %s",
+				tx.Hash().String(), b.ExecutionReceipts[i].TxHash.String()))
 		}
 
-		tipFee := new(big.Int)
-		gasPrice := tx.GasPrice()
-		gasUsed := big.NewInt(int64(b.ExecutionReceipts[i].GasUsed))
-
+		// A new tx type could pay its fees differently, so better to stop than
+		// to credit a wrong reward
 		switch tx.Type() {
-		case 0:
-			tipFee.Mul(gasPrice, gasUsed)
-		case 1:
-			tipFee.Mul(gasPrice, gasUsed)
-		case 2, 3, 4:
-			// Sum gastipcap and basefee or saturate to gasfeecap
-			usedGasPrice := utils.SumAndSaturate(tx.GasTipCap(), b.ExecutionHeader.BaseFee, tx.GasFeeCap())
-			tipFee = new(big.Int).Mul(usedGasPrice, gasUsed)
+		case types.LegacyTxType, types.AccessListTxType, types.DynamicFeeTxType, types.BlobTxType, types.SetCodeTxType:
 		default:
 			return nil, errors.New(fmt.Sprintf("unknown tx type: %d, hash: %s", tx.Type(), tx.Hash().String()))
 		}
-		tips = tips.Add(tips, tipFee)
-	}
-	burnt := new(big.Int).Mul(big.NewInt(int64(b.GetGasUsed())), baseFeePerGas)
-	proposerReward := new(big.Int).Sub(tips, burnt)
 
-	return proposerReward, nil
+		// As per EIP-1559: min(tip cap, fee cap - base fee). Legacy txs have both
+		// caps set to their gas price
+		tipPerGas, err := tx.EffectiveGasTip(baseFeePerGas)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get effective tip of tx "+tx.Hash().String())
+		}
+		gasUsed := new(big.Int).SetUint64(b.ExecutionReceipts[i].GasUsed)
+		tips.Add(tips, new(big.Int).Mul(tipPerGas, gasUsed))
+	}
+
+	return tips, nil
 }
 
 // Returns the donations sent to the pool. There are two types of donations:
@@ -739,8 +738,9 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 // This fuction detects both by checking the tx and the EtherReceived event
 func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherReceived {
 
-	// If the block was missed, there cant be any donations
-	if b.ConsensusBlock == nil {
+	// If the block was missed or its execution payload withheld, there is no
+	// execution block and therefore no donations
+	if !b.HasExecutionPayload() {
 		return []*contract.ContractEtherReceived{}
 	}
 
@@ -844,12 +844,27 @@ func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Summariz
 		isFromSubscriber := oracle.isSubscribed(b.GetProposerIndexUint64())
 
 		// Fetch block information
-		reward, correctFeeRec, rewardType := b.GetSentRewardAndType(poolAddress, isFromSubscriber)
+		var reward *big.Int
+		var correctFeeRec bool
+		var rewardType RewardType
+		if b.IsGloas() {
+			proposal := b.gloasProposal(poolAddress, isFromSubscriber)
+			if proposal.missed {
+				poolBlock.BlockType = MissedProposal
+				return poolBlock
+			}
+			reward, correctFeeRec, rewardType = proposal.reward, proposal.correctFeeRecipient, proposal.rewardType
+			poolBlock.BuilderPaymentWei = proposal.builderPaymentWei
+		} else {
+			reward, correctFeeRec, rewardType = b.GetSentRewardAndType(poolAddress, isFromSubscriber)
+		}
 
 		// Populate common parameters
 		poolBlock.Reward = reward
 		poolBlock.RewardType = rewardType
-		poolBlock.Block = b.GetBlockNumber()
+		if b.HasExecutionPayload() {
+			poolBlock.Block = b.GetBlockNumber()
+		}
 
 		if correctFeeRec {
 			// If the fee recipient was correct
@@ -888,6 +903,8 @@ func (b *FullBlock) GetFeeRecipient() string {
 		feeRecipient = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.FeeRecipient.String()
 	} else if b.ConsensusBlock.Fulu != nil {
 		feeRecipient = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.FeeRecipient.String()
+	} else if b.ConsensusBlock.Gloas != nil {
+		feeRecipient = b.gloasExecutionPayload().FeeRecipient.String()
 	} else {
 		log.Fatal("Block was empty, cant get fee recipient")
 	}
@@ -910,6 +927,8 @@ func (b *FullBlock) GetBlockTransactions() []bellatrix.Transaction {
 		transactions = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.Transactions
 	} else if b.ConsensusBlock.Fulu != nil {
 		transactions = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.Transactions
+	} else if b.ConsensusBlock.Gloas != nil {
+		transactions = b.gloasExecutionPayload().Transactions
 	} else {
 		log.Fatal("Block was empty, cant get transactions")
 	}
@@ -932,6 +951,8 @@ func (b *FullBlock) GetBlockNumber() uint64 {
 		blockNumber = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.BlockNumber
 	} else if b.ConsensusBlock.Fulu != nil {
 		blockNumber = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.BlockNumber
+	} else if b.ConsensusBlock.Gloas != nil {
+		blockNumber = b.gloasExecutionPayload().BlockNumber
 	} else {
 		log.Fatal("Block was empty, cant get block number")
 	}
@@ -959,6 +980,8 @@ func (b *FullBlock) GetSlot() phase0.Slot {
 		slot = b.ConsensusBlock.Electra.Message.Slot
 	} else if b.ConsensusBlock.Fulu != nil {
 		slot = b.ConsensusBlock.Fulu.Message.Slot
+	} else if b.ConsensusBlock.Gloas != nil {
+		slot = b.ConsensusBlock.Gloas.Message.Slot
 	} else {
 		log.Fatal("Block was empty, cant get slot")
 	}
@@ -985,6 +1008,8 @@ func (b *FullBlock) GetProposerIndex() phase0.ValidatorIndex {
 		proposerIndex = b.ConsensusBlock.Electra.Message.ProposerIndex
 	} else if b.ConsensusBlock.Fulu != nil {
 		proposerIndex = b.ConsensusBlock.Fulu.Message.ProposerIndex
+	} else if b.ConsensusBlock.Gloas != nil {
+		proposerIndex = b.ConsensusBlock.Gloas.Message.ProposerIndex
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
@@ -1011,6 +1036,8 @@ func (b *FullBlock) GetGasUsed() uint64 {
 		gasUsed = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.GasUsed
 	} else if b.ConsensusBlock.Fulu != nil {
 		gasUsed = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.GasUsed
+	} else if b.ConsensusBlock.Gloas != nil {
+		gasUsed = b.gloasExecutionPayload().GasUsed
 	} else {
 		log.Fatal("Block was empty, cant get gas used")
 	}
@@ -1050,8 +1077,41 @@ func (b *FullBlock) GetBaseFeePerGas() [32]byte {
 			baseFeePerGas[i] = baseFeePerGasBigEndian[32-1-i]
 		}
 
+	} else if b.ConsensusBlock.Gloas != nil {
+		baseFeePerGasBigEndian := b.gloasExecutionPayload().BaseFeePerGas.Bytes32()
+		for i := 0; i < 32; i++ {
+			baseFeePerGas[i] = baseFeePerGasBigEndian[32-1-i]
+		}
+
 	} else {
 		log.Fatal("Block was empty, cant get base fee per gas")
 	}
 	return baseFeePerGas
+}
+
+// Returns the base fee per gas of the block as a number, in wei
+func (b *FullBlock) GetBaseFeePerGasBigInt() *big.Int {
+	// GetBaseFeePerGas is little-endian, big.Int expects big-endian
+	littleEndian := b.GetBaseFeePerGas()
+	var bigEndian [32]byte
+	for i := 0; i < 32; i++ {
+		bigEndian[i] = littleEndian[32-1-i]
+	}
+	return new(big.Int).SetBytes(bigEndian[:])
+}
+
+// Returns the withdrawals credited by the execution payload, from Capella on
+func (b *FullBlock) GetWithdrawals() ([]*capella.Withdrawal, error) {
+	if b.IsGloas() {
+		return b.gloasExecutionPayload().Withdrawals, nil
+	}
+	return b.ConsensusBlock.Withdrawals()
+}
+
+// Returns the hash of the execution block
+func (b *FullBlock) GetExecutionBlockHash() (phase0.Hash32, error) {
+	if b.IsGloas() {
+		return b.gloasExecutionPayload().BlockHash, nil
+	}
+	return b.ConsensusBlock.ExecutionBlockHash()
 }
