@@ -7,6 +7,7 @@ import (
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
@@ -158,6 +159,10 @@ type FullBlock struct {
 
 	// consensus data: block (optional, only when not missed)
 	ConsensusBlock *spec.VersionedSignedBeaconBlock `json:"consensus_block"`
+
+	// execution payload, Gloas only: published separately from the beacon
+	// block, see gloas.go. Nil when the slot is empty
+	ExecutionPayload *gloas.ExecutionPayload `json:"execution_payload,omitempty"`
 
 	// execution data: txs (optional, only when interested in vanila reward)
 	ExecutionHeader   *types.Header    `json:"execution_header"`

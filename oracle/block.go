@@ -9,6 +9,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/contract"
 	"github.com/dappnode/mev-sp-oracle/utils"
@@ -190,9 +191,13 @@ func (b *FullBlock) SetConsensusBlock(consensusBlock *spec.VersionedSignedBeacon
 		proposerIndex = uint64(consensusBlock.Electra.Message.ProposerIndex)
 	} else if consensusBlock.Fulu != nil {
 		proposerIndex = uint64(consensusBlock.Fulu.Message.ProposerIndex)
+	} else if consensusBlock.Gloas != nil {
+		proposerIndex = uint64(consensusBlock.Gloas.Message.ProposerIndex)
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
+
+	b.checkGloasForkSlot(consensusBlock.Version, uint64(cBlockSlot))
 
 	// Sanity check
 	if uint64(b.ConsensusDuty.ValidatorIndex) != proposerIndex {
@@ -733,8 +738,9 @@ func (b *FullBlock) GetProposerTip() (*big.Int, error) {
 // This fuction detects both by checking the tx and the EtherReceived event
 func (b *FullBlock) GetDonations(poolAddress string) []*contract.ContractEtherReceived {
 
-	// If the block was missed, there cant be any donations
-	if b.ConsensusBlock == nil {
+	// If the block was missed or its execution payload withheld, there is no
+	// execution block and therefore no donations
+	if !b.HasExecutionPayload() {
 		return []*contract.ContractEtherReceived{}
 	}
 
@@ -833,6 +839,8 @@ func (b *FullBlock) SummarizedBlock(oracle *Oracle, poolAddress string) Summariz
 		poolBlock.BlockType = MissedProposal
 		return poolBlock
 
+	} else if b.IsGloas() {
+		log.Fatal("Gloas proposals can't be classified yet, slot: ", b.GetSlotUint64())
 	} else {
 		// Check if the proposer is subscribed to the pool
 		isFromSubscriber := oracle.isSubscribed(b.GetProposerIndexUint64())
@@ -882,6 +890,8 @@ func (b *FullBlock) GetFeeRecipient() string {
 		feeRecipient = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.FeeRecipient.String()
 	} else if b.ConsensusBlock.Fulu != nil {
 		feeRecipient = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.FeeRecipient.String()
+	} else if b.ConsensusBlock.Gloas != nil {
+		feeRecipient = b.gloasExecutionPayload().FeeRecipient.String()
 	} else {
 		log.Fatal("Block was empty, cant get fee recipient")
 	}
@@ -904,6 +914,8 @@ func (b *FullBlock) GetBlockTransactions() []bellatrix.Transaction {
 		transactions = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.Transactions
 	} else if b.ConsensusBlock.Fulu != nil {
 		transactions = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.Transactions
+	} else if b.ConsensusBlock.Gloas != nil {
+		transactions = b.gloasExecutionPayload().Transactions
 	} else {
 		log.Fatal("Block was empty, cant get transactions")
 	}
@@ -926,6 +938,8 @@ func (b *FullBlock) GetBlockNumber() uint64 {
 		blockNumber = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.BlockNumber
 	} else if b.ConsensusBlock.Fulu != nil {
 		blockNumber = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.BlockNumber
+	} else if b.ConsensusBlock.Gloas != nil {
+		blockNumber = b.gloasExecutionPayload().BlockNumber
 	} else {
 		log.Fatal("Block was empty, cant get block number")
 	}
@@ -953,6 +967,8 @@ func (b *FullBlock) GetSlot() phase0.Slot {
 		slot = b.ConsensusBlock.Electra.Message.Slot
 	} else if b.ConsensusBlock.Fulu != nil {
 		slot = b.ConsensusBlock.Fulu.Message.Slot
+	} else if b.ConsensusBlock.Gloas != nil {
+		slot = b.ConsensusBlock.Gloas.Message.Slot
 	} else {
 		log.Fatal("Block was empty, cant get slot")
 	}
@@ -979,6 +995,8 @@ func (b *FullBlock) GetProposerIndex() phase0.ValidatorIndex {
 		proposerIndex = b.ConsensusBlock.Electra.Message.ProposerIndex
 	} else if b.ConsensusBlock.Fulu != nil {
 		proposerIndex = b.ConsensusBlock.Fulu.Message.ProposerIndex
+	} else if b.ConsensusBlock.Gloas != nil {
+		proposerIndex = b.ConsensusBlock.Gloas.Message.ProposerIndex
 	} else {
 		log.Fatal("Block was empty, cant get proposer index")
 	}
@@ -1005,6 +1023,8 @@ func (b *FullBlock) GetGasUsed() uint64 {
 		gasUsed = b.ConsensusBlock.Electra.Message.Body.ExecutionPayload.GasUsed
 	} else if b.ConsensusBlock.Fulu != nil {
 		gasUsed = b.ConsensusBlock.Fulu.Message.Body.ExecutionPayload.GasUsed
+	} else if b.ConsensusBlock.Gloas != nil {
+		gasUsed = b.gloasExecutionPayload().GasUsed
 	} else {
 		log.Fatal("Block was empty, cant get gas used")
 	}
@@ -1044,6 +1064,12 @@ func (b *FullBlock) GetBaseFeePerGas() [32]byte {
 			baseFeePerGas[i] = baseFeePerGasBigEndian[32-1-i]
 		}
 
+	} else if b.ConsensusBlock.Gloas != nil {
+		baseFeePerGasBigEndian := b.gloasExecutionPayload().BaseFeePerGas.Bytes32()
+		for i := 0; i < 32; i++ {
+			baseFeePerGas[i] = baseFeePerGasBigEndian[32-1-i]
+		}
+
 	} else {
 		log.Fatal("Block was empty, cant get base fee per gas")
 	}
@@ -1059,4 +1085,20 @@ func (b *FullBlock) GetBaseFeePerGasBigInt() *big.Int {
 		bigEndian[i] = littleEndian[32-1-i]
 	}
 	return new(big.Int).SetBytes(bigEndian[:])
+}
+
+// Returns the withdrawals credited by the execution payload, from Capella on
+func (b *FullBlock) GetWithdrawals() ([]*capella.Withdrawal, error) {
+	if b.IsGloas() {
+		return b.gloasExecutionPayload().Withdrawals, nil
+	}
+	return b.ConsensusBlock.Withdrawals()
+}
+
+// Returns the hash of the execution block
+func (b *FullBlock) GetExecutionBlockHash() (phase0.Hash32, error) {
+	if b.IsGloas() {
+		return b.gloasExecutionPayload().BlockHash, nil
+	}
+	return b.ConsensusBlock.ExecutionBlockHash()
 }

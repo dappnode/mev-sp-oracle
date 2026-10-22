@@ -20,7 +20,7 @@ import (
 // candidate. Ambiguous or unsupported inflows stop processing instead of
 // silently banning a validator or allocating an arbitrary amount.
 func (o *Onchain) DetectForcedMevPayment(b *FullBlock, opts ...retry.Option) error {
-	if b.ConsensusBlock == nil || !b.IsForcedPaymentDetectionActive() ||
+	if !b.HasExecutionPayload() || !b.IsForcedPaymentDetectionActive() ||
 		!b.IsAnyPositionForcedPaymentDetectionActive() {
 		return nil
 	}
@@ -64,7 +64,7 @@ func (o *Onchain) detectAnyPositionForcedMevPayment(b *FullBlock, opts ...retry.
 	// A consensus withdrawal can credit any address, including the pool. It
 	// must not be mistaken for a proposer payment of the same value.
 	if b.ConsensusBlock.Version >= spec.DataVersionCapella {
-		withdrawals, err := b.ConsensusBlock.Withdrawals()
+		withdrawals, err := b.GetWithdrawals()
 		if err != nil {
 			return fmt.Errorf("read withdrawals at block %d: %w", blockNumber, err)
 		}
@@ -136,7 +136,7 @@ func (o *Onchain) forcedPaymentReceipt(b *FullBlock, tx *types.Transaction, inde
 			return nil, fmt.Errorf("read forced payment receipt %s: %w", tx.Hash(), err)
 		}
 	}
-	blockHash, err := b.ConsensusBlock.ExecutionBlockHash()
+	blockHash, err := b.GetExecutionBlockHash()
 	if err != nil {
 		return nil, err
 	}

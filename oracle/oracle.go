@@ -251,7 +251,8 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	processedSlot := or.state.NextSlotToProcess
 	or.state.LatestProcessedSlot = processedSlot
 	or.state.NextSlotToProcess++
-	if summarizedBlock.BlockType != MissedProposal {
+	// Missed and empty slots have no execution block
+	if fullBlock.HasExecutionPayload() {
 		or.state.LatestProcessedBlock = summarizedBlock.Block
 	}
 	return processedSlot, nil
