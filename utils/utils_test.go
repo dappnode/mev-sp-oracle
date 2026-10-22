@@ -232,3 +232,10 @@ func Test_IsIn(t *testing.T) {
 	require.Equal(t, true, IsIn("0x000A", []string{"0x000a"}))
 	require.Equal(t, false, IsIn("a", []string{"c", "d"}))
 }
+
+func Test_GweiToWei(t *testing.T) {
+	require.Equal(t, "0", GweiToWei(0).String())
+	require.Equal(t, "48200000000000000", GweiToWei(48_200_000).String())
+	// Does not overflow for the largest gwei amount
+	require.Equal(t, "18446744073709551615000000000", GweiToWei(^uint64(0)).String())
+}

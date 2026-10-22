@@ -2,12 +2,17 @@ package oracle
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 
 	"github.com/attestantio/go-eth2-client/api"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/gloas"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -82,20 +87,39 @@ func isExecutionPayloadIncluded(
 		"cant tell whether its execution payload was included", slot))
 }
 
-// Completes a Gloas full block with its execution payload. Returns false when
-// the slot is empty, in which case there is no execution block to read events,
-// txs or receipts from.
-func (o *Onchain) fetchGloasExecutionPayload(fullBlock *FullBlock) bool {
+// Completes a Gloas full block with what happened to its bid: whether its
+// execution payload was included, and whether the payment it promised to the
+// pool is paid. Returns false when the slot is empty, in which case there is
+// no execution block to read events, txs or receipts from.
+func (o *Onchain) fetchGloasSlot(fullBlock *FullBlock) bool {
 	slot := fullBlock.GetSlotUint64()
+	bid := fullBlock.GetExecutionPayloadBid()
 
-	included, err := o.IsExecutionPayloadIncluded(slot, fullBlock.GetExecutionPayloadBid())
+	included, err := o.IsExecutionPayloadIncluded(slot, bid)
 	if err != nil {
 		log.Fatal("could not tell whether the execution payload of slot ", slot, " was included: ", err)
 	}
+
+	if fullBlock.BidPromisesPaymentTo(o.PoolAddress) {
+		// A payload the next beacon block builds on is paid: that block settles
+		// the payment before processing anything else. Before that, only the
+		// proposer's slashing included in its own beacon block could cancel it,
+		// which no proposer would do. If it ever happened, the payment would
+		// never arrive and the onchain reconciliation would stop the oracle
+		paid := included
+		if !included {
+			paid, err = o.IsWithheldBidPaid(fullBlock)
+			if err != nil {
+				log.Fatal("could not tell whether the withheld bid of slot ", slot, " is paid: ", err)
+			}
+		}
+		fullBlock.SetBuilderPayment(paid)
+	}
+
 	if !included {
 		log.WithFields(log.Fields{
 			"Slot":         slot,
-			"BuilderIndex": fullBlock.GetExecutionPayloadBid().BuilderIndex,
+			"BuilderIndex": bid.BuilderIndex,
 		}).Info("Empty slot: the beacon block was proposed but its execution payload was not included")
 		return false
 	}
@@ -106,4 +130,107 @@ func (o *Onchain) fetchGloasExecutionPayload(fullBlock *FullBlock) bool {
 	}
 	fullBlock.SetExecutionPayload(envelope)
 	return true
+}
+
+// Returns whether the protocol pays the bid of an empty slot, reading the
+// beacon state the protocol bases that decision on. See isWithheldBidPaid
+func (o *Onchain) IsWithheldBidPaid(fullBlock *FullBlock, opts ...retry.Option) (bool, error) {
+	stateID := strconv.FormatUint(builderPaymentDecisionSlot(fullBlock.GetSlotUint64()), 10)
+
+	pendingPayments, err := o.GetBuilderPendingPayments(stateID, opts...)
+	if err != nil {
+		return false, err
+	}
+	totalActiveBalance, err := o.GetTotalActiveBalance(stateID, opts...)
+	if err != nil {
+		return false, err
+	}
+	return isWithheldBidPaid(fullBlock.GetExecutionPayloadBid(), fullBlock.GetProposerIndex(), pendingPayments, totalActiveBalance)
+}
+
+// Returns the builder payments of the last two epochs at the given beacon
+// state. go-eth2-client has no call for this endpoint yet
+func (o *Onchain) GetBuilderPendingPayments(stateID string, opts ...retry.Option) ([]*gloas.BuilderPendingPayment, error) {
+	var payments []*gloas.BuilderPendingPayment
+	err := retry.Do(func() error {
+		var err error
+		payments, err = fetchBuilderPendingPayments(o.ConsensusClient.Address(), stateID)
+		if err != nil {
+			log.Warn("Failed attempt to fetch builder pending payments at state ", stateID, ": ", err.Error(), " Retrying...")
+		}
+		return err
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "could not fetch builder pending payments at state "+stateID)
+	}
+	return payments, nil
+}
+
+func fetchBuilderPendingPayments(beaconNodeUrl string, stateID string) ([]*gloas.BuilderPendingPayment, error) {
+	url := fmt.Sprintf("%s/eth/v1/beacon/states/%s/builder_pending_payments", beaconNodeUrl, stateID)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create request")
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "request failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, errors.New(fmt.Sprintf("non-200 response: %d - %s", resp.StatusCode, string(body)))
+	}
+
+	var response struct {
+		Data []*gloas.BuilderPendingPayment `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, errors.Wrap(err, "could not decode response")
+	}
+	return response.Data, nil
+}
+
+// Returns the sum of the effective balances of the validators active at the
+// given beacon state, ie get_total_active_balance in the spec. It fetches the
+// whole active set, which is heavy, so it is only meant for empty slots whose
+// bid promised a payment to the pool.
+func (o *Onchain) GetTotalActiveBalance(stateID string, opts ...retry.Option) (phase0.Gwei, error) {
+	var validators *api.Response[map[phase0.ValidatorIndex]*v1.Validator]
+	err := retry.Do(func() error {
+		var err error
+		validators, err = o.ConsensusClient.Validators(context.Background(), &api.ValidatorsOpts{
+			State: stateID,
+			ValidatorStates: []v1.ValidatorState{
+				v1.ValidatorStateActiveOngoing,
+				v1.ValidatorStateActiveExiting,
+				v1.ValidatorStateActiveSlashed,
+			},
+		})
+		if err != nil {
+			log.Warn("Failed attempt to fetch active validators at state ", stateID, ": ", err.Error(), " Retrying...")
+		}
+		return err
+	}, o.GetRetryOpts(opts)...)
+
+	if err != nil {
+		return 0, errors.Wrap(err, "could not fetch active validators at state "+stateID)
+	}
+	return totalActiveBalance(validators.Data), nil
+}
+
+// Sums the effective balances of the active validators. The beacon node was
+// asked for active ones only, but filtering again costs nothing
+func totalActiveBalance(validators map[phase0.ValidatorIndex]*v1.Validator) phase0.Gwei {
+	total := phase0.Gwei(0)
+	for _, validator := range validators {
+		if validator.Status.IsActive() {
+			total += validator.Validator.EffectiveBalance
+		}
+	}
+	return total
 }

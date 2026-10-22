@@ -1,9 +1,14 @@
 package oracle
 
 import (
+	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/gloas"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dappnode/mev-sp-oracle/constants"
+	"github.com/dappnode/mev-sp-oracle/utils"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,8 +44,67 @@ func SettlementSlot(chainId uint64, slot uint64) uint64 {
 	if !IsGloasSlot(chainId, slot) {
 		return slot
 	}
+	return builderPaymentDecisionSlot(slot)
+}
+
+// The last slot of the epoch after the given slot's one. The protocol decides
+// whether a withheld payload's bid is paid in the epoch transition right after
+// it, so its beacon state holds what that decision is based on
+func builderPaymentDecisionSlot(slot uint64) uint64 {
 	epoch := slot / constants.SlotsInEpoch
 	return (epoch+2)*constants.SlotsInEpoch - 1
+}
+
+// BUILDER_PAYMENT_THRESHOLD_NUMERATOR and DENOMINATOR in the Gloas spec: the
+// share of a slot's stake that must vote for a beacon block in its own slot for
+// its bid to be paid when the payload is withheld
+const (
+	builderPaymentThresholdNumerator   = 6
+	builderPaymentThresholdDenominator = 10
+)
+
+// EFFECTIVE_BALANCE_INCREMENT, the floor of the total active balance
+const effectiveBalanceIncrement = phase0.Gwei(1_000_000_000)
+
+// get_builder_payment_quorum_threshold in the Gloas spec
+func builderPaymentQuorum(totalActiveBalance phase0.Gwei) phase0.Gwei {
+	perSlotBalance := max(totalActiveBalance, effectiveBalanceIncrement) / phase0.Gwei(constants.SlotsInEpoch)
+	return perSlotBalance * builderPaymentThresholdNumerator / builderPaymentThresholdDenominator
+}
+
+// Whether the protocol pays a bid whose execution payload was withheld. It
+// does if the votes its beacon block got in its own slot reach the quorum,
+// unless the payment was cancelled before, as slashing the proposer does.
+//
+// pendingPayments and totalActiveBalance must come from the beacon state at
+// builderPaymentDecisionSlot, which is just before the protocol decides it in
+// process_builder_pending_payments. Effective balances only change after that
+// step, so the quorum calculated here is the one the protocol uses.
+func isWithheldBidPaid(bid *gloas.ExecutionPayloadBid, proposerIndex phase0.ValidatorIndex,
+	pendingPayments []*gloas.BuilderPendingPayment, totalActiveBalance phase0.Gwei) (bool, error) {
+
+	if uint64(len(pendingPayments)) != 2*constants.SlotsInEpoch {
+		return false, errors.New(fmt.Sprintf("expected %d builder pending payments, got %d",
+			2*constants.SlotsInEpoch, len(pendingPayments)))
+	}
+
+	// The first half holds the payments of the previous epoch, the bid's one
+	payment := pendingPayments[uint64(bid.Slot)%constants.SlotsInEpoch]
+
+	// An empty entry means the payment was cancelled
+	if payment == nil || payment.Withdrawal == nil || payment.Withdrawal.Amount == 0 {
+		return false, nil
+	}
+
+	if payment.Withdrawal.BuilderIndex != bid.BuilderIndex ||
+		payment.Withdrawal.Amount != bid.Value ||
+		payment.Withdrawal.FeeRecipient != bid.FeeRecipient ||
+		payment.ProposerIndex != proposerIndex {
+		return false, errors.New(fmt.Sprintf("builder pending payment of slot %d does not match its bid. "+
+			"payment: %s, bid: %s", bid.Slot, payment.String(), bid.String()))
+	}
+
+	return payment.Weight >= builderPaymentQuorum(totalActiveBalance), nil
 }
 
 // Whether the beacon block of this slot is a Gloas one, ie carries a bid
@@ -70,6 +134,26 @@ func (b *FullBlock) GetExecutionPayloadBid() *gloas.ExecutionPayloadBid {
 // builder's bid
 func (b *FullBlock) IsSelfBuilt() bool {
 	return b.GetExecutionPayloadBid().BuilderIndex == gloas.BuilderIndexSelfBuild
+}
+
+// Whether the bid promised a payment to the given address. A self-built
+// payload promises none, its proposer collects the tips instead
+func (b *FullBlock) BidPromisesPaymentTo(address string) bool {
+	bid := b.GetExecutionPayloadBid()
+	return !b.IsSelfBuilt() && bid.Value > 0 && utils.Equals(bid.FeeRecipient.String(), address)
+}
+
+// Records the payment the bid promised to the pool, and whether the protocol
+// pays it
+func (b *FullBlock) SetBuilderPayment(paid bool) {
+	bid := b.GetExecutionPayloadBid()
+	b.BuilderPayment = &BuilderPayment{
+		Slot:          uint64(bid.Slot),
+		ProposerIndex: b.GetProposerIndexUint64(),
+		BuilderIndex:  uint64(bid.BuilderIndex),
+		AmountWei:     utils.GweiToWei(uint64(bid.Value)),
+		Paid:          paid,
+	}
 }
 
 // Adds the execution payload of a full slot. It must be the payload the bid in

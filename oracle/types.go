@@ -149,6 +149,26 @@ type ForcedMevPayment struct {
 	BlockHash   string `json:"block_hash"`
 }
 
+// From Gloas on, a builder's bid promises a payment to the proposer's fee
+// recipient. The protocol takes it from the builder's deposit and pays it as a
+// withdrawal in a later execution payload, so it arrives without any tx or
+// event. Only payments to the pool are tracked.
+type BuilderPayment struct {
+	// Slot whose bid promised the payment, and who proposed it
+	Slot          uint64 `json:"slot"`
+	ProposerIndex uint64 `json:"proposer_index"`
+
+	BuilderIndex uint64   `json:"builder_index"`
+	AmountWei    *big.Int `json:"amount_wei"`
+
+	// False when the protocol dropped the payment: the payload was withheld
+	// and the beacon block got too few votes, or the proposer was slashed
+	Paid bool `json:"paid"`
+
+	// Execution block whose withdrawals paid it. Zero while it is in flight
+	ArrivalBlock uint64 `json:"arrival_block,omitempty"`
+}
+
 type FullBlock struct {
 
 	// consensus data: duty (mandatory, who should propose the block)
@@ -174,6 +194,9 @@ type FullBlock struct {
 	// Set only when the block needed forced-payment verification, ie when a MEV
 	// payment was detected but its apparent recipient was not the pool
 	ForcedMevPayment *ForcedMevPayment `json:"forced_mev_payment,omitempty"`
+
+	// Gloas only: set when the bid promised a payment to the pool
+	BuilderPayment *BuilderPayment `json:"builder_payment,omitempty"`
 
 	// Populated with the validators if there are sub/unsub events
 	ValidatorsSubs   []*v1.Validator `json:"validators_subs"`

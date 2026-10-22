@@ -260,6 +260,11 @@ func WeiToEther(wei *big.Int) *big.Float {
 	return new(big.Float).Quo(new(big.Float).SetInt(wei), big.NewFloat(params.Ether))
 }
 
+// Converts an amount in gwei, the unit of the beacon chain, to wei
+func GweiToWei(gwei uint64) *big.Int {
+	return new(big.Int).Mul(new(big.Int).SetUint64(gwei), big.NewInt(params.GWei))
+}
+
 func IsIn(a string, list []string) bool {
 	for _, b := range list {
 		if Equals(a, b) {

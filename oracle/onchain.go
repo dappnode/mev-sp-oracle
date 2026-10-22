@@ -1044,7 +1044,7 @@ func (o *Onchain) FetchFullBlock(slot uint64, oracle *Oracle, opt ...bool) *Full
 		// From Gloas on, the beacon block carries a bid and the execution payload
 		// is published separately. An empty slot has no execution block, so
 		// there are no events, txs or receipts to fetch
-		if fullBlock.IsGloas() && !o.fetchGloasExecutionPayload(fullBlock) {
+		if fullBlock.IsGloas() && !o.fetchGloasSlot(fullBlock) {
 			return fullBlock
 		}
 
