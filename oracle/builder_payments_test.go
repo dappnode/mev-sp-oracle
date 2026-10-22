@@ -15,6 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	log "github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -119,6 +121,12 @@ func Test_SettleArrivedBuilderPayments(t *testing.T) {
 		require.NoError(t, oracle.settleArrivedBuilderPayments(blockPaying(t,
 			builderWithdrawal(42, testBuilderAddress, 48_200_000), validatorWithdrawal(42, testPoolAddress, 48_200_000))))
 		require.Equal(t, []*BuilderPayment{payment}, oracle.state.InFlightBuilderPayments)
+	})
+
+	t.Run("zero amount withdrawals move nothing and are ignored", func(t *testing.T) {
+		oracle := gloasTestOracle(t)
+		require.NoError(t, oracle.settleArrivedBuilderPayments(blockPaying(t, builderWithdrawal(42, testPoolAddress, 0))))
+		require.Empty(t, oracle.state.InFlightBuilderPayments)
 	})
 
 	t.Run("a payment never credited is rejected without touching the state", func(t *testing.T) {
@@ -331,4 +339,30 @@ func Test_AdvanceStateToNextSlot_CancelledPaymentIsNotTracked(t *testing.T) {
 	require.Empty(t, oracle.state.InFlightBuilderPayments)
 	require.NoError(t, oracle.RunOffchainReconciliation())
 	require.NoError(t, oracle.RunOnchainReconciliation(big.NewInt(0), nil))
+}
+
+func Test_WarnAboutLateBuilderPayments(t *testing.T) {
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	oracle := gloasTestOracle(t)
+	oracle.state.InFlightBuilderPayments = []*BuilderPayment{inFlightPayment(1000, 42, 1), inFlightPayment(1100, 7, 1)}
+
+	countWarnings := func(processedSlot uint64) int {
+		hook.Reset()
+		oracle.warnAboutLateBuilderPayments(processedSlot)
+		warnings := 0
+		for _, entry := range hook.AllEntries() {
+			if entry.Level == log.WarnLevel {
+				warnings++
+			}
+		}
+		return warnings
+	}
+
+	// Once per epoch, for each payment in flight for more than 4 epochs
+	require.Equal(t, 0, countWarnings(1120))
+	require.Equal(t, 1, countWarnings(1152))
+	require.Equal(t, 0, countWarnings(1153))
+	require.Equal(t, 2, countWarnings(1248))
 }

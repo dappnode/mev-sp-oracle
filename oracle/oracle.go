@@ -234,6 +234,7 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	if summarizedBlock.BuilderPaymentWei != nil {
 		or.trackBuilderPayment(fullBlock.BuilderPayment)
 	}
+	or.warnAboutLateBuilderPayments(summarizedBlock.Slot)
 
 	// Handle unsubscriptions the last thing after distributing rewards
 	or.handleManualUnsubscriptions(fullBlock.Events.UnsubscribeValidator, fullBlock.ValidatorsUnsubs)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/dappnode/mev-sp-oracle/constants"
 	"github.com/dappnode/mev-sp-oracle/utils"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -33,7 +34,8 @@ func (b *FullBlock) BuilderWithdrawalsTo(address string) []*capella.Withdrawal {
 	}
 	received := make([]*capella.Withdrawal, 0)
 	for _, withdrawal := range b.gloasExecutionPayload().Withdrawals {
-		if isBuilderWithdrawal(withdrawal) && utils.Equals(withdrawal.Address.String(), address) {
+		// A zero amount moves no ETH, so there is nothing to match
+		if withdrawal.Amount > 0 && isBuilderWithdrawal(withdrawal) && utils.Equals(withdrawal.Address.String(), address) {
 			received = append(received, withdrawal)
 		}
 	}
@@ -104,6 +106,33 @@ func (or *Oracle) settleArrivedBuilderPayments(fullBlock *FullBlock) error {
 		}).Info("Builder payment reached the pool")
 	}
 	return nil
+}
+
+// A builder payment reaches the pool within about two epochs of its slot: in
+// the next full payload, or after the end of the next epoch if its payload was
+// withheld. One still in flight long after may never arrive, and meanwhile it
+// counts as an asset in the onchain reconciliation, so it is worth a look.
+//
+// This only warns. Stopping would be wrong: slots are processed in order, so
+// the oracle could never reach the one where a slow payment finally lands.
+const lateBuilderPaymentSlots = 4 * 32
+
+// Warns, once per epoch, about the builder payments still in flight long
+// after their slot
+func (or *Oracle) warnAboutLateBuilderPayments(processedSlot uint64) {
+	if processedSlot%constants.SlotsInEpoch != 0 {
+		return
+	}
+	for _, payment := range or.state.InFlightBuilderPayments {
+		if processedSlot > payment.Slot+lateBuilderPaymentSlots {
+			log.WithFields(log.Fields{
+				"Slot":          payment.Slot,
+				"BuilderIndex":  payment.BuilderIndex,
+				"AmountWei":     payment.AmountWei,
+				"SlotsInFlight": processedSlot - payment.Slot,
+			}).Warn("Builder payment credited long ago still has not reached the pool, check it was paid")
+		}
+	}
 }
 
 // Total amount of the builder payments credited but not in the pool yet
