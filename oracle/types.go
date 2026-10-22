@@ -164,9 +164,6 @@ type BuilderPayment struct {
 	// False when the protocol dropped the payment: the payload was withheld
 	// and the beacon block got too few votes, or the proposer was slashed
 	Paid bool `json:"paid"`
-
-	// Execution block whose withdrawals paid it. Zero while it is in flight
-	ArrivalBlock uint64 `json:"arrival_block,omitempty"`
 }
 
 type FullBlock struct {
@@ -269,6 +266,12 @@ type OracleState struct {
 
 	// Stores a subset of EtherReceived events, just donations
 	Donations []*contract.ContractEtherReceived `json:"donations"`
+
+	// Builder payments to the pool already credited, whose withdrawal has not
+	// reached the pool yet. They are part of what the pool has, see
+	// RunOnchainReconciliation. Omitted when empty, so states saved before
+	// Gloas keep their hash
+	InFlightBuilderPayments []*BuilderPayment `json:"in_flight_builder_payments,omitempty"`
 
 	// Summarized versions of the blocks
 	ProposedBlocks []SummarizedBlock `json:"proposed_blocks"`

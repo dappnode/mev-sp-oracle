@@ -183,6 +183,12 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 		return 0, errors.Wrap(err, "Error validating full block config")
 	}
 
+	// Builder payments credited in earlier slots may reach the pool in this one
+	err = or.settleArrivedBuilderPayments(fullBlock)
+	if err != nil {
+		return 0, errors.Wrap(err, "Error settling builder payments")
+	}
+
 	// Full block is too heavy to be stored in the state, so we summarize it
 	summarizedBlock := fullBlock.SummarizedBlock(or, or.cfg.PoolAddress)
 
@@ -222,6 +228,11 @@ func (or *Oracle) AdvanceStateToNextSlot(fullBlock *FullBlock) (uint64, error) {
 	// If the validator was subscribed but the fee recipient was wrong we ban the validator
 	if summarizedBlock.BlockType == WrongFeeRecipient && or.isSubscribed(summarizedBlock.ValidatorIndex) {
 		or.handleBanValidator(summarizedBlock)
+	}
+
+	// Credited above, but only reaches the pool in a later slot
+	if summarizedBlock.BuilderPaymentWei != nil {
+		or.trackBuilderPayment(fullBlock.BuilderPayment)
 	}
 
 	// Handle unsubscriptions the last thing after distributing rewards
@@ -898,12 +909,19 @@ func (or *Oracle) RunOnchainReconciliation(
 
 	log.Info("[Reconciliation] Total pool balance (what we have): ", contractBalanceWei)
 
-	if totalLiabilities.Cmp(contractBalanceWei) != 0 {
-		return errors.New(fmt.Sprintf("[Reconciliation] Liabilities and balance dont match: %d vs %d",
-			totalLiabilities, contractBalanceWei))
+	// Builder payments already credited but not in the pool yet. The pool
+	// will hold them once their withdrawal is processed
+	inFlight := or.inFlightBuilderPaymentsWei()
+	assets := new(big.Int).Add(contractBalanceWei, inFlight)
+
+	log.Info("[Reconciliation] Builder payments on their way to the pool: ", inFlight)
+
+	if totalLiabilities.Cmp(assets) != 0 {
+		return errors.New(fmt.Sprintf("[Reconciliation] Liabilities and balance dont match: %d vs %d (balance %d + in flight %d)",
+			totalLiabilities, assets, contractBalanceWei, inFlight))
 	}
 
-	log.Info("[Reconciliation] Success! Liabilities and balance match: ", totalLiabilities, " vs ", contractBalanceWei)
+	log.Info("[Reconciliation] Success! Liabilities and balance match: ", totalLiabilities, " vs ", assets)
 
 	return nil
 }

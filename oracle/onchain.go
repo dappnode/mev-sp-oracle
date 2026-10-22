@@ -910,9 +910,10 @@ func (o *Onchain) GetPoolEthBalance(blockNumber *big.Int, opts ...retry.Option) 
 // read the block computes the same result, now and on any future resync.
 //
 // Note it does not model beacon chain withdrawals credited to the pool address.
-// That cannot happen with the current pool contract, and if it ever did the
-// result would be an unexpected value that fails the exact match below, which
-// is the safe direction: it never turns a missing payment into a valid one.
+// From Gloas, builder payments arrive that way, and DetectForcedMevPayment
+// subtracts them. Any other withdrawal to the pool would be an unexpected value
+// that fails the exact match, which is the safe direction: it never turns a
+// missing payment into a valid one.
 func unexplainedPoolInflow(balanceDelta *big.Int, events *Events) *big.Int {
 
 	explained := big.NewInt(0)

@@ -7,6 +7,7 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/avast/retry-go/v4"
@@ -63,13 +64,25 @@ type gloasScenario struct {
 	payloadFeeRecipient string
 	executionPaymentWei *big.Int
 	tipsToPayloadFeeRec bool
+	withdrawals         []*capella.Withdrawal
+
+	// Default to testProposalSlot and execution block 5000
+	slot        uint64
+	blockNumber uint64
 }
 
 // Builds the FullBlock FetchFullBlock would have built for the scenario
 func (s gloasScenario) block(t *testing.T) *FullBlock {
 	t.Helper()
-	bid := gloasBid(testProposalSlot, s.builder, s.bidValueGwei, s.bidFeeRecipient, 0xaa, 0xbb)
-	fullBlock := gloasFullBlock(t, testProposalSlot, testProposer, bid)
+	slot, blockNumber := s.slot, s.blockNumber
+	if slot == 0 {
+		slot = testProposalSlot
+	}
+	if blockNumber == 0 {
+		blockNumber = 5000
+	}
+	bid := gloasBid(slot, s.builder, s.bidValueGwei, s.bidFeeRecipient, 0xaa, byte(slot))
+	fullBlock := gloasFullBlock(t, slot, testProposer, bid)
 
 	if fullBlock.BidPromisesPaymentTo(testPoolAddress) {
 		fullBlock.SetBuilderPayment(s.included || s.withheldPaid)
@@ -103,7 +116,7 @@ func (s gloasScenario) block(t *testing.T) *FullBlock {
 		fullBlock.Events.EtherReceived = append(fullBlock.Events.EtherReceived, event)
 	}
 
-	fullBlock.SetExecutionPayload(gloasEnvelope(bid, 5000, payloadFeeRecipient, txs, nil))
+	fullBlock.SetExecutionPayload(gloasEnvelope(bid, blockNumber, payloadFeeRecipient, txs, s.withdrawals))
 	if receipts != nil {
 		fullBlock.ExecutionReceipts = receipts
 	}

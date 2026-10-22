@@ -52,6 +52,10 @@ func (o *Onchain) detectAnyPositionForcedMevPayment(b *FullBlock, opts ...retry.
 		return err
 	}
 	inflow := unexplainedPoolInflow(new(big.Int).Sub(after, before), b.Events)
+	// From Gloas, builder payments reach the pool as withdrawals, without any
+	// event. They are matched to the credited payments when the slot is
+	// processed, see settleArrivedBuilderPayments
+	inflow.Sub(inflow, b.BuilderWithdrawalsWeiTo(o.PoolAddress))
 	if inflow.Sign() == 0 {
 		return nil
 	}
@@ -69,7 +73,7 @@ func (o *Onchain) detectAnyPositionForcedMevPayment(b *FullBlock, opts ...retry.
 			return fmt.Errorf("read withdrawals at block %d: %w", blockNumber, err)
 		}
 		for _, withdrawal := range withdrawals {
-			if withdrawal.Amount > 0 && utils.Equals(withdrawal.Address.String(), o.PoolAddress) {
+			if withdrawal.Amount > 0 && utils.Equals(withdrawal.Address.String(), o.PoolAddress) && !isBuilderWithdrawal(withdrawal) {
 				return fmt.Errorf("block %d credits a consensus withdrawal to the pool; cannot attribute unexplained inflow %s wei to MEV", blockNumber, inflow)
 			}
 		}
