@@ -116,17 +116,44 @@ func Test_IsGloasSlot(t *testing.T) {
 
 func Test_SettlementSlot(t *testing.T) {
 	// Before Gloas a finalized slot is settled
-	require.Equal(t, testGloasSlot-1, SettlementSlot(HoodiChainId, testGloasSlot-1))
-	require.Equal(t, uint64(20_000_000), SettlementSlot(MainnetChainId, 20_000_000))
+	require.Equal(t, testGloasSlot-1, settlementSlot(HoodiChainId, testGloasSlot-1))
+	require.Equal(t, uint64(20_000_000), settlementSlot(MainnetChainId, 20_000_000))
 
 	// From Gloas on, wait until the epoch after the slot's one is finalized.
 	// The fork slot is the first of epoch 132352
 	require.Equal(t, uint64(132352*32), testGloasSlot)
 	lastSlotOfNextEpoch := uint64(132354*32 - 1)
-	require.Equal(t, lastSlotOfNextEpoch, SettlementSlot(HoodiChainId, testGloasSlot))
-	require.Equal(t, lastSlotOfNextEpoch, SettlementSlot(HoodiChainId, testGloasSlot+17))
-	require.Equal(t, lastSlotOfNextEpoch, SettlementSlot(HoodiChainId, testGloasSlot+31))
-	require.Equal(t, lastSlotOfNextEpoch+32, SettlementSlot(HoodiChainId, testGloasSlot+32))
+	require.Equal(t, lastSlotOfNextEpoch, settlementSlot(HoodiChainId, testGloasSlot))
+	require.Equal(t, lastSlotOfNextEpoch, settlementSlot(HoodiChainId, testGloasSlot+17))
+	require.Equal(t, lastSlotOfNextEpoch, settlementSlot(HoodiChainId, testGloasSlot+31))
+	require.Equal(t, lastSlotOfNextEpoch+32, settlementSlot(HoodiChainId, testGloasSlot+32))
+}
+
+func Test_LatestSettledSlot(t *testing.T) {
+	// Before Gloas, and on chains without it, every finalized slot is settled
+	require.Equal(t, uint64(20_000_000), LatestSettledSlot(MainnetChainId, 20_000_000))
+	require.Equal(t, testGloasSlot-1, LatestSettledSlot(HoodiChainId, testGloasSlot-1))
+
+	// Right after the fork only the slots before it are settled
+	require.Equal(t, testGloasSlot-1, LatestSettledSlot(HoodiChainId, testGloasSlot))
+	require.Equal(t, testGloasSlot-1, LatestSettledSlot(HoodiChainId, testGloasSlot+62))
+
+	// The first Gloas epoch settles with the last slot of the next one
+	require.Equal(t, testGloasSlot+31, LatestSettledSlot(HoodiChainId, testGloasSlot+63))
+	// An oracle in sync trails a finalized epoch boundary by 33 slots
+	require.Equal(t, testGloasSlot+64-33, LatestSettledSlot(HoodiChainId, testGloasSlot+64))
+}
+
+// LatestSettledSlot is the inverse of settlementSlot: the latest slot that
+// settlementSlot allows processing. Check it against a brute force search
+func Test_LatestSettledSlot_MatchesSettlementSlot(t *testing.T) {
+	for finalized := testGloasSlot - 70; finalized < testGloasSlot+300; finalized++ {
+		expected := finalized
+		for settlementSlot(HoodiChainId, expected) > finalized {
+			expected--
+		}
+		require.Equal(t, expected, LatestSettledSlot(HoodiChainId, finalized), "finalized slot %d", finalized)
+	}
 }
 
 func Test_GloasBlock_FullSlot(t *testing.T) {

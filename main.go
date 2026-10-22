@@ -254,9 +254,9 @@ func mainLoop(oracleInstance *oracle.Oracle, onchain *oracle.Onchain, cfg *oracl
 		finalizedSlot := uint64(finalizedBlockHeader.Header.Message.Slot)
 
 		// From Gloas on, a slot is only settled some time after it is finalized
-		settlementSlot := oracle.SettlementSlot(onchain.ChainId, oracleInstance.State().NextSlotToProcess)
+		latestSettledSlot := oracle.LatestSettledSlot(onchain.ChainId, finalizedSlot)
 
-		if finalizedSlot >= settlementSlot {
+		if oracleInstance.State().NextSlotToProcess <= latestSettledSlot {
 
 			// Fetch block information
 			fullBlock := onchain.FetchFullBlock(oracleInstance.State().NextSlotToProcess, oracleInstance)

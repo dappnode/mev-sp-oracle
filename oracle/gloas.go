@@ -41,11 +41,37 @@ func IsGloasSlot(chainId uint64, slot uint64) bool {
 // by the next beacon block, and whether a bid whose payload was withheld is still
 // paid is decided at the end of the following epoch. Waiting until that epoch is
 // finalized covers both, at the cost of trailing finality by about one epoch.
-func SettlementSlot(chainId uint64, slot uint64) uint64 {
+func settlementSlot(chainId uint64, slot uint64) uint64 {
 	if !IsGloasSlot(chainId, slot) {
 		return slot
 	}
 	return builderPaymentDecisionSlot(slot)
+}
+
+// Returns the latest slot that can be processed when finalizedSlot is the
+// latest finalized one, ie the latest slot whose settlementSlot is not after
+// it. An oracle that processed it is in sync, even if it trails finality.
+func LatestSettledSlot(chainId uint64, finalizedSlot uint64) uint64 {
+	forkSlot, found := GloasForkSlot[chainId]
+	if !found || finalizedSlot < forkSlot {
+		return finalizedSlot
+	}
+
+	// Number of epochs whose last slot is finalized. A Gloas slot of epoch e is
+	// settled when the last slot of epoch e+1 is, ie when e+2 epochs are
+	settledEpochs := (finalizedSlot + 1) / constants.SlotsInEpoch
+	if settledEpochs >= 2 {
+		latestSettledGloasSlot := (settledEpochs-1)*constants.SlotsInEpoch - 1
+		if latestSettledGloasSlot >= forkSlot {
+			return latestSettledGloasSlot
+		}
+	}
+
+	// No Gloas slot is settled yet, but every slot before the fork is
+	if forkSlot == 0 {
+		return 0
+	}
+	return forkSlot - 1
 }
 
 // The last slot of the epoch after the given slot's one. The protocol decides
